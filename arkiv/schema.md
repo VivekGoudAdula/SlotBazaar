@@ -1,142 +1,209 @@
-# SlotBazaar — Arkiv Entity Schema v1
+# SlotBazaar — Arkiv Entity Schema v1 (LOCKED)
 
-> Last updated: 2026-10-12  
-> Status: `slot` = live · `booking` = planned · `completion` = planned
-
----
-
-## Design Principles
-
-1. **Filterable vs payload**: Anything a query will filter on goes in `attributes`. Everything else (long descriptions, nested JSON, display data) goes in the `payload`.
-2. **Attribute budget**: Max ~30 attributes per entity. We use 11 on `slot`; leave headroom for future fields.
-3. **Types**: u64 for unix timestamps (never strings); i32 for lat/lon encoded as degrees × 10 000 (supports negatives); str for enums.
-4. **Namespace**: Every entity carries `project="slotbazaar"` and `entity_type` so queries are safely scoped.
-5. **Entity Expiration = slot end time**: The Arkiv entity expires when the time slot ends, so expired slots are automatically removed from the chain.
+> Phase 1 Schema Lock  
+> Ground-truth specification for all on-chain entities and queries in SlotBazaar.  
+> Namespace: `project="slotbazaar"`
 
 ---
 
-## Entity Type: `slot`
+## 1. Design & Architecture Principles
 
-**Status: Live (Phase 0)**
+1. **Arkiv is the Sole Data Layer**:
+   - Zero traditional databases, zero centralized servers, zero localStorage truth.
+   - All app state is read directly from and written directly to the Arkiv Tiramisu testnet.
+2. **Immutable Append-Only Records**:
+   - Slots are **never edited**. When a slot is booked, a separate `booking` entity is created.
+   - When a job completes, separate `completion` entities are minted by seller and buyer.
+3. **Filterable Attributes vs. Unindexed Payload**:
+   - `attributes`: Only properties evaluated in search predicates (`==`, `>`, `<`) or geo-bounding queries.
+   - `payload`: Opaque JSON containing display text (titles, descriptions, notes). Payloads are decoded and strictly validated at runtime.
+4. **Autonomous Chain Expiration**:
+   - Entities have strict lifetimes set via `ExpirationTime`.
+   - Expired entities are automatically pruned by the protocol, eliminating manual maintenance and garbage collection.
+5. **Cryptographic Authentication ($creator)**:
+   - Entity `$creator` is the signer's wallet address and is strictly immutable.
+   - Trusted reads authenticate transactions via `$creator`, never by trusting payload strings.
 
-### Attributes
+---
 
-| Attribute | Type | Why attribute (not payload) | Notes |
-|-----------|------|----------------------------|-------|
-| `project` | `str` | Namespace all queries — required by every select | Value: `"slotbazaar"` |
-| `entity_type` | `str` | Scope by entity kind | Value: `"slot"` |
-| `schema_v` | `str` | Forward compat — query UI can adapt to schema changes | Value: `"1"` |
-| `category` | `str` | Users filter by category (machine/transport/freelance) | `"machine"`, `"transport"`, `"freelance"` |
-| `cluster` | `str` | Users filter by city cluster | `"surat"`, `"mumbai"`, `"delhi"`, … |
-| `starts_at` | `u64` | Range query: slots starting after a time | Unix seconds |
-| `ends_at` | `u64` | Range query: slots still active (ends_at > now) | Unix seconds, must match Entity Expiration |
-| `price_band` | `str` | Users filter by price bucket | `"low"`, `"mid"`, `"high"` |
-| `lat_e4` | `i32` | Map marker position, filterable for geo bounding box | degrees × 10 000, supports negatives |
-| `lon_e4` | `i32` | Map marker position | degrees × 10 000, supports negatives |
-| `synthetic` | `bool` | Mark seeded/test data — used to clean up in queries | `true` for all seed data |
+## 2. Entity Specifications
 
-### Payload (JSON, non-filterable)
+### A. `slot` (Expiring Available Time Slot)
 
+A machine hour, freight capacity, or freelance time slot offered by an SME or individual.
+
+| Attribute | Type | Storage Reason | Constraints & Notes |
+|-----------|------|----------------|---------------------|
+| `project` | `str` | Query namespace | Must be `"slotbazaar"` |
+| `entity_type` | `str` | Filter entity kind | Must be `"slot"` |
+| `schema_v` | `str` | Versioning | `"1"` |
+| `category` | `str` | Filterable by user | `"machine"`, `"transport"`, `"freelance"` |
+| `cluster` | `str` | Filterable regional hub | `"surat"`, `"mumbai"`, `"delhi"`, `"bengaluru"`, `"hyderabad"`, `"chennai"`, etc. |
+| `starts_at` | `u64` | Range filter (`>=`) | Unix seconds |
+| `ends_at` | `u64` | Range filter (`> now`) | Unix seconds; strictly matches slot end |
+| `price_band` | `str` | Price tier filter | `"low"`, `"mid"`, `"high"` |
+| `lat_e4` | `i32` | Geo bounding filter | Latitude × 10 000 (signed integer handles negative coords) |
+| `lon_e4` | `i32` | Geo bounding filter | Longitude × 10 000 (signed integer) |
+| `synthetic` | `bool` | Filter test/seed data | `true` for synthetic/mock slots |
+
+#### Payload Schema (`application/json`)
 ```json
 {
-  "title": "string (≤80 chars display name)",
-  "description": "string (longer description, no PII)",
-  "seller_label": "string (fake business name, synthetic)",
+  "title": "string (1-80 chars)",
+  "description": "string (max 1000 chars)",
+  "seller_label": "string (business or trade name)",
   "schema_version": 1
 }
 ```
 
-### Entity Expiration
-
-`ExpirationTime.atDate(new Date(endsAtSec * 1000))`
-
-**Reasoning**: The slot ceases to be relevant when its end time passes. Using `atDate(endTime)` means Arkiv automatically removes it from all queries — no manual cleanup needed. This is the core semantic elegance of the design.
-
-### UI Queries
-
-| Use case | Query |
-|----------|-------|
-| All active slots | `project=slotbazaar AND entity_type=slot AND ends_at > u64(now)` |
-| By category | + `AND category = str("machine")` |
-| By cluster | + `AND cluster = str("surat")` |
-| By seller | `.createdBy(walletAddress)` |
-| Single slot | `getEntity(key)` |
+#### Expiration Rule & Reasoning
+- **Expiry**: `ExpirationTime.atDate(new Date(ends_at * 1000))`
+- **Reasoning**: A time slot has no commercial utility once its window has passed. Setting entity expiration equal to `ends_at` guarantees the chain purges it from live search and the map without manual intervention.
 
 ---
 
-## Entity Type: `booking` _(planned — Phase 1)_
+### B. `booking` (Buyer Slot Claim)
 
-**Status: Planned**
+A claim placed on an available slot by a buyer. Created as an autonomous entity pointing to `slot_key`.
 
-A buyer's claim on a slot — created when a buyer signs a booking transaction.
+| Attribute | Type | Storage Reason | Constraints & Notes |
+|-----------|------|----------------|---------------------|
+| `project` | `str` | Query namespace | Must be `"slotbazaar"` |
+| `entity_type` | `str` | Filter entity kind | Must be `"booking"` |
+| `slot_key` | `key` | Foreign key to slot | Entity key of parent slot (`0x...`) |
+| `booked_at` | `u64` | Timestamp of booking | Unix seconds |
+| `synthetic` | `bool` | Filter test data | `true` for synthetic records |
 
-### Planned Attributes
-
-| Attribute | Type | Why attribute | Notes |
-|-----------|------|--------------|-------|
-| `project` | `str` | Namespace | `"slotbazaar"` |
-| `entity_type` | `str` | Scope | `"booking"` |
-| `slot_key` | `key` | Query bookings for a slot | Reference to slot entity key |
-| `status` | `str` | Filter by booking state | `"pending"`, `"confirmed"`, `"cancelled"` |
-| `created_at` | `u64` | Ordering | Unix seconds |
-| `synthetic` | `bool` | Test marker | |
-
-### Payload (planned)
-
+#### Payload Schema (`application/json`)
 ```json
 {
-  "message": "optional buyer note (synthetic/no PII)",
+  "note": "string (optional buyer message/requirement, max 500 chars)",
   "schema_version": 1
 }
 ```
 
-### Entity Expiration (planned)
+#### Expiration Rule & Reasoning
+- **Expiry**: `ExpirationTime.atDate(new Date((slot_ends_at + 86400) * 1000))` (Slot end time + 24 hours).
+- **Reasoning**: Bookings must survive throughout the active slot window and slightly beyond so both parties can reference booking terms during fulfillment. Once the 24-hour settlement window closes, uncompleted bookings safely expire.
 
-Booking lives as long as the parent slot: `ExpirationTime.atDate(slot.endsAt)`.  
-**Reasoning**: Booking with no slot is meaningless — auto-expire together.
-
-### Creator / Reputation
-
-`entity.$creator` = buyer's wallet. Immutable. Powers buyer reputation score (count of confirmed bookings per wallet).
-
----
-
-## Entity Type: `completion` _(planned — Phase 2)_
-
-**Status: Planned**
-
-A seller's confirmation that a booked slot was fulfilled. Completes the reputation loop.
-
-### Planned Attributes
-
-| Attribute | Type | Why attribute | Notes |
-|-----------|------|--------------|-------|
-| `project` | `str` | Namespace | `"slotbazaar"` |
-| `entity_type` | `str` | Scope | `"completion"` |
-| `booking_key` | `key` | Link to booking | Reference |
-| `slot_key` | `key` | Direct link to slot | For seller dashboard queries |
-| `synthetic` | `bool` | Test marker | |
-
-### Entity Expiration (planned)
-
-Long-lived — `ExpirationTime.fromDays(365)`.  
-**Reasoning**: Completion records are reputation evidence — they should persist long after the slot expired.
+#### Winner & Tie-Break Logic
+- A slot may receive multiple concurrent booking transactions.
+- **Rule**: Earliest creation block wins (`createdAt` ascending).
+- **Tie-Break within same block**: Lexicographical order of `entityKey` ascending (`a.key.toLowerCase() < b.key.toLowerCase()`).
 
 ---
 
-## Attribute Constraints (SDK enforced)
+### C. `completion` (Mutual Fulfillment Receipt)
 
-| Rule | Value |
-|------|-------|
-| Max attribute name length | 32 bytes |
-| Attribute name pattern | `[a-z][a-z0-9_]*` (lowercase, start with letter) |
-| Max string value | 128 bytes UTF-8 |
-| Max attributes per entity | ~30 |
-| u64 range | 0 to 2^64 - 1 |
-| i32 range | -2^31 to 2^31 - 1 |
+Proof of job completion submitted by either the seller or buyer.
+
+| Attribute | Type | Storage Reason | Constraints & Notes |
+|-----------|------|----------------|---------------------|
+| `project` | `str` | Query namespace | Must be `"slotbazaar"` |
+| `entity_type` | `str` | Filter entity kind | Must be `"completion"` |
+| `slot_key` | `key` | Foreign key to slot | Entity key of booked slot (`0x...`) |
+| `role` | `str` | Role of submitter | `"seller"` or `"buyer"` |
+| `completed_at` | `u64` | Fulfillment timestamp | Unix seconds |
+| `synthetic` | `bool` | Filter test data | `true` for synthetic records |
+
+#### Payload Schema (`application/json`)
+```json
+{
+  "note": "string (optional review/feedback note, max 500 chars)",
+  "schema_version": 1
+}
+```
+
+#### Expiration Rule & Reasoning
+- **Expiry**: `ExpirationTime.fromDays(365)` (1 year).
+- **Reasoning**: Completion records are persistent proof of performance powering on-chain reputation. They outlive the slot and booking so that historical reputation scores remain verifiable over long time horizons.
+
+#### Dual-Sided Reputation Verification
+- An account's verified reputation score is calculated as:
+  **Number of completed jobs where BOTH a seller completion and a buyer completion exist from DIFFERENT creator addresses for the same slot key.**
+- One-sided completion claims or self-dealing completions from the same wallet address are rejected.
 
 ---
 
-## Ordering Note
+## 3. Standard UI Queries
 
-Arkiv does **not** support server-side ordering by attribute. All results are sorted **client-side** after fetching. For the map view we sort by `ends_at` ascending (soonest-expiring first).
+### 1. Fetch All Live Active Slots
+```ts
+client.select()
+  .where(and(
+    eq("project", str("slotbazaar")),
+    eq("entity_type", str("slot")),
+    gt("ends_at", u64(nowSec))
+  ))
+  .fetch()
+```
+*Client sorts results by `ends_at` ascending.*
+
+### 2. Fetch Live Slots by Regional Cluster
+```ts
+client.select()
+  .where(and(
+    eq("project", str("slotbazaar")),
+    eq("entity_type", str("slot")),
+    eq("cluster", str(clusterName)),
+    gt("ends_at", u64(nowSec))
+  ))
+  .fetch()
+```
+
+### 3. Fetch Live Slots by Category
+```ts
+client.select()
+  .where(and(
+    eq("project", str("slotbazaar")),
+    eq("entity_type", str("slot")),
+    eq("category", str(categoryName)),
+    gt("ends_at", u64(nowSec))
+  ))
+  .fetch()
+```
+
+### 4. Fetch Slots Created by a Specific Seller
+```ts
+client.select()
+  .where(and(
+    eq("project", str("slotbazaar")),
+    eq("entity_type", str("slot"))
+  ))
+  .createdBy(sellerAddress)
+  .fetch()
+```
+
+### 5. Fetch Bookings for a Slot
+```ts
+client.select()
+  .where(and(
+    eq("project", str("slotbazaar")),
+    eq("entity_type", str("booking")),
+    eq("slot_key", key(slotKey))
+  ))
+  .fetch()
+```
+*Client determines winning booking by sorting by `createdAt` ascending with deterministic `entityKey` tie-break.*
+
+### 6. Fetch Completions for a Slot
+```ts
+client.select()
+  .where(and(
+    eq("project", str("slotbazaar")),
+    eq("entity_type", str("completion")),
+    eq("slot_key", key(slotKey))
+  ))
+  .fetch()
+```
+
+### 7. Fetch All Completions Involving an Account
+```ts
+client.select()
+  .where(and(
+    eq("project", str("slotbazaar")),
+    eq("entity_type", str("completion"))
+  ))
+  .createdBy(userAddress)
+  .fetch()
+```
