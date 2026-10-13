@@ -16,9 +16,9 @@ import React, {
   type ReactNode,
 } from "react";
 import type { Address } from "viem";
-import { custom, createWalletClient } from "viem";
+import { custom } from "viem";
 import { tiramisu } from "@arkiv-network/sdk/chains";
-import type { WalletArkivClient } from "@arkiv-network/sdk";
+import { createWalletClient, type WalletArkivClient } from "@arkiv-network/sdk";
 import { parseArkivError, type ArkivError } from "./arkiv.js";
 
 export const TIRAMISU_CHAIN_ID_DEC = 7738577;
@@ -178,12 +178,12 @@ export function WalletProvider({ children }: { children: ReactNode }): React.Rea
       })) as string;
       setChainId(currentChain);
 
-      // Create Arkiv/viem wallet client
+      // Create genuine Arkiv wallet client with createEntity extensions
       const wc = createWalletClient({
         chain: tiramisu,
         transport: custom(provider),
         account: activeAddress,
-      }) as unknown as WalletArkivClient;
+      });
 
       setClient(wc);
       setAddress(activeAddress);
@@ -221,7 +221,7 @@ export function WalletProvider({ children }: { children: ReactNode }): React.Rea
             chain: tiramisu,
             transport: custom(provider),
             account: nextAddr,
-          }) as unknown as WalletArkivClient;
+          });
           setClient(wc);
         }
       }
