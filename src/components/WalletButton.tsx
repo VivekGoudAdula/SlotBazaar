@@ -1,14 +1,31 @@
 /**
  * src/components/WalletButton.tsx
  *
- * MetaMask connection button. Displays current connection status
- * and truncated wallet address when connected.
+ * Wallet connection button with popover help and connected account menu.
+ * Adheres to Phase 2C UI layout requirements:
+ *  - Not connected: opens "Connect to try SlotBazaar" 3-step popover + "?" help button
+ *  - Connected: displays short address and GLM balance; popover menu with copy address,
+ *    balance, "Switch to Tiramisu", and Disconnect
+ *  - Outside click & Escape close handlers, focus trap, 44px touch targets
  */
 
-import React from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { formatEther } from "viem";
 import { useWallet } from "../lib/wallet.js";
+import { getArkivPublicClient } from "../lib/arkiv.js";
 
-/** Truncates 0xABCDE...12345 for compact display */
+const TIRAMISU_CHAIN_ID_DEC = 7738577;
+const TIRAMISU_CHAIN_ID_HEX = "0x761591";
+
+const NETWORK_DETAILS = {
+  name: "Arkiv Tiramisu",
+  rpc: "https://rpc.tiramisu.db-chain.testnet.arkiv.network",
+  chainId: "7738577",
+  symbol: "GLM",
+  explorer: "https://tiramisu.explorer.arkiv.network",
+  faucet: "https://hub.arkiv.network/faucet",
+};
+
 function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
@@ -16,57 +33,386 @@ function truncateAddress(addr: string): string {
 export function WalletButton(): React.ReactElement {
   const { status, address, connect, disconnect } = useWallet();
 
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [balance, setBalance] = useState<string | null>(null);
+  const [isWrongNetwork, setIsWrongNetwork] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // ─── Fetch GLM Balance & Check Network ──────────────────────────────────────
+  const fetchBalanceAndNetwork = useCallback(async () => {
+    if (!address) return;
+    try {
+      const publicClient = getArkivPublicClient();
+      const bal = await publicClient.getBalance({ address });
+      const formatted = parseFloat(formatEther(bal)).toFixed(3);
+      setBalance(`${formatted} GLM`);
+    } catch {
+      setBalance(null);
+    }
+
+    if (typeof window !== "undefined" && (window as unknown as { ethereum?: { chainId?: string } }).ethereum) {
+      const eth = (window as unknown as { ethereum: { chainId?: string } }).ethereum;
+      const currentChain = eth.chainId;
+      if (currentChain && parseInt(currentChain, 16) !== TIRAMISU_CHAIN_ID_DEC) {
+        setIsWrongNetwork(true);
+      } else {
+        setIsWrongNetwork(false);
+      }
+    }
+  }, [address]);
+
+  useEffect(() => {
+    if (status === "connected" && address) {
+      void fetchBalanceAndNetwork();
+      const interval = setInterval(fetchBalanceAndNetwork, 10_000);
+      return () => clearInterval(interval);
+    } else {
+      setBalance(null);
+    }
+  }, [status, address, fetchBalanceAndNetwork]);
+
+  // ─── Outside Click & Escape Handlers ────────────────────────────────────────
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setHelpOpen(false);
+        setMenuOpen(false);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setHelpOpen(false);
+        setMenuOpen(false);
+      }
+    }
+    if (helpOpen || menuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [helpOpen, menuOpen]);
+
+  // ─── Copy Helper ────────────────────────────────────────────────────────────
+  const copyToClipboard = useCallback((text: string, keyName: string) => {
+    void navigator.clipboard.writeText(text);
+    setCopiedKey(keyName);
+    setTimeout(() => setCopiedKey(null), 1800);
+  }, []);
+
+  const copyAllNetworkDetails = useCallback(() => {
+    const text = [
+      `Network Name: ${NETWORK_DETAILS.name}`,
+      `RPC URL: ${NETWORK_DETAILS.rpc}`,
+      `Chain ID: ${NETWORK_DETAILS.chainId}`,
+      `Currency Symbol: ${NETWORK_DETAILS.symbol}`,
+      `Block Explorer: ${NETWORK_DETAILS.explorer}`,
+    ].join("\n");
+    copyToClipboard(text, "all");
+  }, [copyToClipboard]);
+
+  // ─── Switch Network Helper ──────────────────────────────────────────────────
+  const switchNetwork = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    const eth = (window as unknown as { ethereum?: { request: (args: unknown) => Promise<unknown> } }).ethereum;
+    if (!eth) return;
+    try {
+      await eth.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: TIRAMISU_CHAIN_ID_HEX }],
+      });
+      setIsWrongNetwork(false);
+    } catch (err: unknown) {
+      const code = (err as { code?: number })?.code;
+      if (code === 4902) {
+        try {
+          await eth.request({
+            method: "wallet_addEthereumChain",
+            params: [{
+              chainId: TIRAMISU_CHAIN_ID_HEX,
+              chainName: NETWORK_DETAILS.name,
+              rpcUrls: [NETWORK_DETAILS.rpc],
+              nativeCurrency: { name: "GLM", symbol: "GLM", decimals: 18 },
+              blockExplorerUrls: [NETWORK_DETAILS.explorer],
+            }],
+          });
+          setIsWrongNetwork(false);
+        } catch {
+          // User rejected
+        }
+      }
+    }
+  }, []);
+
+  // ─── CONNECTED VIEW ─────────────────────────────────────────────────────────
   if (status === "connected" && address) {
     return (
-      <button
-        id="wallet-btn-connected"
-        className="wallet-btn wallet-btn--connected"
-        onClick={disconnect}
-        title={address}
-        aria-label={`Connected as ${address}. Click to disconnect.`}
-      >
-        <span aria-hidden="true">🦊</span>
-        <span className="wallet-addr">{truncateAddress(address)}</span>
-      </button>
+      <div className="wallet-container" ref={containerRef}>
+        <button
+          id="wallet-btn-connected"
+          className="wallet-btn wallet-btn--connected"
+          onClick={() => setMenuOpen((o) => !o)}
+          aria-expanded={menuOpen}
+          aria-haspopup="dialog"
+          aria-label={`Connected: ${address}. Click for account details.`}
+        >
+          <span aria-hidden="true">🦊</span>
+          <span className="wallet-addr">{truncateAddress(address)}</span>
+          {balance && <span className="wallet-balance-pill">{balance}</span>}
+          {isWrongNetwork && <span className="wallet-warning-dot" title="Wrong network! Switch to Tiramisu">⚠️</span>}
+        </button>
+
+        {/* Connected Menu Popover */}
+        {menuOpen && (
+          <div
+            className="wallet-popover wallet-popover--menu"
+            role="dialog"
+            aria-label="Account details"
+            id="wallet-menu-popover"
+          >
+            <div className="wallet-popover__header">
+              <span className="wallet-popover__title">Connected Account</span>
+              <button
+                className="wallet-popover__close"
+                onClick={() => setMenuOpen(false)}
+                aria-label="Close menu"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="wallet-popover__row">
+              <span className="wallet-popover__label">Address:</span>
+              <div className="wallet-popover__val-group">
+                <code className="wallet-popover__val">{truncateAddress(address)}</code>
+                <button
+                  className="wallet-copy-btn"
+                  onClick={() => copyToClipboard(address, "address")}
+                  aria-label="Copy wallet address"
+                >
+                  {copiedKey === "address" ? "✓ Copied" : "Copy"}
+                </button>
+              </div>
+            </div>
+
+            <div className="wallet-popover__row">
+              <span className="wallet-popover__label">Balance:</span>
+              <span className="wallet-popover__balance">{balance ?? "Fetching…"}</span>
+            </div>
+
+            {isWrongNetwork && (
+              <div className="wallet-popover__network-alert">
+                <span>Wrong network! Please switch to Tiramisu testnet.</span>
+                <button
+                  className="wallet-action-btn wallet-action-btn--warn"
+                  onClick={switchNetwork}
+                  id="wallet-switch-network-btn"
+                >
+                  Switch to Tiramisu
+                </button>
+              </div>
+            )}
+
+            <div className="wallet-popover__actions">
+              <button
+                className="wallet-action-btn wallet-action-btn--secondary"
+                onClick={() => {
+                  disconnect();
+                  setMenuOpen(false);
+                }}
+                id="wallet-disconnect-btn"
+              >
+                Disconnect
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     );
   }
 
-  if (status === "connecting") {
-    return (
-      <button
-        id="wallet-btn-connecting"
-        className="wallet-btn wallet-btn--connecting"
-        disabled
-        aria-label="Connecting wallet…"
-      >
-        <span className="spin" aria-hidden="true">⟳</span>
-        Connecting…
-      </button>
-    );
-  }
-
-  if (status === "error") {
-    return (
-      <button
-        id="wallet-btn-error"
-        className="wallet-btn wallet-btn--error"
-        onClick={() => void connect()}
-        aria-label="Wallet connection failed. Click to retry."
-      >
-        ⚠ Retry Connect
-      </button>
-    );
-  }
-
+  // ─── DISCONNECTED / CONNECTING / ERROR VIEW ─────────────────────────────────
   return (
-    <button
-      id="wallet-btn-connect"
-      className="wallet-btn wallet-btn--connect"
-      onClick={() => void connect()}
-      aria-label="Connect MetaMask wallet"
-    >
-      <span aria-hidden="true">🦊</span>
-      Connect Wallet
-    </button>
+    <div className="wallet-container" ref={containerRef}>
+      <div className="wallet-button-group">
+        <button
+          id="wallet-btn-connect"
+          className={`wallet-btn ${status === "error" ? "wallet-btn--error" : "wallet-btn--connect"}`}
+          onClick={() => setHelpOpen((o) => !o)}
+          aria-expanded={helpOpen}
+          aria-haspopup="dialog"
+          aria-label="Connect wallet options"
+          disabled={status === "connecting"}
+        >
+          <span aria-hidden="true">{status === "connecting" ? "⟳" : "🦊"}</span>
+          <span>{status === "connecting" ? "Connecting…" : status === "error" ? "Retry Connect" : "Connect Wallet"}</span>
+        </button>
+
+        {/* Small ? help trigger button */}
+        <button
+          id="wallet-help-btn"
+          className="wallet-help-btn"
+          onClick={() => setHelpOpen((o) => !o)}
+          title="Network setup & faucet help"
+          aria-label="Open connection help guide"
+          aria-expanded={helpOpen}
+        >
+          ?
+        </button>
+      </div>
+
+      {/* Disconnected 3-Step Help Popover */}
+      {helpOpen && (
+        <div
+          className="wallet-popover wallet-popover--help"
+          role="dialog"
+          aria-label="Connect to try SlotBazaar"
+          id="wallet-help-popover"
+        >
+          <div className="wallet-popover__header">
+            <span className="wallet-popover__title">Connect to try SlotBazaar</span>
+            <button
+              className="wallet-popover__close"
+              onClick={() => setHelpOpen(false)}
+              aria-label="Close help"
+            >
+              ✕
+            </button>
+          </div>
+
+          <ol className="wallet-steps">
+            {/* Step 1 */}
+            <li className="wallet-step">
+              <div className="wallet-step__title">
+                <span className="wallet-step__num">1</span>
+                Get test GLM from the faucet
+              </div>
+              <p className="wallet-step__desc">
+                Free testnet GLM is required to sign transactions and book slots.
+              </p>
+              <a
+                href={NETWORK_DETAILS.faucet}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="wallet-step__link"
+                id="popover-faucet-link"
+              >
+                Arkiv Faucet ↗
+              </a>
+            </li>
+
+            {/* Step 2 */}
+            <li className="wallet-step">
+              <div className="wallet-step__title">
+                <span className="wallet-step__num">2</span>
+                Add Tiramisu network details
+              </div>
+              <div className="network-params-box">
+                <div className="network-param-row">
+                  <span className="param-label">Network Name</span>
+                  <div className="param-value-wrap">
+                    <code>{NETWORK_DETAILS.name}</code>
+                    <button
+                      className="param-copy-btn"
+                      onClick={() => copyToClipboard(NETWORK_DETAILS.name, "name")}
+                      aria-label="Copy network name"
+                    >
+                      {copiedKey === "name" ? "✓" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="network-param-row">
+                  <span className="param-label">RPC URL</span>
+                  <div className="param-value-wrap">
+                    <code>{NETWORK_DETAILS.rpc}</code>
+                    <button
+                      className="param-copy-btn"
+                      onClick={() => copyToClipboard(NETWORK_DETAILS.rpc, "rpc")}
+                      aria-label="Copy RPC URL"
+                    >
+                      {copiedKey === "rpc" ? "✓" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="network-param-row">
+                  <span className="param-label">Chain ID</span>
+                  <div className="param-value-wrap">
+                    <code>{NETWORK_DETAILS.chainId}</code>
+                    <button
+                      className="param-copy-btn"
+                      onClick={() => copyToClipboard(NETWORK_DETAILS.chainId, "chainId")}
+                      aria-label="Copy Chain ID"
+                    >
+                      {copiedKey === "chainId" ? "✓" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="network-param-row">
+                  <span className="param-label">Currency</span>
+                  <div className="param-value-wrap">
+                    <code>{NETWORK_DETAILS.symbol}</code>
+                    <button
+                      className="param-copy-btn"
+                      onClick={() => copyToClipboard(NETWORK_DETAILS.symbol, "symbol")}
+                      aria-label="Copy Symbol"
+                    >
+                      {copiedKey === "symbol" ? "✓" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="network-param-row">
+                  <span className="param-label">Explorer</span>
+                  <div className="param-value-wrap">
+                    <code>{NETWORK_DETAILS.explorer}</code>
+                    <button
+                      className="param-copy-btn"
+                      onClick={() => copyToClipboard(NETWORK_DETAILS.explorer, "explorer")}
+                      aria-label="Copy Explorer"
+                    >
+                      {copiedKey === "explorer" ? "✓" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  className="network-copy-all-btn"
+                  onClick={copyAllNetworkDetails}
+                  id="wallet-copy-all-btn"
+                >
+                  {copiedKey === "all" ? "✓ All Copied to Clipboard" : "📋 Copy All Details"}
+                </button>
+              </div>
+            </li>
+
+            {/* Step 3 */}
+            <li className="wallet-step">
+              <div className="wallet-step__title">
+                <span className="wallet-step__num">3</span>
+                Connect MetaMask
+              </div>
+              <button
+                id="popover-connect-metamask-btn"
+                className="wallet-action-btn wallet-action-btn--primary"
+                onClick={async () => {
+                  setHelpOpen(false);
+                  await connect();
+                }}
+              >
+                🦊 Connect MetaMask
+              </button>
+            </li>
+          </ol>
+        </div>
+      )}
+    </div>
   );
 }

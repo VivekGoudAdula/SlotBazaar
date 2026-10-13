@@ -246,4 +246,16 @@ Measured with `scripts/measure-cost.ts` on Tiramisu testnet. Balance delta (befo
 
 ---
 
+## 6. Client-Side Test Entity Filter Rule
+
+To prevent automated test probes and cost measurement entities (e.g. `cost-test 24h`, `Test · Machine`) from polluting the live user-facing map and slot lists, SlotBazaar applies a strict client-side exclusion filter (`isProductionSlot` in `src/lib/arkiv.ts`):
+
+1. **Entity title**: Excluded if `title` (trimmed, lowercase) starts with `"test"`, `"cost-test"`, or `"cost_test"`.
+2. **Seed batch attribute**: Excluded if `seed_batch` (trimmed, lowercase) starts with `"test"` or `"cost"`.
+3. **Cluster attribute**: Excluded if `cluster` equals `"test"`.
+
+Production and synthetic demo slots created via `seed.ts` (tagged `seed_batch="seed-YYYY-MM-DD"`) remain visible and fully functional. On-chain data is untouched.
+
+---
+
 *Last updated: 2026-10-13 IST*

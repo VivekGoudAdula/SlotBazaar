@@ -67,7 +67,6 @@ function createSlotIcon(slot: SlotEntity, now: number): L.DivIcon {
       title="${slot.title.replace(/"/g, "&quot;")}"
     >
       <div class="slot-marker__inner">${CATEGORY_ICONS[slot.category] ?? "📦"}</div>
-      ${slot.synthetic ? '<div class="slot-marker__badge">DEMO</div>' : ""}
     </div>
   `;
 
@@ -86,11 +85,11 @@ const INDIA_BOUNDS = L.latLngBounds(
   [6.0,  68.0],   // SW: tip of Kanyakumari + west coast
   [37.5, 98.0],   // NE: Kashmir + Arunachal
 );
-const INDIA_CENTER: [number, number] = [20.5937, 78.9629];
+const INDIA_CENTER: [number, number] = [22.5, 79.0];
 const INDIA_ZOOM    = 5;
 const INDIA_MIN_ZOOM = 4;
 
-// ─── Auto-fit to slot bounds (fires once on first non-empty render) ───────────
+// ─── Auto-fit to slot bounds (maxZoom 7 prevents village-level zoom) ──────────
 function FitBounds({
   slots,
   fitted,
@@ -100,11 +99,19 @@ function FitBounds({
 }): null {
   const map = useMap();
   useEffect(() => {
-    if (fitted.current || slots.length === 0) return;
-    const bounds = L.latLngBounds(slots.map((s) => [s.lat, s.lon]));
-    if (bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 10 });
-      fitted.current = true;
+    if (slots.length === 0) {
+      if (fitted.current) {
+        map.setView(INDIA_CENTER, INDIA_ZOOM);
+        fitted.current = false;
+      }
+      return;
+    }
+    if (!fitted.current) {
+      const bounds = L.latLngBounds(slots.map((s) => [s.lat, s.lon]));
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 7 });
+        fitted.current = true;
+      }
     }
   }, [map, slots, fitted]);
   return null;

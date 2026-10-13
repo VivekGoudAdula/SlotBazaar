@@ -136,6 +136,7 @@ export interface SlotEntity {
   createdAtBlock?: bigint;
   expiresAtBlock?: bigint;
   synthetic: boolean;
+  seedBatch?: string;
 }
 
 export interface BookingPayload {
@@ -297,6 +298,7 @@ export function parseSlotEntity(entity: Entity | FullEntity): SlotEntity | null 
     const lon = rawLon / 10000;
 
     const synthetic = getAttrValue<boolean>(attrs, "synthetic") ?? false;
+    const seedBatch = getAttrValue<string>(attrs, "seed_batch");
 
     let payloadJson: unknown = null;
     try {
@@ -325,10 +327,28 @@ export function parseSlotEntity(entity: Entity | FullEntity): SlotEntity | null 
       createdAtBlock: entity.createdAt,
       expiresAtBlock: entity.expiresAt,
       synthetic,
+      seedBatch,
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * Filter predicate that excludes test probes and cost measurement entities.
+ * Excludes entities where seed_batch starts with "test" or "cost",
+ * title starts with "cost-test" or "test", or cluster is "test".
+ * Documented in schema.md.
+ */
+export function isProductionSlot(slot: { title: string; seedBatch?: string; cluster?: string }): boolean {
+  const t = slot.title.trim().toLowerCase();
+  if (t.startsWith("test") || t.startsWith("cost-test") || t.startsWith("cost_test")) return false;
+  if (slot.seedBatch) {
+    const b = slot.seedBatch.trim().toLowerCase();
+    if (b.startsWith("test") || b.startsWith("cost")) return false;
+  }
+  if (slot.cluster?.trim().toLowerCase() === "test") return false;
+  return true;
 }
 
 /**
@@ -452,7 +472,7 @@ export async function fetchLiveSlots(client: PublicArkivClient = getArkivPublicC
     const slots: SlotEntity[] = [];
     for (const raw of allRaw) {
       const parsed = parseSlotEntity(raw);
-      if (parsed) slots.push(parsed);
+      if (parsed && isProductionSlot(parsed)) slots.push(parsed);
     }
 
     // Client-side sort: earliest expiring first
