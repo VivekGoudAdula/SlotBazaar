@@ -210,8 +210,6 @@ export interface MapViewProps {
   reputationByAddress?: Map<string, ReputationResult>;
   userAddress?: string | null;
   userLocation?: UserLocationState | null;
-  userGeoStatus?: "prompt" | "detecting" | "granted" | "denied" | "unsupported";
-  onRequestLocation?: () => void;
   onRecenterUser?: () => void;
 }
 
@@ -223,8 +221,6 @@ export function MapView({
   reputationByAddress,
   userAddress,
   userLocation = null,
-  userGeoStatus = "prompt",
-  onRequestLocation,
   onRecenterUser,
 }: MapViewProps): React.ReactElement {
   const now    = useNow();
@@ -232,33 +228,19 @@ export function MapView({
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      {/* Floating Permission Prompt Banner (shown if location is not given) */}
-      {userGeoStatus === "denied" && (
-        <div className="map-geo-prompt" role="alert" id="map-geo-denied-banner">
-          <span>📍 Location not granted — enable location to show &ldquo;You Are Here&rdquo; on the map</span>
-          <button type="button" onClick={onRequestLocation} id="enable-location-prompt-btn">
-            Enable Location
-          </button>
-        </div>
+      {/* Recenter to My Location Button (shown once location is active) */}
+      {userLocation && (
+        <button
+          type="button"
+          className="map-locate-btn"
+          id="recenter-my-location-btn"
+          title="Center map on my location"
+          onClick={onRecenterUser}
+        >
+          <span aria-hidden="true">📍</span>
+          <span>My Location</span>
+        </button>
       )}
-
-      {/* Recenter / Locate Me Button */}
-      <button
-        type="button"
-        className="map-locate-btn"
-        id="recenter-my-location-btn"
-        title={userLocation ? "Center map on my location" : "Enable location access"}
-        onClick={() => {
-          if (userLocation && onRecenterUser) {
-            onRecenterUser();
-          } else if (onRequestLocation) {
-            onRequestLocation();
-          }
-        }}
-      >
-        <span aria-hidden="true">📍</span>
-        <span>{userLocation ? "My Location" : "Locate Me"}</span>
-      </button>
 
       <MapContainer
         center={userLocation ? [userLocation.lat, userLocation.lon] : INDIA_CENTER}

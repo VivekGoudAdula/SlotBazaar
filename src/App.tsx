@@ -279,9 +279,6 @@ function AppInner(): React.ReactElement {
     lon: number;
     accuracy?: number;
   } | null>(null);
-  const [userGeoStatus, setUserGeoStatus] = useState<
-    "prompt" | "detecting" | "granted" | "denied" | "unsupported"
-  >("detecting");
 
   const flyRef = useRef<[number, number] | null>(null);
 
@@ -292,11 +289,8 @@ function AppInner(): React.ReactElement {
    */
   const requestAppLocation = useCallback(() => {
     if (typeof window === "undefined" || !navigator.geolocation) {
-      setUserGeoStatus("unsupported");
       return;
     }
-
-    setUserGeoStatus("detecting");
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -304,11 +298,10 @@ function AppInner(): React.ReactElement {
         const uLon = pos.coords.longitude;
         const accuracy = Math.round(pos.coords.accuracy);
         setUserLocation({ lat: uLat, lon: uLon, accuracy });
-        setUserGeoStatus("granted");
         setFlyTarget([uLat, uLon]);
       },
       () => {
-        setUserGeoStatus("denied");
+        // User denied/dismissed — native browser permission is enough, no extra banner
       },
       {
         enableHighAccuracy: true,
@@ -489,8 +482,6 @@ function AppInner(): React.ReactElement {
           reputationByAddress={reputationByAddress}
           userAddress={address}
           userLocation={userLocation}
-          userGeoStatus={userGeoStatus}
-          onRequestLocation={requestAppLocation}
           onRecenterUser={handleRecenterUser}
         />
 
