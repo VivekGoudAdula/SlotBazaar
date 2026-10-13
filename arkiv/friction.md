@@ -494,6 +494,24 @@
 
 ---
 
+### FR-016 · explorer.tiramisu.arkiv.network returns NXDOMAIN; official explorer is data.arkiv.network/?q=${key}&chain=tiramisu
+
+- **Date/time (IST):** 2026-10-13, ~20:55 IST
+- **Phase:** 4 (Explorer Link Audit & UX Verification)
+- **SDK + network versions:** Tiramisu testnet, chain ID `7738577`
+- **What I expected:**  
+  Navigating to `https://explorer.tiramisu.arkiv.network/entity/<key>` or `https://explorer.tiramisu.arkiv.network/tx/<txHash>` would open the block explorer view for the Arkiv entity or transaction.
+- **What actually happened:**  
+  The browser returned `DNS_PROBE_FINISHED_NXDOMAIN` ("Hmmm… can't reach this page / Check if there is a typo in explorer.tiramisu.arkiv.network"). The subdomains `explorer.tiramisu.arkiv.network` and `tiramisu.explorer.arkiv.network` have no valid DNS A/CNAME records.
+- **Root Cause & Official Canonical Pattern:**  
+  The official, working Arkiv Data Explorer uses a unified query parameter interface hosted on:
+  `https://data.arkiv.network/?q=${entityKeyOrTxHash}&chain=tiramisu`
+- **Severity:** medium (broken outgoing links in UI modals, toasts, and drawers until updated)
+- **Fix Applied:**  
+  Added shared helpers `getEntityExplorerUrl(key)` and `getTxExplorerUrl(txHash)` in `src/lib/arkiv.ts` pointing to `https://data.arkiv.network/?q=${key}&chain=tiramisu`, and updated all drawers, modals, toasts, and documentation across the codebase.
+
+---
+
 ## What worked well — Phase 4
 
 - **End-to-End Post-Expiry Verification**: Schema v2 decoupling proved 100% successful on-chain. Even after the slot entity was purged from Arkiv, two-sided completion signatures linked to the booking entity allowed `getReputation` to verify the job without error.
