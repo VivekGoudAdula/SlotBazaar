@@ -15,8 +15,17 @@ import React, { useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 // @ts-expect-error — no types for this package
-import MarkerClusterGroup from "@changey/react-leaflet-markercluster";
+import _MarkerClusterGroup from "@changey/react-leaflet-markercluster";
 import "@changey/react-leaflet-markercluster/dist/styles.min.css";
+
+/**
+ * The package ships as CJS with a .default export under Vite's ESM transform.
+ * Unwrap so React receives the component function, not the module object.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const MarkerClusterGroup: React.ComponentType<any> =
+  (_MarkerClusterGroup as any).default ?? _MarkerClusterGroup;
+
 import type { SlotEntity } from "../lib/arkiv.js";
 import { SlotCard } from "./SlotCard.js";
 import { useNow } from "../hooks/useNow.js";
