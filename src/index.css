@@ -2334,3 +2334,159 @@ body {
   background: rgba(251, 247, 240, 0.88) !important;
   padding: 2px 6px !important;
 }
+
+/* ─── "YOU ARE HERE" PULSING USER LOCATION MARKER ───────────────────────── */
+.user-location-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.user-location-marker {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.user-location-radar {
+  position: absolute;
+  top: 14px;
+  left: 55px;
+  width: 24px;
+  height: 24px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(15, 139, 141, 0.4);
+  box-shadow: 0 0 14px rgba(15, 139, 141, 0.7);
+  animation: userRadarWave 2s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
+  pointer-events: none;
+}
+
+.user-location-dot {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #0F8B8D; /* Peacock Teal */
+  border: 3px solid #FFFFFF;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  z-index: 2;
+  transition: transform 0.15s ease;
+}
+
+.user-location-marker:hover .user-location-dot {
+  transform: scale(1.2);
+}
+
+.user-location-tag {
+  margin-top: 4px;
+  background: #1B1A17;
+  color: #FBF7F0;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border: 1.5px solid #FFFFFF;
+  border-radius: 2px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 3;
+}
+
+@keyframes userRadarWave {
+  0% {
+    width: 16px;
+    height: 16px;
+    opacity: 0.9;
+  }
+  70% {
+    width: 54px;
+    height: 54px;
+    opacity: 0;
+  }
+  100% {
+    width: 54px;
+    height: 54px;
+    opacity: 0;
+  }
+}
+
+/* Floating Recenter Location Button */
+.map-locate-btn {
+  position: absolute;
+  bottom: 38px;
+  right: 14px;
+  z-index: 999;
+  background: var(--c-paper);
+  border: 2px solid var(--c-ink);
+  box-shadow: var(--shadow-md);
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--c-ink);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.map-locate-btn:hover {
+  background: var(--c-paper-dark);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+/* Location Permission Prompt Bar (if not given) */
+.map-geo-prompt {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999;
+  background: var(--c-paper);
+  border: 2px solid var(--c-ink);
+  box-shadow: var(--shadow-lg);
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--c-ink);
+  max-width: 90%;
+  animation: slideDownFade 0.3s ease;
+}
+
+.map-geo-prompt button {
+  background: var(--c-teal);
+  color: #FFFFFF;
+  border: 1px solid var(--c-ink);
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.map-geo-prompt button:hover {
+  background: #0d7577;
+}
+
+@keyframes slideDownFade {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+

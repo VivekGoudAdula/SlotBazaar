@@ -12,13 +12,14 @@
  */
 
 import React, { useEffect, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
 import L from "leaflet";
 import { MarkerClusterGroup } from "./MarkerClusterGroup.js";
 
 import type { SlotEntity, BookingEntity, ReputationResult } from "../lib/arkiv.js";
 import { SlotCard } from "./SlotCard.js";
 import { useNow } from "../hooks/useNow.js";
+import { findNearestCluster } from "../lib/clusters.js";
 
 // ─── Fix Leaflet icon paths (broken under Vite) ───────────────────────────────
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -111,6 +112,27 @@ function createSlotIcon(
   });
 }
 
+/**
+ * Creates custom "You Are Here" user location radar beacon icon.
+ */
+function createUserLocationIcon(): L.DivIcon {
+  const html = `
+    <div class="user-location-marker" title="You Are Here">
+      <div class="user-location-radar"></div>
+      <div class="user-location-dot"></div>
+      <div class="user-location-tag">YOU ARE HERE</div>
+    </div>
+  `;
+
+  return L.divIcon({
+    html,
+    className: "user-location-div-icon",
+    iconSize: [110, 42],
+    iconAnchor: [55, 14],
+    popupAnchor: [0, -20],
+  });
+}
+
 // ─── India bounds ─────────────────────────────────────────────────────────────
 /** Approximate bounding box for India — prevents scrolling to empty ocean */
 const INDIA_BOUNDS = L.latLngBounds(
@@ -121,16 +143,30 @@ const INDIA_CENTER: [number, number] = [22.5, 79.0];
 const INDIA_ZOOM    = 5;
 const INDIA_MIN_ZOOM = 4;
 
+export interface UserLocationState {
+  lat: number;
+  lon: number;
+  accuracy?: number;
+}
+
 // ─── Auto-fit to slot bounds (maxZoom 7 prevents village-level zoom) ──────────
 function FitBounds({
   slots,
   fitted,
+  userLocation,
 }: {
   slots: SlotEntity[];
   fitted: React.MutableRefObject<boolean>;
+  userLocation?: UserLocationState | null;
 }): null {
   const map = useMap();
   useEffect(() => {
+    // If user granted location, smoothly center to user's exact location on initial load
+    if (userLocation && !fitted.current) {
+      map.flyTo([userLocation.lat, userLocation.lon], 12, { duration: 1.2 });
+      fitted.current = true;
+      return;
+    }
     if (slots.length === 0) {
       if (fitted.current) {
         map.setView(INDIA_CENTER, INDIA_ZOOM);
@@ -145,7 +181,7 @@ function FitBounds({
         fitted.current = true;
       }
     }
-  }, [map, slots, fitted]);
+  }, [map, slots, fitted, userLocation]);
   return null;
 }
 
@@ -158,7 +194,7 @@ function FlyController({
   const map = useMap();
   useEffect(() => {
     if (!target) return;
-    map.flyTo(target, Math.max(map.getZoom(), 10), { duration: 0.8 });
+    map.flyTo(target, Math.max(map.getZoom(), 11), { duration: 0.9 });
   }, [map, target]);
   return null;
 }
@@ -173,6 +209,10 @@ export interface MapViewProps {
   winningBookingsBySlot?: Map<string, BookingEntity>;
   reputationByAddress?: Map<string, ReputationResult>;
   userAddress?: string | null;
+  userLocation?: UserLocationState | null;
+  userGeoStatus?: "prompt" | "detecting" | "granted" | "denied" | "unsupported";
+  onRequestLocation?: () => void;
+  onRecenterUser?: () => void;
 }
 
 export function MapView({
@@ -182,72 +222,165 @@ export function MapView({
   winningBookingsBySlot,
   reputationByAddress,
   userAddress,
+  userLocation = null,
+  userGeoStatus = "prompt",
+  onRequestLocation,
+  onRecenterUser,
 }: MapViewProps): React.ReactElement {
   const now    = useNow();
   const fitted = useRef(false);
 
   return (
-    <MapContainer
-      center={INDIA_CENTER}
-      zoom={INDIA_ZOOM}
-      minZoom={INDIA_MIN_ZOOM}
-      maxZoom={19}
-      maxBounds={INDIA_BOUNDS}
-      maxBoundsViscosity={0.85}
-      style={{ width: "100%", height: "100%", background: "#FBF7F0" }}
-      zoomControl={true}
-      attributionControl={true}
-      id="leaflet-map"
-    >
-      {/*
-        OpenStreetMap raster tiles — free, no API key, CC-BY-SA licence.
-        Usage policy: https://operations.osmfoundation.org/policies/tiles/
-        Tile provider: openstreetmap.org
-        Tinting applied via CSS on .leaflet-tile-pane in index.css.
-      */}
-      <TileLayer
-        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-        maxZoom={19}
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
-        crossOrigin="anonymous"
-        errorTileUrl="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
-      />
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      {/* Floating Permission Prompt Banner (shown if location is not given) */}
+      {userGeoStatus === "denied" && (
+        <div className="map-geo-prompt" role="alert" id="map-geo-denied-banner">
+          <span>📍 Location not granted — enable location to show &ldquo;You Are Here&rdquo; on the map</span>
+          <button type="button" onClick={onRequestLocation} id="enable-location-prompt-btn">
+            Enable Location
+          </button>
+        </div>
+      )}
 
-      <FitBounds slots={slots} fitted={fitted} />
-      <FlyController target={flyTarget} />
-
-      {/* Clustered slot markers */}
-      <MarkerClusterGroup
-        chunkedLoading
-        maxClusterRadius={50}
-        showCoverageOnHover={false}
+      {/* Recenter / Locate Me Button */}
+      <button
+        type="button"
+        className="map-locate-btn"
+        id="recenter-my-location-btn"
+        title={userLocation ? "Center map on my location" : "Enable location access"}
+        onClick={() => {
+          if (userLocation && onRecenterUser) {
+            onRecenterUser();
+          } else if (onRequestLocation) {
+            onRequestLocation();
+          }
+        }}
       >
-        {slots.map((slot) => {
-          const sKeyNorm = slot.key.toLowerCase();
-          const winningBooking = winningBookingsBySlot?.get(sKeyNorm);
-          const sellerRep = reputationByAddress?.get(slot.creator.toLowerCase());
-          const icon = createSlotIcon(slot, now, winningBooking, userAddress);
+        <span aria-hidden="true">📍</span>
+        <span>{userLocation ? "My Location" : "Locate Me"}</span>
+      </button>
 
-          return (
+      <MapContainer
+        center={userLocation ? [userLocation.lat, userLocation.lon] : INDIA_CENTER}
+        zoom={userLocation ? 12 : INDIA_ZOOM}
+        minZoom={INDIA_MIN_ZOOM}
+        maxZoom={19}
+        maxBounds={INDIA_BOUNDS}
+        maxBoundsViscosity={0.85}
+        style={{ width: "100%", height: "100%", background: "#FBF7F0" }}
+        zoomControl={true}
+        attributionControl={true}
+        id="leaflet-map"
+      >
+        {/*
+          OpenStreetMap raster tiles — free, no API key, CC-BY-SA licence.
+          Usage policy: https://operations.osmfoundation.org/policies/tiles/
+          Tile provider: openstreetmap.org
+          Tinting applied via CSS on .leaflet-tile-pane in index.css.
+        */}
+        <TileLayer
+          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={19}
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
+          crossOrigin="anonymous"
+          errorTileUrl="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+        />
+
+        <FitBounds slots={slots} fitted={fitted} userLocation={userLocation} />
+        <FlyController target={flyTarget} />
+
+        {/* ─── YOU ARE HERE User Location Pin ─────────────────────── */}
+        {userLocation && (
+          <>
+            {userLocation.accuracy && userLocation.accuracy > 0 && (
+              <Circle
+                center={[userLocation.lat, userLocation.lon]}
+                radius={Math.min(userLocation.accuracy, 1500)}
+                pathOptions={{
+                  color: "#0F8B8D",
+                  fillColor: "#0F8B8D",
+                  fillOpacity: 0.12,
+                  weight: 1.5,
+                  dashArray: "4, 4",
+                }}
+              />
+            )}
+
             <Marker
-              key={slot.key}
-              position={[slot.lat, slot.lon]}
-              icon={icon}
-              title={slot.title}
+              position={[userLocation.lat, userLocation.lon]}
+              icon={createUserLocationIcon()}
+              zIndexOffset={1000}
             >
-              <Popup closeButton={false} className="slot-popup">
-                <SlotCard
-                  slot={slot}
-                  winningBooking={winningBooking}
-                  sellerReputation={sellerRep}
-                  userAddress={userAddress}
-                  onSelect={onSelectSlot}
-                />
+              <Popup className="slot-popup">
+                <div style={{ padding: "12px 14px", minWidth: 200 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <span style={{ fontSize: "1.1rem" }}>📍</span>
+                    <strong style={{ fontSize: "0.95rem", color: "var(--c-ink)" }}>You Are Here</strong>
+                  </div>
+                  <div style={{ fontSize: "0.8rem", color: "var(--c-ink)", opacity: 0.85, marginTop: 4 }}>
+                    Exact GPS: <code>{userLocation.lat.toFixed(4)}°, {userLocation.lon.toFixed(4)}°</code>
+                  </div>
+                  {(() => {
+                    const nearest = findNearestCluster(userLocation.lat, userLocation.lon);
+                    return (
+                      <div
+                        style={{
+                          fontSize: "0.78rem",
+                          marginTop: 6,
+                          background: "var(--c-sand)",
+                          padding: "4px 8px",
+                          border: "1px solid var(--c-ink)",
+                        }}
+                      >
+                        Nearest Hub: <strong>{nearest.label}</strong> ({nearest.state})
+                      </div>
+                    );
+                  })()}
+                  {userLocation.accuracy && (
+                    <div style={{ fontSize: "0.72rem", opacity: 0.65, marginTop: 4 }}>
+                      GPS Precision: ±{userLocation.accuracy}m
+                    </div>
+                  )}
+                </div>
               </Popup>
             </Marker>
-          );
-        })}
-      </MarkerClusterGroup>
-    </MapContainer>
+          </>
+        )}
+
+        {/* Clustered slot markers */}
+        <MarkerClusterGroup
+          chunkedLoading
+          maxClusterRadius={50}
+          showCoverageOnHover={false}
+        >
+          {slots.map((slot) => {
+            const sKeyNorm = slot.key.toLowerCase();
+            const winningBooking = winningBookingsBySlot?.get(sKeyNorm);
+            const sellerRep = reputationByAddress?.get(slot.creator.toLowerCase());
+            const icon = createSlotIcon(slot, now, winningBooking, userAddress);
+
+            return (
+              <Marker
+                key={slot.key}
+                position={[slot.lat, slot.lon]}
+                icon={icon}
+                title={slot.title}
+              >
+                <Popup closeButton={false} className="slot-popup">
+                  <SlotCard
+                    slot={slot}
+                    winningBooking={winningBooking}
+                    sellerReputation={sellerRep}
+                    userAddress={userAddress}
+                    onSelect={onSelectSlot}
+                  />
+                </Popup>
+              </Marker>
+            );
+          })}
+        </MarkerClusterGroup>
+      </MapContainer>
+    </div>
   );
 }
+

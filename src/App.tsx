@@ -273,9 +273,63 @@ function AppInner(): React.ReactElement {
     link?: { text: string; url: string };
   } | null>(null);
 
+  // App-level user GPS location (prompted immediately on app load)
+  const [userLocation, setUserLocation] = useState<{
+    lat: number;
+    lon: number;
+    accuracy?: number;
+  } | null>(null);
+  const [userGeoStatus, setUserGeoStatus] = useState<
+    "prompt" | "detecting" | "granted" | "denied" | "unsupported"
+  >("detecting");
+
   const flyRef = useRef<[number, number] | null>(null);
 
   const now = useNow();
+
+  /**
+   * Request browser location permission immediately on app startup.
+   */
+  const requestAppLocation = useCallback(() => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      setUserGeoStatus("unsupported");
+      return;
+    }
+
+    setUserGeoStatus("detecting");
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const uLat = pos.coords.latitude;
+        const uLon = pos.coords.longitude;
+        const accuracy = Math.round(pos.coords.accuracy);
+        setUserLocation({ lat: uLat, lon: uLon, accuracy });
+        setUserGeoStatus("granted");
+        setFlyTarget([uLat, uLon]);
+      },
+      () => {
+        setUserGeoStatus("denied");
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      }
+    );
+  }, []);
+
+  // Request browser location permission as soon as the application opens
+  useEffect(() => {
+    requestAppLocation();
+  }, [requestAppLocation]);
+
+  const handleRecenterUser = useCallback(() => {
+    if (userLocation) {
+      setFlyTarget([userLocation.lat, userLocation.lon]);
+    } else {
+      requestAppLocation();
+    }
+  }, [userLocation, requestAppLocation]);
 
   const userReputation = useMemo(() => {
     return address ? reputationByAddress.get(address.toLowerCase()) : undefined;
@@ -434,6 +488,10 @@ function AppInner(): React.ReactElement {
           winningBookingsBySlot={winningBookingsBySlot}
           reputationByAddress={reputationByAddress}
           userAddress={address}
+          userLocation={userLocation}
+          userGeoStatus={userGeoStatus}
+          onRequestLocation={requestAppLocation}
+          onRecenterUser={handleRecenterUser}
         />
 
         {/* 4. SLIM ONE-LINE FOOTER ATTRIBUTION BAR OVERLAY */}
@@ -485,6 +543,7 @@ function AppInner(): React.ReactElement {
         open={isPostOpen}
         onClose={() => setIsPostOpen(false)}
         onSlotCreated={handleSlotCreated}
+        initialUserLocation={userLocation}
       />
 
       {/* Book Slot Modal */}

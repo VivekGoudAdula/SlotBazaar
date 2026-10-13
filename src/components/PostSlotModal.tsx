@@ -64,6 +64,7 @@ export interface PostSlotModalProps {
   open: boolean;
   onClose: () => void;
   onSlotCreated?: (created: { key: Hex; lat: number; lon: number; slot: SlotEntity }) => void;
+  initialUserLocation?: { lat: number; lon: number; accuracy?: number } | null;
 }
 
 /** Helper to format Date into datetime-local input string YYYY-MM-DDTHH:mm */
@@ -81,6 +82,7 @@ export function PostSlotModal({
   open,
   onClose,
   onSlotCreated,
+  initialUserLocation = null,
 }: PostSlotModalProps): React.ReactElement | null {
   const { client, address, status, isWrongNetwork, switchNetwork } = useWallet();
 
@@ -199,10 +201,24 @@ export function PostSlotModal({
       setStartsAtStr(toDateTimeLocalString(now));
       setEndsAtStr(toDateTimeLocalString(new Date(now.getTime() + 4 * 3600 * 1000)));
 
-      // Auto-detect location immediately
-      requestLocation();
+      // If user location already granted at app level, use it immediately
+      if (initialUserLocation) {
+        const nearest = findNearestCluster(initialUserLocation.lat, initialUserLocation.lon);
+        setLat(initialUserLocation.lat);
+        setLon(initialUserLocation.lon);
+        setCluster(nearest.name);
+        setNearestClusterDef(nearest);
+        setGeoAccuracyMeters(
+          initialUserLocation.accuracy ? Math.round(initialUserLocation.accuracy) : null
+        );
+        setGeoStatus("granted");
+        setGeoErrorMsg(null);
+      } else {
+        // Otherwise request browser location now
+        requestLocation();
+      }
     }
-  }, [open, requestLocation]);
+  }, [open, initialUserLocation, requestLocation]);
 
   // Fetch balance for error message if needed
   useEffect(() => {
