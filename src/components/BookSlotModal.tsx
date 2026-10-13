@@ -155,12 +155,16 @@ export function BookSlotModal({
 
       while (Date.now() - pollStart < 18_000) {
         try {
-          const { winner, all } = await fetchBookingsForSlot(slot.key, pubClient);
+          const fetchPromise = fetchBookingsForSlot(slot.key, pubClient);
+          const timeoutPromise = new Promise<never>((_, rej) =>
+            setTimeout(() => rej(new Error("Timeout")), 4000)
+          );
+          const { winner, all } = await Promise.race([fetchPromise, timeoutPromise]);
           finalWinner = winner;
           myBookingFound = all.find((b) => b.key.toLowerCase() === res.entityKey.toLowerCase()) ?? null;
           if (myBookingFound) break;
         } catch {
-          // retry
+          // retry on next tick
         }
         await new Promise((r) => setTimeout(r, 2000));
       }

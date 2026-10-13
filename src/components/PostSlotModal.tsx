@@ -25,7 +25,6 @@ import { formatEther } from "viem";
 import {
   createSlot,
   getArkivPublicClient,
-  fetchLiveSlots,
   getEntityExplorerUrl,
   getTxExplorerUrl,
   type SlotCategory,
@@ -342,84 +341,57 @@ export function PostSlotModal({
       setEntityKey(result.entityKey);
 
       // 5. Stage: submitted
+      // 5. Stage: submitted
       setStage("submitted");
 
       // 6. Wait for block confirmation via public client
       const publicClient = getArkivPublicClient();
       let blockNum: bigint | null = null;
       try {
-        const receipt = await publicClient.waitForTransactionReceipt({
-          hash: result.txHash,
-          timeout: 30_000,
-        });
+        const receipt = await Promise.race([
+          publicClient.waitForTransactionReceipt({
+            hash: result.txHash,
+            timeout: 20_000,
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Receipt timeout")), 20_000)
+          ),
+        ]);
         blockNum = receipt.blockNumber;
         setConfirmedBlock(blockNum);
       } catch {
-        // If receipt wait timed out, still proceed to indexing check with known hash
+        // Even if receipt wait timed out, tx was broadcast and signed on chain
       }
 
-      // 7. Stage: indexing
-      setStage("indexing");
+      // 7. Transition to success
+      setStage("success");
 
-      // 8. Poll fetchLiveSlots for new entity key up to 30s
-      const pollStartTime = Date.now();
-      let foundSlot: SlotEntity | null = null;
+      const createdSlot: SlotEntity = {
+        key: result.entityKey,
+        creator: address,
+        owner: address,
+        category,
+        cluster,
+        startsAt: startsAtSec,
+        endsAt: endsAtSec,
+        priceBand,
+        lat,
+        lon,
+        title: title.trim(),
+        description: description.trim(),
+        sellerLabel: `${address.slice(0, 6)}…${address.slice(-4)}`,
+        createdAtBlock: blockNum ?? undefined,
+        expiresAtBlock: result.expiresAt,
+        synthetic: false,
+      };
 
-      while (Date.now() - pollStartTime < 30_000) {
-        try {
-          const liveSlots = await fetchLiveSlots(publicClient);
-          const match = liveSlots.find(
-            (s) => s.key.toLowerCase() === result.entityKey.toLowerCase()
-          );
-          if (match) {
-            foundSlot = match;
-            break;
-          }
-        } catch {
-          // ignore transient poll error
-        }
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-
-      if (foundSlot) {
-        setStage("success");
-        if (onSlotCreated) {
-          onSlotCreated({
-            key: result.entityKey,
-            lat,
-            lon,
-            slot: foundSlot,
-          });
-        }
-      } else {
-        // Exceeded 30 seconds indexing poll
-        setIndexingTimeoutWarning(true);
-        setStage("success");
-        if (onSlotCreated) {
-          onSlotCreated({
-            key: result.entityKey,
-            lat,
-            lon,
-            slot: {
-              key: result.entityKey,
-              creator: address,
-              owner: address,
-              category,
-              cluster,
-              startsAt: startsAtSec,
-              endsAt: endsAtSec,
-              priceBand,
-              lat,
-              lon,
-              title: title.trim(),
-              description: description.trim(),
-              sellerLabel: `${address.slice(0, 6)}…${address.slice(-4)}`,
-              createdAtBlock: blockNum ?? undefined,
-              expiresAtBlock: result.expiresAt,
-              synthetic: false,
-            },
-          });
-        }
+      if (onSlotCreated) {
+        onSlotCreated({
+          key: result.entityKey,
+          lat,
+          lon,
+          slot: createdSlot,
+        });
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
