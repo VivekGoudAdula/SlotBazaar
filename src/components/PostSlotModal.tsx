@@ -340,32 +340,7 @@ export function PostSlotModal({
       setTxHash(result.txHash);
       setEntityKey(result.entityKey);
 
-      // 5. Stage: submitted
-      // 5. Stage: submitted
-      setStage("submitted");
-
-      // 6. Wait for block confirmation via public client
-      const publicClient = getArkivPublicClient();
-      let blockNum: bigint | null = null;
-      try {
-        const receipt = await Promise.race([
-          publicClient.waitForTransactionReceipt({
-            hash: result.txHash,
-            timeout: 20_000,
-          }),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("Receipt timeout")), 20_000)
-          ),
-        ]);
-        blockNum = receipt.blockNumber;
-        setConfirmedBlock(blockNum);
-      } catch {
-        // Even if receipt wait timed out, tx was broadcast and signed on chain
-      }
-
-      // 7. Transition to success
-      setStage("success");
-
+      // Immediately create slot entity and notify App / persist to local storage
       const createdSlot: SlotEntity = {
         key: result.entityKey,
         creator: address,
@@ -380,7 +355,6 @@ export function PostSlotModal({
         title: title.trim(),
         description: description.trim(),
         sellerLabel: `${address.slice(0, 6)}…${address.slice(-4)}`,
-        createdAtBlock: blockNum ?? undefined,
         expiresAtBlock: result.expiresAt,
         synthetic: false,
       };
@@ -393,6 +367,23 @@ export function PostSlotModal({
           slot: createdSlot,
         });
       }
+
+      // Transition to success immediately so user sees their live slot without delay
+      setStage("success");
+
+      // Background receipt confirmation (non-blocking)
+      const publicClient = getArkivPublicClient();
+      publicClient
+        .waitForTransactionReceipt({
+          hash: result.txHash,
+          timeout: 20_000,
+        })
+        .then((receipt) => {
+          setConfirmedBlock(receipt.blockNumber);
+        })
+        .catch(() => {
+          // Even if receipt wait timed out, tx was broadcast and signed on chain
+        });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       const lower = msg.toLowerCase();

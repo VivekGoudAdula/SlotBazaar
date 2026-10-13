@@ -248,7 +248,13 @@ function loadLocalRecentSlots(): SlotEntity[] {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     const parsed = raw ? (JSON.parse(raw) as SlotEntity[]) : [];
     const nowSec = Math.floor(Date.now() / 1000);
-    const validLocal = parsed.filter((s) => s.endsAt > nowSec);
+    const validLocal = parsed
+      .filter((s) => s.endsAt > nowSec)
+      .map((s) => ({
+        ...s,
+        createdAtBlock: s.createdAtBlock ? BigInt(s.createdAtBlock) : undefined,
+        expiresAtBlock: s.expiresAtBlock ? BigInt(s.expiresAtBlock) : undefined,
+      }));
     const map = new Map<string, SlotEntity>();
     for (const b of base) map.set(b.key.toLowerCase(), b);
     for (const s of validLocal) map.set(s.key.toLowerCase(), s);
@@ -263,9 +269,13 @@ function saveLocalRecentSlots(slots: SlotEntity[]): void {
   try {
     const nowSec = Math.floor(Date.now() / 1000);
     const valid = slots.filter((s) => s.endsAt > nowSec);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(valid));
-  } catch {
-    // ignore
+    // Custom replacer handles BigInt serialization (e.g. createdAtBlock, expiresAtBlock)
+    const serialized = JSON.stringify(valid, (_, value) =>
+      typeof value === "bigint" ? value.toString() : value
+    );
+    localStorage.setItem(LOCAL_STORAGE_KEY, serialized);
+  } catch (err) {
+    console.error("Failed to persist slots to localStorage:", err);
   }
 }
 
