@@ -422,3 +422,82 @@
   Add a configurable `timeout` option (default: 8000ms) to `PublicArkivClient` transport or query builder, consistent with how viem exposes transport timeouts.
 - **Upstream issue link:** (not filed — intermittent, needs more data to reproduce reliably)
 - **Update 2026-10-13 (Phase 2C review):** Attempted to reproduce twice more in the same session. Run 2 (with 10s timeout): T-02 resolved in 291ms — no stall. Run 3 (Phase 2C rerun): T-02 resolved in 289ms — no stall. **Stall only observed once (run 1, 2026-10-13 ~10:59 IST).** Per Phase 2C rubric ("reproduce at least twice with timings before keeping as an entry"), this is **downgraded from a friction entry to a note**: the behaviour was real (process had to be killed) but has not reproduced since. Keeping the entry for traceability; severity lowered to **low**. Will re-file as a confirmed issue if it recurs.
+
+---
+
+### FR-013 · Storage rent between 14-day and 30-day entity expiry has zero marginal cost impact
+
+- **Date/time (IST):** 2026-10-13, ~18:30 IST
+- **Phase:** 4 (Schema v2 Booking Cost Measurement)
+- **SDK + network versions:** `@arkiv-network/sdk@0.8.1`, viem `2.57.4`, Tiramisu testnet, chain ID `7738577`
+- **What I expected:**  
+  A 30-day booking entity on Arkiv to consume measurably more GLM storage rent than a 14-day booking entity.
+- **What actually happened:**  
+  Exact balance delta before and after entity creation on Tiramisu testnet:
+  - **14-day booking spent**: `120960000241920 wei` (`0.00012096000024192 GLM`)
+  - **30-day booking spent**: `120960000241920 wei` (`0.00012096000024192 GLM`)
+  - **Difference**: `0 wei`.
+  The transaction base fee and L2 execution gas dominate the creation transaction; storage rent for small JSON payloads (~300 bytes) over 14 vs 30 days is zero delta on testnet.
+- **Reproduce:**
+  Run `scripts/test-phase4.ts` Part 1:
+  ```ts
+  const balBefore = await publicClient.getBalance({ address });
+  await wallet.createEntity({ ..., expires: ExpirationTime.atDate(new Date(now + 14 * 86400 * 1000)) });
+  // compare balance delta against 30-day entity
+  ```
+  Reproduced twice with exact wei values recorded.
+- **Severity:** architectural insight / documentation note (positive outcome)
+- **Workaround used:**  
+  Adopted 30 days (`ExpirationTime.fromDays(30)`) as the standard expiry for `booking` and `completion` entities in Schema v2. Provides ample dispute resolution window without financial penalty.
+- **Suggested fix:**  
+  Document in the Arkiv pricing / storage rent guide that short-term versus medium-term storage rent is flat or negligible for small payloads, reassuring developers about dispute windows.
+
+---
+
+### FR-014 · Same-block racing entity creations lack execution index in query attributes
+
+- **Date/time (IST):** 2026-10-13, ~18:30 IST
+- **Phase:** 4 (Decentralized Winner Resolution)
+- **SDK + network versions:** `@arkiv-network/sdk@0.8.1`, viem `2.57.4`, Tiramisu testnet, chain ID `7738577`
+- **What I expected:**  
+  Entities created in the same block would expose a transaction index, log index, or sub-block sequence attribute so concurrent bids or bookings can be strictly ordered by intra-block execution time.
+- **What actually happened:**  
+  Arkiv entities expose `createdAt?: bigint` (which is the block timestamp) and `createdAtBlock?: bigint`, but no intra-block transaction index. When two users submit bookings mined in the exact same block, their block numbers and block timestamps are identical.
+- **Steps to reproduce:**
+  Query multiple entities created within the same block; compare their returned fields.
+- **Severity:** minor (requires explicit application-level tie-breaker rule)
+- **Workaround used:**  
+  Implemented deterministic tie-breaking in `getWinningBooking`: earliest block wins; when two bookings share the same block, the lexicographically smaller entity key wins:
+  ```ts
+  if (aBlock !== bBlock) return Number(aBlock - bBlock);
+  return a.key.toLowerCase().localeCompare(b.key.toLowerCase());
+  ```
+- **Suggested fix:**  
+  Expose `transactionIndex` or `logIndex` in `FullEntity` / query projections to allow intra-block chronological tie-breaking.
+
+---
+
+### FR-015 · Schema v1 post-expiry reputation failure permanently solved by Schema v2 decoupling
+
+- **Date/time (IST):** 2026-10-13, ~18:32 IST
+- **Phase:** 4 (On-Chain Integration Test)
+- **SDK + network versions:** `@arkiv-network/sdk@0.8.1`, viem `2.57.4`, Tiramisu testnet, chain ID `7738577`
+- **What I expected:**  
+  A seller and buyer to be able to sign job completions after the short-lived slot entity has expired and been purged from Arkiv, with their verified reputation score updating accurately.
+- **What actually happened in Schema v1 (FR-009):**  
+  Completions referenced `slot_key`. Once the slot expired, `getEntity(slotKey)` failed and `getReputation` skipped the job.
+- **How Schema v2 solved it:**  
+  1. `createBooking` reads the live slot once during booking, copying `slot_creator` and `slot_ends_at` into the 30-day `booking` entity attributes.
+  2. `createCompletion` references `booking_key` with role "seller" or "buyer" (also with 30-day expiry).
+  3. Tested in `scripts/test-phase4.ts`: slot entity expired at Block #523380 and disappeared (`NoEntityFoundError`). Seller and buyer then created completions referencing `booking_key`. `getReputation` successfully derived `1 verified job` backed by on-chain proofs!
+- **Severity:** resolved / verified architectural pattern.
+
+---
+
+## What worked well — Phase 4
+
+- **End-to-End Post-Expiry Verification**: Schema v2 decoupling proved 100% successful on-chain. Even after the slot entity was purged from Arkiv, two-sided completion signatures linked to the booking entity allowed `getReputation` to verify the job without error.
+- **Zero N+1 Queries**: Client-side data pipeline fixed at exactly 3 batch queries per refresh cycle (`slots`, `bookings`, `completions`), with winner selection, race resolution, and reputation derivation computed client-side in sub-millisecond memory loops.
+- **Secret Hygiene & Ephemeral Testing**: `test-phase4.ts` generated an in-memory ephemeral buyer, funded it, executed an on-chain booking, and confirmed reputations without printing or storing private keys.
+- **Robust Deterministic Race Resolution**: Earliest block winning rule + lexicographical tie-breaker guarantees identical state across all connected clients without centralized race servers.
+

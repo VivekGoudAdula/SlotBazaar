@@ -149,11 +149,14 @@ export interface BookingEntity {
   creator: Address;
   owner: Address;
   slotKey: Hex;
+  slotCreator?: Address;
+  slotEndsAt?: number;
   bookedAt: number;
   note: string;
   createdAtBlock?: bigint;
   expiresAtBlock?: bigint;
   synthetic: boolean;
+  schemaVersion: number;
 }
 
 export interface CompletionPayload {
@@ -165,13 +168,15 @@ export interface CompletionEntity {
   key: Hex;
   creator: Address;
   owner: Address;
-  slotKey: Hex;
+  bookingKey: Hex;
+  slotKey?: Hex; // backwards compat for v1
   role: "seller" | "buyer";
   completedAt: number;
   note: string;
   createdAtBlock?: bigint;
   expiresAtBlock?: bigint;
   synthetic: boolean;
+  schemaVersion: number;
 }
 
 /**
@@ -334,25 +339,30 @@ export function parseSlotEntity(entity: Entity | FullEntity): SlotEntity | null 
   }
 }
 
+export const EXCLUDED_PROBE_BATCHES = new Set([
+  "dev-probe",
+  "cost-measure",
+  "fr005-retest",
+]);
+
 /**
- * Filter predicate that excludes test probes and cost measurement entities.
- * Excludes entities where seed_batch starts with "test" or "cost",
- * title starts with "cost-test" or "test", or cluster is "test".
- * Documented in schema.md.
+ * Filter predicate that excludes automated developer probes and cost measurement entities.
+ *
+ * Rules (Phase 4):
+ *  - Must NEVER hide a slot by title, description, or cluster (e.g. slots titled "test slot" remain visible).
+ *  - Hides an entity ONLY when its `seed_batch` equals "dev-probe", "cost-measure", "fr005-retest", or starts with "t06-".
  */
-export function isProductionSlot(slot: { title: string; seedBatch?: string; cluster?: string }): boolean {
-  const t = slot.title.trim().toLowerCase();
-  if (t.startsWith("test") || t.startsWith("cost-test") || t.startsWith("cost_test")) return false;
-  if (slot.seedBatch) {
-    const b = slot.seedBatch.trim().toLowerCase();
-    if (b.startsWith("test") || b.startsWith("cost")) return false;
+export function isProductionSlot(slot: { title?: string; seedBatch?: string; cluster?: string }): boolean {
+  if (!slot.seedBatch) return true;
+  const b = slot.seedBatch.trim().toLowerCase();
+  if (EXCLUDED_PROBE_BATCHES.has(b) || b.startsWith("t06-")) {
+    return false;
   }
-  if (slot.cluster?.trim().toLowerCase() === "test") return false;
   return true;
 }
 
 /**
- * Safely decodes a booking entity.
+ * Safely decodes a booking entity (Schema v2 with v1 backward compatibility).
  */
 export function parseBookingEntity(entity: Entity | FullEntity): BookingEntity | null {
   try {
@@ -365,9 +375,15 @@ export function parseBookingEntity(entity: Entity | FullEntity): BookingEntity |
     if (project !== PROJECT_NAMESPACE || entityType !== "booking") return null;
 
     const slotKey = getAttrValue<Hex>(attrs, "slot_key") || ("0x0" as Hex);
+    const rawSlotCreator = getAttrValue<string>(attrs, "slot_creator");
+    const slotCreator = rawSlotCreator ? (rawSlotCreator.toLowerCase() as Address) : undefined;
+    const rawSlotEndsAt = getAttrValue<bigint>(attrs, "slot_ends_at");
+    const slotEndsAt = rawSlotEndsAt ? Number(rawSlotEndsAt) : undefined;
     const rawBookedAt = getAttrValue<bigint>(attrs, "booked_at");
     const bookedAt = rawBookedAt ? Number(rawBookedAt) : Math.floor(Date.now() / 1000);
     const synthetic = getAttrValue<boolean>(attrs, "synthetic") ?? false;
+    const rawSchemaV = getAttrValue<string>(attrs, "schema_v");
+    const schemaVersion = rawSchemaV ? parseInt(rawSchemaV, 10) : 1;
 
     let payloadJson: unknown = null;
     try {
@@ -384,11 +400,14 @@ export function parseBookingEntity(entity: Entity | FullEntity): BookingEntity |
       creator: (entity.creator || "0x0") as Address,
       owner: (entity.owner || "0x0") as Address,
       slotKey,
+      slotCreator,
+      slotEndsAt,
       bookedAt,
       note: validated.note || "",
       createdAtBlock: entity.createdAt,
       expiresAtBlock: entity.expiresAt,
       synthetic,
+      schemaVersion,
     };
   } catch {
     return null;
@@ -396,7 +415,7 @@ export function parseBookingEntity(entity: Entity | FullEntity): BookingEntity |
 }
 
 /**
- * Safely decodes a completion entity.
+ * Safely decodes a completion entity (Schema v2 with v1 backward compatibility).
  */
 export function parseCompletionEntity(entity: Entity | FullEntity): CompletionEntity | null {
   try {
@@ -408,13 +427,19 @@ export function parseCompletionEntity(entity: Entity | FullEntity): CompletionEn
     const entityType = getAttrValue<string>(attrs, "entity_type");
     if (project !== PROJECT_NAMESPACE || entityType !== "completion") return null;
 
-    const slotKey = getAttrValue<Hex>(attrs, "slot_key") || ("0x0" as Hex);
+    const rawBookingKey = getAttrValue<Hex>(attrs, "booking_key");
+    const rawSlotKey = getAttrValue<Hex>(attrs, "slot_key");
+    const bookingKey = rawBookingKey || rawSlotKey || ("0x0" as Hex);
+    const slotKey = rawSlotKey || undefined;
+
     const rawRole = getAttrValue<string>(attrs, "role") || "seller";
     const role: "seller" | "buyer" = rawRole === "buyer" ? "buyer" : "seller";
 
     const rawCompletedAt = getAttrValue<bigint>(attrs, "completed_at");
     const completedAt = rawCompletedAt ? Number(rawCompletedAt) : Math.floor(Date.now() / 1000);
     const synthetic = getAttrValue<boolean>(attrs, "synthetic") ?? false;
+    const rawSchemaV = getAttrValue<string>(attrs, "schema_v");
+    const schemaVersion = rawSchemaV ? parseInt(rawSchemaV, 10) : 1;
 
     let payloadJson: unknown = null;
     try {
@@ -430,6 +455,7 @@ export function parseCompletionEntity(entity: Entity | FullEntity): CompletionEn
       key: entity.key as Hex,
       creator: (entity.creator || "0x0") as Address,
       owner: (entity.owner || "0x0") as Address,
+      bookingKey,
       slotKey,
       role,
       completedAt,
@@ -437,6 +463,7 @@ export function parseCompletionEntity(entity: Entity | FullEntity): CompletionEn
       createdAtBlock: entity.createdAt,
       expiresAtBlock: entity.expiresAt,
       synthetic,
+      schemaVersion,
     };
   } catch {
     return null;
@@ -587,9 +614,129 @@ export async function fetchSlotsByCreator(creator: Address, client: PublicArkivC
 }
 
 /**
- * Fetches bookings for a slot and determines the winning booking.
- * Winner rule: Earliest creation block (`createdAtBlock`) wins.
- * Tie-break within same block: Lexicographically smaller `key` wins.
+ * Fetches a single slot entity by key, trying active live slots first,
+ * then falling back to an unconstrained project query (for expired slots).
+ */
+export async function getSlotEntity(
+  slotKey: Hex,
+  client: PublicArkivClient = getArkivPublicClient()
+): Promise<SlotEntity | null> {
+  const normKey = slotKey.toLowerCase();
+  try {
+    const live = await fetchLiveSlots(client);
+    const found = live.find((s) => s.key.toLowerCase() === normKey);
+    if (found) return found;
+  } catch {
+    // fallback to broader query
+  }
+
+  try {
+    let page = await client
+      .select()
+      .where(and(
+        eq("project", str(PROJECT_NAMESPACE)),
+        eq("entity_type", str("slot"))
+      ))
+      .fetch();
+
+    const allRaw: Entity[] = [...page.entities];
+    while (page.hasNextPage()) {
+      page = await page.next();
+      allRaw.push(...page.entities);
+    }
+
+    const match = allRaw.find((e) => e.key && e.key.toLowerCase() === normKey);
+    return match ? parseSlotEntity(match) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetches ALL bookings for project=slotbazaar in a single batch query (no N+1).
+ */
+export async function fetchAllBookings(
+  client: PublicArkivClient = getArkivPublicClient()
+): Promise<BookingEntity[]> {
+  try {
+    let page = await client
+      .select()
+      .where(and(
+        eq("project", str(PROJECT_NAMESPACE)),
+        eq("entity_type", str("booking"))
+      ))
+      .fetch();
+
+    const allRaw: Entity[] = [...page.entities];
+    while (page.hasNextPage()) {
+      page = await page.next();
+      allRaw.push(...page.entities);
+    }
+
+    const bookings: BookingEntity[] = [];
+    for (const raw of allRaw) {
+      const parsed = parseBookingEntity(raw);
+      if (parsed) bookings.push(parsed);
+    }
+    return bookings;
+  } catch (err) {
+    throw parseArkivError(err, "QUERY_ERROR");
+  }
+}
+
+/**
+ * Fetches ALL completions for project=slotbazaar in a single batch query (no N+1).
+ */
+export async function fetchAllCompletions(
+  client: PublicArkivClient = getArkivPublicClient()
+): Promise<CompletionEntity[]> {
+  try {
+    let page = await client
+      .select()
+      .where(and(
+        eq("project", str(PROJECT_NAMESPACE)),
+        eq("entity_type", str("completion"))
+      ))
+      .fetch();
+
+    const allRaw: Entity[] = [...page.entities];
+    while (page.hasNextPage()) {
+      page = await page.next();
+      allRaw.push(...page.entities);
+    }
+
+    const completions: CompletionEntity[] = [];
+    for (const raw of allRaw) {
+      const parsed = parseCompletionEntity(raw);
+      if (parsed) completions.push(parsed);
+    }
+    return completions;
+  } catch (err) {
+    throw parseArkivError(err, "QUERY_ERROR");
+  }
+}
+
+/**
+ * Pure function: Sorts bookings for a single slot to determine the winning booking.
+ * Earliest createdAtBlock wins. Tie-break: lexicographically smaller entity key (lowercase).
+ */
+export function getWinningBooking(bookings: BookingEntity[]): BookingEntity | null {
+  if (!bookings || bookings.length === 0) return null;
+
+  const sorted = [...bookings].sort((a, b) => {
+    const blockA = a.createdAtBlock ?? 0n;
+    const blockB = b.createdAtBlock ?? 0n;
+    if (blockA !== blockB) {
+      return blockA < blockB ? -1 : 1;
+    }
+    return a.key.toLowerCase().localeCompare(b.key.toLowerCase());
+  });
+
+  return sorted[0];
+}
+
+/**
+ * Fetches bookings for a specific slot and determines the winner.
  */
 export async function fetchBookingsForSlot(
   slotKey: Hex,
@@ -617,31 +764,34 @@ export async function fetchBookingsForSlot(
       if (parsed) bookings.push(parsed);
     }
 
-    if (bookings.length === 0) {
-      return { winner: null, all: [] };
-    }
-
-    // Sort: earliest block first. If block matches, compare entity key string.
-    bookings.sort((a, b) => {
-      const blockA = a.createdAtBlock ?? 0n;
-      const blockB = b.createdAtBlock ?? 0n;
-      if (blockA !== blockB) {
-        return blockA < blockB ? -1 : 1;
-      }
-      return a.key.toLowerCase().localeCompare(b.key.toLowerCase());
-    });
-
-    return { winner: bookings[0], all: bookings };
+    const winner = getWinningBooking(bookings);
+    return { winner, all: bookings };
   } catch (err) {
     throw parseArkivError(err, "QUERY_ERROR");
   }
 }
 
 /**
- * Fetches all completion records for a given slot.
+ * Fetches all completion records for a given slot or booking.
  */
 export async function fetchCompletionsForSlot(
   slotKey: Hex,
+  client: PublicArkivClient = getArkivPublicClient()
+): Promise<CompletionEntity[]> {
+  try {
+    const all = await fetchAllCompletions(client);
+    const norm = slotKey.toLowerCase();
+    return all.filter((c) => (c.slotKey && c.slotKey.toLowerCase() === norm) || c.bookingKey.toLowerCase() === norm);
+  } catch (err) {
+    throw parseArkivError(err, "QUERY_ERROR");
+  }
+}
+
+/**
+ * Fetches completions specifically referencing a booking_key.
+ */
+export async function fetchCompletionsForBooking(
+  bookingKey: Hex,
   client: PublicArkivClient = getArkivPublicClient()
 ): Promise<CompletionEntity[]> {
   try {
@@ -650,7 +800,7 @@ export async function fetchCompletionsForSlot(
       .where(and(
         eq("project", str(PROJECT_NAMESPACE)),
         eq("entity_type", str("completion")),
-        eq("slot_key", key(slotKey))
+        eq("booking_key", key(bookingKey))
       ))
       .fetch();
 
@@ -665,7 +815,6 @@ export async function fetchCompletionsForSlot(
       const parsed = parseCompletionEntity(raw);
       if (parsed) completions.push(parsed);
     }
-
     return completions;
   } catch (err) {
     throw parseArkivError(err, "QUERY_ERROR");
@@ -677,165 +826,179 @@ export async function fetchCompletionsForSlot(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Verifies whether a single slot qualifies as a "completed job" for reputation.
+ * Verifies whether a single slot / booking qualifies as a "completed job" for reputation.
  *
- * All three conditions MUST hold:
+ * All Phase 4 rules MUST hold:
  *   (a) A winning booking exists, and the winning booking's creator is NOT
- *       the same as the slot's creator (prevents self-booking reputation).
- *   (b) A seller completion exists whose creator equals the slot's creator.
+ *       the same as the slot's creator (blocks self-booking fraud).
+ *   (b) A seller completion exists whose creator equals the slot creator.
  *   (c) A buyer completion exists whose creator equals the winning booking's creator.
+ *   (d) The booking is the winning booking for the slot.
+ *   (e) Completions occurred at or after slot.startsAt (if startsAt is known).
  *
- * @returns The verified BookingEntity+CompletionPair, or null if any condition fails.
+ * Duplicate completions do NOT double-count.
  */
 export function verifyJobCompletion(
-  slot: { key: Hex; creator: Address },
+  slot: { key: Hex; creator: Address; startsAt?: number },
   winner: BookingEntity | null,
   completions: CompletionEntity[]
 ): { winner: BookingEntity; seller: CompletionEntity; buyer: CompletionEntity } | null {
-  // (a) There must be a winning booking and the winner must not be the slot creator
   if (!winner) return null;
-  if (winner.creator.toLowerCase() === slot.creator.toLowerCase()) return null;
 
-  // (b) Seller completion must exist and its creator must equal the slot creator
-  const sellerCompletion = completions.find(
-    (c) =>
-      c.role === "seller" &&
-      c.slotKey.toLowerCase() === slot.key.toLowerCase() &&
-      c.creator.toLowerCase() === slot.creator.toLowerCase()
-  );
+  const slotCreator = (winner.slotCreator || slot.creator).toLowerCase();
+  const winnerCreator = winner.creator.toLowerCase();
+
+  // (a) Winning booking creator must NOT be the slot creator
+  if (winnerCreator === slotCreator) return null;
+
+  const winnerKey = winner.key.toLowerCase();
+  const slotKey = slot.key.toLowerCase();
+
+  // Find completions matching this booking or legacy slot key
+  const matchingCompletions = completions.filter((c) => {
+    const bKey = (c.bookingKey || "").toLowerCase();
+    const sKey = (c.slotKey || "").toLowerCase();
+    return bKey === winnerKey || sKey === slotKey;
+  });
+
+  // (b) Seller completion: role == "seller" && creator == slotCreator
+  // (e) Completion before slot start rejected
+  const sellerCompletion = matchingCompletions.find((c) => {
+    if (c.role !== "seller") return false;
+    if (c.creator.toLowerCase() !== slotCreator) return false;
+    if (slot.startsAt !== undefined && c.completedAt < slot.startsAt) return false;
+    return true;
+  });
   if (!sellerCompletion) return null;
 
-  // (c) Buyer completion must exist and its creator must equal the winning booking creator
-  const buyerCompletion = completions.find(
-    (c) =>
-      c.role === "buyer" &&
-      c.slotKey.toLowerCase() === slot.key.toLowerCase() &&
-      c.creator.toLowerCase() === winner.creator.toLowerCase()
-  );
+  // (c) Buyer completion: role == "buyer" && creator == winnerCreator
+  // (e) Completion before slot start rejected
+  const buyerCompletion = matchingCompletions.find((c) => {
+    if (c.role !== "buyer") return false;
+    if (c.creator.toLowerCase() !== winnerCreator) return false;
+    if (slot.startsAt !== undefined && c.completedAt < slot.startsAt) return false;
+    return true;
+  });
   if (!buyerCompletion) return null;
 
   return { winner, seller: sellerCompletion, buyer: buyerCompletion };
 }
 
+export interface ReputationProof {
+  slotKey: Hex;
+  bookingKey: Hex;
+  seller: Address;
+  buyer: Address;
+  sellerCompletionKey: Hex;
+  buyerCompletionKey: Hex;
+}
+
+export interface ReputationResult {
+  verifiedJobsCount: number;
+  verifiedSlotKeys: Hex[];
+  verifiedBookingKeys: Hex[];
+  proofs: ReputationProof[];
+}
+
 /**
  * Computes an account's verified reputation score.
- *
- * Reputation rule — ALL three conditions must hold for a job to count:
- *   (a) A booking exists for the slot and the winning booking's creator is NOT
- *       the slot's creator (blocks self-booking fraud).
- *   (b) A "seller" completion exists whose creator equals the slot's creator.
- *   (c) A "buyer" completion exists whose creator equals the winning booking's creator.
- *
- * Reads are authenticated via `createdBy` filter on the Arkiv index.
+ * Pure synchronous version accepts data arrays; async version queries Arkiv.
  */
-export async function getReputation(
+export function getReputation(
   account: Address,
-  client: PublicArkivClient = getArkivPublicClient()
-): Promise<{ verifiedJobsCount: number; verifiedSlotKeys: Hex[] }> {
-  try {
-    // Step 1 — Find all slots created by this account (potential seller role)
-    // and all slots for which this account has a completion (potential buyer role).
-    let completionsPage = await client
-      .select()
-      .where(and(
-        eq("project", str(PROJECT_NAMESPACE)),
-        eq("entity_type", str("completion"))
-      ))
-      .createdBy(account)
-      .fetch();
+  slots: Array<{ key: Hex; creator: Address; startsAt?: number }>,
+  bookings: BookingEntity[],
+  completions: CompletionEntity[]
+): ReputationResult;
+export function getReputation(
+  account: Address,
+  client?: PublicArkivClient
+): Promise<ReputationResult>;
+export function getReputation(
+  account: Address,
+  arg2?: PublicArkivClient | Array<{ key: Hex; creator: Address; startsAt?: number }>,
+  bookings?: BookingEntity[],
+  completions?: CompletionEntity[]
+): ReputationResult | Promise<ReputationResult> {
+  if (Array.isArray(arg2)) {
+    const normAccount = account.toLowerCase();
+    const slots = arg2;
+    const allBookings = bookings ?? [];
+    const allCompletions = completions ?? [];
 
-    const myCompletionsRaw: Entity[] = [...completionsPage.entities];
-    while (completionsPage.hasNextPage()) {
-      completionsPage = await completionsPage.next();
-      myCompletionsRaw.push(...completionsPage.entities);
+    const bookingsBySlot = new Map<string, BookingEntity[]>();
+    for (const b of allBookings) {
+      const sKey = b.slotKey.toLowerCase();
+      const list = bookingsBySlot.get(sKey) ?? [];
+      list.push(b);
+      bookingsBySlot.set(sKey, list);
     }
 
-    // Collect the unique slot keys this account has submitted a completion for
-    const uniqueSlotKeys = new Set<Hex>();
-    for (const raw of myCompletionsRaw) {
-      const parsed = parseCompletionEntity(raw);
-      if (parsed && parsed.slotKey && parsed.slotKey !== "0x0") {
-        uniqueSlotKeys.add(parsed.slotKey);
+    const verifiedSlotKeys = new Set<Hex>();
+    const verifiedBookingKeys = new Set<Hex>();
+    const proofs: ReputationProof[] = [];
+
+    for (const [, slotBookings] of bookingsBySlot.entries()) {
+      const winner = getWinningBooking(slotBookings);
+      if (!winner) continue;
+
+      const slotMatch = slots.find((s) => s.key.toLowerCase() === winner.slotKey.toLowerCase());
+      const slotCreator = (winner.slotCreator || slotMatch?.creator || "0x0").toLowerCase();
+      const buyer = winner.creator.toLowerCase();
+
+      // Skip self-booking
+      if (slotCreator === buyer) continue;
+
+      // Only evaluate if this account participated as seller or buyer
+      if (slotCreator !== normAccount && buyer !== normAccount) {
+        continue;
       }
-    }
 
-    // Step 2 — Also include slots created by this account (seller perspective)
-    let slotsPage = await client
-      .select()
-      .where(and(
-        eq("project", str(PROJECT_NAMESPACE)),
-        eq("entity_type", str("slot"))
-      ))
-      .createdBy(account)
-      .fetch();
-
-    const mySlotsRaw: Entity[] = [...slotsPage.entities];
-    while (slotsPage.hasNextPage()) {
-      slotsPage = await slotsPage.next();
-      mySlotsRaw.push(...slotsPage.entities);
-    }
-
-    for (const raw of mySlotsRaw) {
-      const parsed = parseSlotEntity(raw);
-      if (parsed && parsed.key) {
-        uniqueSlotKeys.add(parsed.key);
-      }
-    }
-
-    // Step 3 — Verify each candidate slot against the three-part rule
-    const verifiedSlotKeys: Hex[] = [];
-
-    for (const slotKey of uniqueSlotKeys) {
-      // Fetch the slot entity (may be expired — use getEntity fallback or parse from index)
-      let slotCreator: Address | null = null;
-
-      // Try reading from the "my slots" list first (if this account is the seller)
-      const fromMySlots = mySlotsRaw.find(
-        (r) => r.key && r.key.toLowerCase() === slotKey.toLowerCase()
+      const verified = verifyJobCompletion(
+        {
+          key: winner.slotKey,
+          creator: (slotMatch?.creator || winner.slotCreator || "0x0") as Address,
+          startsAt: slotMatch?.startsAt,
+        },
+        winner,
+        allCompletions
       );
-      if (fromMySlots) {
-        slotCreator = (fromMySlots.creator || null) as Address | null;
-      } else {
-        // Look up via a filtered query (slot may have been created by another wallet)
-        try {
-          const slotQuery = await client
-            .select()
-            .where(and(
-              eq("project", str(PROJECT_NAMESPACE)),
-              eq("entity_type", str("slot"))
-            ))
-            .fetch();
-          const match = slotQuery.entities.find(
-            (e) => e.key && e.key.toLowerCase() === slotKey.toLowerCase()
-          );
-          if (match) slotCreator = (match.creator || null) as Address | null;
-        } catch {
-          // slot may be expired; skip
-          continue;
-        }
-      }
 
-      if (!slotCreator) continue;
-
-      const pseudoSlot = { key: slotKey, creator: slotCreator };
-
-      // Fetch bookings and completions for this slot
-      const { winner } = await fetchBookingsForSlot(slotKey, client);
-      const completions = await fetchCompletionsForSlot(slotKey, client);
-
-      const result = verifyJobCompletion(pseudoSlot, winner, completions);
-      if (result) {
-        verifiedSlotKeys.push(slotKey);
+      if (verified) {
+        verifiedSlotKeys.add(winner.slotKey);
+        verifiedBookingKeys.add(winner.key);
+        proofs.push({
+          slotKey: winner.slotKey,
+          bookingKey: winner.key,
+          seller: verified.seller.creator,
+          buyer: verified.buyer.creator,
+          sellerCompletionKey: verified.seller.key,
+          buyerCompletionKey: verified.buyer.key,
+        });
       }
     }
 
     return {
-      verifiedJobsCount: verifiedSlotKeys.length,
-      verifiedSlotKeys,
+      verifiedJobsCount: proofs.length,
+      verifiedSlotKeys: Array.from(verifiedSlotKeys),
+      verifiedBookingKeys: Array.from(verifiedBookingKeys),
+      proofs,
     };
-  } catch (err) {
-    throw parseArkivError(err, "QUERY_ERROR");
   }
+
+  const client = (arg2 as PublicArkivClient) ?? getArkivPublicClient();
+  return (async () => {
+    try {
+      const [allSlots, allBookings, allCompletions] = await Promise.all([
+        fetchLiveSlots(client),
+        fetchAllBookings(client),
+        fetchAllCompletions(client),
+      ]);
+      return getReputation(account, allSlots, allBookings, allCompletions);
+    } catch (err) {
+      throw parseArkivError(err, "QUERY_ERROR");
+    }
+  })();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -919,7 +1082,6 @@ export async function createSlot(
 
 export interface CreateBookingInput {
   slotKey: Hex;
-  slotEndsAt: number; // unix seconds (needed for expiry calculation)
   note?: string;
   synthetic?: boolean;
 }
@@ -931,25 +1093,36 @@ export interface CreateBookingOutput {
 }
 
 /**
- * Creates a booking entity on Arkiv Tiramisu.
- * Sets entity expiry to slot end time + 24 hours.
+ * Creates a booking entity on Arkiv Tiramisu (Schema v2).
+ * Reads the live on-chain slot first, copying slot_creator and slot_ends_at from the real entity.
+ * Expiry: 30 days.
  */
 export async function createBooking(
   wallet: WalletArkivClient,
-  input: CreateBookingInput
+  input: CreateBookingInput,
+  publicClient: PublicArkivClient = getArkivPublicClient()
 ): Promise<CreateBookingOutput> {
   acquireWriteLock("createBooking");
   try {
+    // 1. MUST first read the slot live and copy slot_creator and slot_ends_at
+    const slot = await getSlotEntity(input.slotKey, publicClient);
+    if (!slot) {
+      throw new ArkivError(
+        "INVALID_PAYLOAD",
+        `Cannot book slot: target slot entity ${input.slotKey} not found on Arkiv.`
+      );
+    }
+
     const bookedAt = Math.floor(Date.now() / 1000);
     const synthetic = input.synthetic ?? false;
 
     const payloadObj: BookingPayload = {
       note: input.note?.slice(0, 500),
-      schema_version: 1,
+      schema_version: 2,
     };
 
-    // Booking lives as long as the slot plus 24 hours for fulfillment
-    const expiryDate = new Date((input.slotEndsAt + 86400) * 1000);
+    // Booking lives for 30 days
+    const expiryDate = new Date(Date.now() + 30 * 86400 * 1000);
     const expires = ExpirationTime.atDate(expiryDate);
 
     const result = await wallet.createEntity({
@@ -958,7 +1131,10 @@ export async function createBooking(
       attributes: {
         project: str(PROJECT_NAMESPACE),
         entity_type: str("booking"),
+        schema_v: str("2"),
         slot_key: key(input.slotKey),
+        slot_creator: str(slot.creator.toLowerCase()),
+        slot_ends_at: u64(BigInt(slot.endsAt)),
         booked_at: u64(BigInt(bookedAt)),
         synthetic: bool(synthetic),
       },
@@ -978,7 +1154,7 @@ export async function createBooking(
 }
 
 export interface CreateCompletionInput {
-  slotKey: Hex;
+  bookingKey: Hex;
   role: "seller" | "buyer";
   note?: string;
   synthetic?: boolean;
@@ -991,8 +1167,9 @@ export interface CreateCompletionOutput {
 }
 
 /**
- * Creates a completion entity on Arkiv Tiramisu.
- * Sets long-lived entity expiry (1 year) to persist as reputation receipt.
+ * Creates a completion entity on Arkiv Tiramisu (Schema v2).
+ * Points to booking_key (not slot_key) with a 30-day expiry matching booking,
+ * allowing completion to be submitted AFTER the slot itself has expired.
  */
 export async function createCompletion(
   wallet: WalletArkivClient,
@@ -1005,11 +1182,12 @@ export async function createCompletion(
 
     const payloadObj: CompletionPayload = {
       note: input.note?.slice(0, 500),
-      schema_version: 1,
+      schema_version: 2,
     };
 
-    // Completions persist for 365 days
-    const expires = ExpirationTime.fromDays(365);
+    // Completions match booking 30-day lifecycle
+    const expiryDate = new Date(Date.now() + 30 * 86400 * 1000);
+    const expires = ExpirationTime.atDate(expiryDate);
 
     const result = await wallet.createEntity({
       payload: jsonToPayload(payloadObj),
@@ -1017,7 +1195,8 @@ export async function createCompletion(
       attributes: {
         project: str(PROJECT_NAMESPACE),
         entity_type: str("completion"),
-        slot_key: key(input.slotKey),
+        schema_v: str("2"),
+        booking_key: key(input.bookingKey),
         role: str(input.role),
         completed_at: u64(BigInt(completedAt)),
         synthetic: bool(synthetic),

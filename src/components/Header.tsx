@@ -21,9 +21,17 @@ function formatBlock(n: bigint): string {
 
 export interface HeaderProps {
   onPostSlot?: () => void;
+  verifiedJobsCount?: number;
+  onOpenMyJobs?: () => void;
+  onOpenDemoGuide?: () => void;
 }
 
-export function Header({ onPostSlot }: HeaderProps): React.ReactElement {
+export function Header({
+  onPostSlot,
+  verifiedJobsCount,
+  onOpenMyJobs,
+  onOpenDemoGuide,
+}: HeaderProps): React.ReactElement {
   const { blockNumber, loading: chainLoading, error: chainError } = useChainHead();
   const { status, address, isWrongNetwork, hasProvider } = useWallet();
 
@@ -90,7 +98,11 @@ export function Header({ onPostSlot }: HeaderProps): React.ReactElement {
         </button>
 
         {/* Wallet Connect & Help */}
-        <WalletButton />
+        <WalletButton
+          verifiedJobsCount={verifiedJobsCount}
+          onOpenMyJobs={onOpenMyJobs}
+          onOpenDemoGuide={onOpenDemoGuide}
+        />
       </div>
     </header>
   );

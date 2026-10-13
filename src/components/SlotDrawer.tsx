@@ -16,7 +16,12 @@
  */
 
 import React, { useState, useCallback } from "react";
-import type { SlotEntity } from "../lib/arkiv.js";
+import type {
+  SlotEntity,
+  BookingEntity,
+  CompletionEntity,
+  ReputationResult,
+} from "../lib/arkiv.js";
 import { formatTimeLeft, getUrgency, formatDateTime } from "../lib/time.js";
 import { useNow } from "../hooks/useNow.js";
 import { useWallet } from "../lib/wallet.js";
@@ -68,28 +73,106 @@ function CopyButton({ value, label }: { value: string; label: string }): React.R
 export interface SlotDrawerProps {
   slot: SlotEntity | null;
   onClose: () => void;
+  winningBooking?: BookingEntity;
+  userBookings?: BookingEntity[];
+  completions?: CompletionEntity[];
+  sellerReputation?: ReputationResult;
+  onOpenBook?: (slot: SlotEntity) => void;
+  onOpenConfirmJob?: (slot: SlotEntity, booking: BookingEntity, role: "seller" | "buyer") => void;
 }
 
-export function SlotDrawer({ slot, onClose }: SlotDrawerProps): React.ReactElement | null {
+export function SlotDrawer({
+  slot,
+  onClose,
+  winningBooking,
+  userBookings = [],
+  completions = [],
+  sellerReputation,
+  onOpenBook,
+  onOpenConfirmJob,
+}: SlotDrawerProps): React.ReactElement | null {
   const now    = useNow();
   const wallet = useWallet();
+  const [showProofs, setShowProofs] = useState(false);
 
   if (!slot) return null;
 
-  const urgency  = getUrgency(slot.endsAt, now);
-  const timeLeft = formatTimeLeft(slot.endsAt, now);
+  const urgency   = getUrgency(slot.endsAt, now);
+  const timeLeft  = formatTimeLeft(slot.endsAt, now);
   const remaining = slot.endsAt - now;
-  const expired  = remaining <= 0;
+  const expired   = remaining <= 0;
   const isCritical = remaining > 0 && remaining <= 15 * 60;
+  const hasStarted = now >= slot.startsAt;
 
-  const walletConnected = wallet.status === "connected";
-  const noWalletTip = "Connect MetaMask to use this action";
+  const walletConnected = wallet.status === "connected" && Boolean(wallet.address);
+  const isWrongNetwork = wallet.isWrongNetwork;
+  const userAddr = wallet.address?.toLowerCase();
 
   const isMySlot = Boolean(
-    wallet.address &&
-    (slot.creator.toLowerCase() === wallet.address.toLowerCase() ||
-     slot.owner.toLowerCase() === wallet.address.toLowerCase())
+    userAddr &&
+    (slot.creator.toLowerCase() === userAddr || slot.owner.toLowerCase() === userAddr)
   );
+
+  const hasUserBooking = Boolean(
+    userAddr &&
+    userBookings.some((b) => b.creator.toLowerCase() === userAddr)
+  );
+
+  const userIsWinner = Boolean(
+    winningBooking &&
+    userAddr &&
+    winningBooking.creator.toLowerCase() === userAddr
+  );
+
+  const isSellerOfWinning = Boolean(
+    winningBooking &&
+    userAddr &&
+    (winningBooking.slotCreator || slot.creator).toLowerCase() === userAddr
+  );
+
+  const isBuyerOfWinning = userIsWinner;
+
+  // Check completions for this winning booking
+  const matchingCompletions = completions.filter((c) => {
+    if (!winningBooking) return false;
+    const bKey = (c.bookingKey || "").toLowerCase();
+    const sKey = (c.slotKey || "").toLowerCase();
+    return bKey === winningBooking.key.toLowerCase() || sKey === winningBooking.slotKey.toLowerCase();
+  });
+
+  const sellerCompletion = matchingCompletions.find(
+    (c) => c.role === "seller" && c.creator.toLowerCase() === (winningBooking?.slotCreator || slot.creator).toLowerCase()
+  );
+  const buyerCompletion = matchingCompletions.find(
+    (c) => c.role === "buyer" && c.creator.toLowerCase() === winningBooking?.creator.toLowerCase()
+  );
+
+  const hasSellerConfirmed = Boolean(sellerCompletion);
+  const hasBuyerConfirmed = Boolean(buyerCompletion);
+  const isJobVerified = hasSellerConfirmed && hasBuyerConfirmed;
+
+  // Determine booking button disabled state & message
+  let canBook = true;
+  let bookDisabledReason = "";
+
+  if (!walletConnected) {
+    canBook = false;
+    bookDisabledReason = "Connect MetaMask to book this slot";
+  } else if (isWrongNetwork) {
+    canBook = false;
+    bookDisabledReason = "Switch wallet to Arkiv Tiramisu";
+  } else if (expired) {
+    canBook = false;
+    bookDisabledReason = "This slot has expired on Arkiv";
+  } else if (isMySlot) {
+    canBook = false;
+    bookDisabledReason = "You cannot book your own slot";
+  } else if (hasUserBooking) {
+    canBook = false;
+    bookDisabledReason = "You have already placed a booking on this slot";
+  }
+
+  const verifiedCount = sellerReputation?.verifiedJobsCount ?? 0;
 
   return (
     <>
@@ -139,11 +222,72 @@ export function SlotDrawer({ slot, onClose }: SlotDrawerProps): React.ReactEleme
                   ★ Your Slot
                 </span>
               )}
+              {userIsWinner && (
+                <span
+                  style={{
+                    background: "var(--c-teal)",
+                    color: "white",
+                    padding: "2px 6px",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                  }}
+                >
+                  ★ Booked by You
+                </span>
+              )}
+              {winningBooking && !userIsWinner && !isMySlot && (
+                <span
+                  style={{
+                    background: "#9E9E9E",
+                    color: "white",
+                    padding: "2px 6px",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                  }}
+                >
+                  🔒 Booked
+                </span>
+              )}
             </div>
           </div>
         </div>
 
         <div className="drawer__body">
+          {/* ── Race / Booking Outcome Banner ── */}
+          {winningBooking && (
+            <div
+              style={{
+                padding: "10px 12px",
+                border: "var(--border)",
+                background: userIsWinner
+                  ? "rgba(15, 139, 141, 0.12)"
+                  : hasUserBooking
+                  ? "rgba(232, 69, 44, 0.12)"
+                  : "var(--c-paper-dark)",
+                fontSize: "0.82rem",
+                lineHeight: 1.4,
+              }}
+            >
+              {userIsWinner ? (
+                <div>
+                  <strong>🎉 You booked this slot!</strong> Mined in block #{winningBooking.createdAtBlock?.toString() || "..."}.
+                </div>
+              ) : hasUserBooking ? (
+                <div>
+                  <strong>⚠️ Missed: someone booked first</strong> (block #{winningBooking.createdAtBlock?.toString() || "..."}).
+                  <div style={{ fontSize: "0.75rem", opacity: 0.85, marginTop: 4 }}>
+                    Arkiv resolves races by earliest confirmed block (and key tie-break).
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <strong>🔒 Slot Booked</strong> by{" "}
+                  <code>{winningBooking.creator.slice(0, 8)}…{winningBooking.creator.slice(-6)}</code> (block #{winningBooking.createdAtBlock?.toString() || "..."}).
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Countdown ── */}
           <div
             className={`slot-card__countdown slot-card__countdown--${urgency}`}
@@ -157,6 +301,89 @@ export function SlotDrawer({ slot, onClose }: SlotDrawerProps): React.ReactEleme
             {timeLeft}
             {expired && " — Expired on Arkiv"}
           </div>
+
+          {/* ── Seller Reputation Badge ── */}
+          <section
+            style={{
+              background: "var(--c-paper-dark)",
+              border: "var(--border)",
+              padding: "10px 12px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div
+                title="A job counts toward reputation only when distinct buyer and seller both confirm on-chain after slot start. Self-bookings and losing bookings are excluded."
+                style={{ cursor: "help" }}
+              >
+                <span style={{ fontSize: "0.75rem", textTransform: "uppercase", fontWeight: 700, opacity: 0.8 }}>
+                  Seller Reputation:
+                </span>
+                <div style={{ fontWeight: 800, fontSize: "1rem", color: "var(--c-teal)", marginTop: 2 }}>
+                  🏆 {verifiedCount} Verified {verifiedCount === 1 ? "Job" : "Jobs"}
+                </div>
+              </div>
+
+              {verifiedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowProofs((v) => !v)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    textDecoration: "underline",
+                    fontSize: "0.75rem",
+                    cursor: "pointer",
+                    color: "var(--c-ink)",
+                  }}
+                  id="drawer-toggle-proofs-btn"
+                >
+                  {showProofs ? "Hide Proofs ▲" : `View Proofs (${verifiedCount}) ▼`}
+                </button>
+              )}
+            </div>
+
+            {/* Expandable proof list */}
+            {showProofs && sellerReputation && (
+              <div
+                style={{
+                  background: "var(--c-paper)",
+                  border: "1px solid var(--c-ink)",
+                  padding: "8px",
+                  fontSize: "0.72rem",
+                  fontFamily: "var(--font-mono)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                {sellerReputation.proofs.map((p, idx) => (
+                  <div key={p.bookingKey} style={{ borderBottom: idx < sellerReputation.proofs.length - 1 ? "1px dashed #ccc" : "none", paddingBottom: 4 }}>
+                    <div>
+                      <strong>Booking:</strong>{" "}
+                      <a href={`${EXPLORER_BASE}/entity/${p.bookingKey}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
+                        {p.bookingKey.slice(0, 10)}…{p.bookingKey.slice(-6)} ↗
+                      </a>
+                    </div>
+                    <div>
+                      <strong>Seller Signature:</strong>{" "}
+                      <a href={`${EXPLORER_BASE}/entity/${p.sellerCompletionKey}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
+                        {p.sellerCompletionKey.slice(0, 10)}…{p.sellerCompletionKey.slice(-6)} ↗
+                      </a>
+                    </div>
+                    <div>
+                      <strong>Buyer Signature:</strong>{" "}
+                      <a href={`${EXPLORER_BASE}/entity/${p.buyerCompletionKey}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
+                        {p.buyerCompletionKey.slice(0, 10)}…{p.buyerCompletionKey.slice(-6)} ↗
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
 
           {/* ── Description ── */}
           <section aria-labelledby="desc-label">
@@ -215,7 +442,7 @@ export function SlotDrawer({ slot, onClose }: SlotDrawerProps): React.ReactEleme
 
             {/* Entity Key */}
             <div className="proof-row">
-              <div className="proof-key">Entity Key</div>
+              <div className="proof-key">Slot Entity Key</div>
               <div className="proof-val-wrap">
                 <div className="drawer__key-box" aria-label={`Entity key: ${slot.key}`}>
                   {slot.key}
@@ -271,76 +498,124 @@ export function SlotDrawer({ slot, onClose }: SlotDrawerProps): React.ReactEleme
 
           {/* ── ACTIONS ── */}
           <div className="drawer__actions">
-            {expired ? (
-              <p className="expired-notice">
-                🔴 This slot has expired and been removed from Arkiv.
-              </p>
-            ) : (
-              <>
-                {/* Book button */}
-                <div
-                  title={walletConnected ? "Book this slot on-chain" : noWalletTip}
-                  style={{ width: "100%" }}
-                >
-                  <button
-                    id="drawer-book-btn"
-                    className="btn-primary"
-                    disabled={!walletConnected}
-                    onClick={() => {
-                      /* Phase 3: createBooking() */
+            {/* 1. Confirm Job Done (appears for seller and winning buyer once slot started) */}
+            {winningBooking && (isSellerOfWinning || isBuyerOfWinning) && (
+              <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
+                {isJobVerified ? (
+                  <div
+                    style={{
+                      background: "rgba(34, 197, 94, 0.15)",
+                      border: "1px solid #22c55e",
+                      padding: "8px 12px",
+                      fontSize: "0.82rem",
+                      fontWeight: 700,
+                      color: "#15803d",
+                      textAlign: "center",
                     }}
-                    aria-label={walletConnected ? "Book this slot (on-chain)" : noWalletTip}
-                    aria-disabled={!walletConnected}
-                    style={{ width: "100%" }}
                   >
-                    🤝 Book This Slot
-                    {!walletConnected && (
-                      <span className="btn-tooltip">Connect wallet first</span>
-                    )}
-                  </button>
-                </div>
-
-                {/* Confirm seller button */}
-                <div
-                  title={walletConnected ? "Mark slot as fulfilled (seller)" : noWalletTip}
-                  style={{ width: "100%" }}
-                >
-                  <button
-                    id="drawer-complete-seller-btn"
-                    className="btn-secondary"
-                    disabled={!walletConnected}
-                    onClick={() => {
-                      /* Phase 3: createCompletion("seller") */
-                    }}
-                    aria-label={walletConnected ? "Confirm as seller" : noWalletTip}
-                    aria-disabled={!walletConnected}
-                    style={{ width: "100%" }}
-                  >
-                    ✅ Confirm as Seller
-                    {!walletConnected && (
-                      <span className="btn-tooltip">Connect wallet first</span>
-                    )}
-                  </button>
-                </div>
-
-                {/* Wallet connect prompt */}
-                {!walletConnected && (
-                  <button
-                    id="drawer-connect-wallet-btn"
-                    className="btn-primary"
-                    onClick={() => void wallet.connect()}
-                    style={{ width: "100%", background: "var(--c-teal)" }}
-                    aria-label="Connect MetaMask"
-                  >
-                    🦊 Connect Wallet
-                  </button>
-                )}
-
-                <p className="drawer__footnote">
-                  All actions are Arkiv transactions on Tiramisu testnet (chain 7738577).
-                </p>
-              </>
+                    ✓ Job Verified on Arkiv (Both Sides Signed)
+                  </div>
+                ) : isSellerOfWinning ? (
+                  hasSellerConfirmed ? (
+                    <div
+                      style={{
+                        background: "rgba(234, 179, 8, 0.15)",
+                        border: "1px solid #eab308",
+                        padding: "8px 12px",
+                        fontSize: "0.82rem",
+                        fontWeight: 700,
+                        color: "#a16207",
+                        textAlign: "center",
+                      }}
+                    >
+                      ✓ You confirmed as Seller (Awaiting Buyer)
+                    </div>
+                  ) : hasStarted ? (
+                    <button
+                      id="drawer-confirm-seller-btn"
+                      className="btn-primary"
+                      onClick={() => onOpenConfirmJob?.(slot, winningBooking, "seller")}
+                      style={{ width: "100%", background: "var(--c-teal)" }}
+                    >
+                      ✅ Confirm Job Done (Seller)
+                    </button>
+                  ) : (
+                    <div style={{ fontSize: "0.78rem", opacity: 0.8, textAlign: "center" }}>
+                      ⏳ Seller confirmation opens after slot start ({formatDateTime(slot.startsAt)})
+                    </div>
+                  )
+                ) : isBuyerOfWinning ? (
+                  hasBuyerConfirmed ? (
+                    <div
+                      style={{
+                        background: "rgba(234, 179, 8, 0.15)",
+                        border: "1px solid #eab308",
+                        padding: "8px 12px",
+                        fontSize: "0.82rem",
+                        fontWeight: 700,
+                        color: "#a16207",
+                        textAlign: "center",
+                      }}
+                    >
+                      ✓ You confirmed as Buyer (Awaiting Seller)
+                    </div>
+                  ) : hasStarted ? (
+                    <button
+                      id="drawer-confirm-buyer-btn"
+                      className="btn-primary"
+                      onClick={() => onOpenConfirmJob?.(slot, winningBooking, "buyer")}
+                      style={{ width: "100%", background: "var(--c-teal)" }}
+                    >
+                      ✅ Confirm Job Done (Buyer)
+                    </button>
+                  ) : (
+                    <div style={{ fontSize: "0.78rem", opacity: 0.8, textAlign: "center" }}>
+                      ⏳ Buyer confirmation opens after slot start ({formatDateTime(slot.startsAt)})
+                    </div>
+                  )
+                ) : null}
+              </div>
             )}
+
+            {/* 2. Book button */}
+            {!expired && (
+              <div
+                title={canBook ? "Book this slot on-chain" : bookDisabledReason}
+                style={{ width: "100%" }}
+              >
+                <button
+                  id="drawer-book-btn"
+                  className="btn-primary"
+                  disabled={!canBook}
+                  onClick={() => onOpenBook?.(slot)}
+                  aria-label={canBook ? "Book this slot (on-chain)" : bookDisabledReason}
+                  aria-disabled={!canBook}
+                  style={{ width: "100%" }}
+                >
+                  🤝 Book This Slot
+                  {!canBook && (
+                    <span className="btn-tooltip">{bookDisabledReason}</span>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* 3. Wallet connect prompt */}
+            {!walletConnected && (
+              <button
+                id="drawer-connect-wallet-btn"
+                className="btn-primary"
+                onClick={() => void wallet.connect()}
+                style={{ width: "100%", background: "var(--c-teal)" }}
+                aria-label="Connect MetaMask"
+              >
+                🦊 Connect Wallet
+              </button>
+            )}
+
+            <p className="drawer__footnote">
+              All actions are Arkiv transactions on Tiramisu testnet (chain 7738577).
+            </p>
           </div>
         </div>
       </aside>

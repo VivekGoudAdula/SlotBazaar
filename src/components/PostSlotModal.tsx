@@ -38,29 +38,7 @@ import {
   type SlotFormValues,
 } from "../lib/slotValidation.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PRESET CLUSTERS WITH COORDINATES
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface PresetCluster {
-  name: string;
-  label: string;
-  lat: number;
-  lon: number;
-}
-
-const PRESET_CLUSTERS: PresetCluster[] = [
-  { name: "jaipur",    label: "Jaipur",    lat: 26.9124, lon: 75.7873 },
-  { name: "delhi",     label: "Delhi",     lat: 28.6139, lon: 77.2090 },
-  { name: "mumbai",    label: "Mumbai",    lat: 19.0760, lon: 72.8777 },
-  { name: "bangalore", label: "Bangalore", lat: 12.9716, lon: 77.5946 },
-  { name: "kolkata",   label: "Kolkata",   lat: 22.5726, lon: 88.3639 },
-  { name: "lucknow",   label: "Lucknow",   lat: 26.8467, lon: 80.9462 },
-  { name: "surat",     label: "Surat",     lat: 21.1702, lon: 72.8311 },
-  { name: "chennai",   label: "Chennai",   lat: 13.0827, lon: 80.2707 },
-  { name: "hyderabad", label: "Hyderabad", lat: 17.3850, lon: 78.4867 },
-  { name: "pune",      label: "Pune",      lat: 18.5204, lon: 73.8567 },
-];
+import { CLUSTERS } from "../lib/clusters.js";
 
 const EXPLORER_BASE = "https://explorer.tiramisu.arkiv.network";
 const FAUCET_URL = "https://hub.arkiv.network/faucet";
@@ -160,7 +138,7 @@ export function PostSlotModal({
   const handleClusterChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setCluster(val);
-    const found = PRESET_CLUSTERS.find((c) => c.name === val);
+    const found = CLUSTERS.find((c) => c.name === val);
     if (found) {
       setLat(found.lat);
       setLon(found.lon);
@@ -712,8 +690,8 @@ export function PostSlotModal({
                     fontSize: "0.88rem",
                   }}
                 >
-                  {PRESET_CLUSTERS.map((c) => (
-                    <option key={c.name} value={c.name}>
+                  {CLUSTERS.map((c) => (
+                    <option key={c.id} value={c.name}>
                       {c.label} ({c.lat.toFixed(4)}, {c.lon.toFixed(4)})
                     </option>
                   ))}

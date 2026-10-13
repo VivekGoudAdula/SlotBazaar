@@ -246,16 +246,82 @@ Measured with `scripts/measure-cost.ts` on Tiramisu testnet. Balance delta (befo
 
 ---
 
-## 6. Client-Side Test Entity Filter Rule
+## 6. Client-Side Test Entity Filter Rule (Updated in Phase 4)
 
-To prevent automated test probes and cost measurement entities (e.g. `cost-test 24h`, `Test · Machine`) from polluting the live user-facing map and slot lists, SlotBazaar applies a strict client-side exclusion filter (`isProductionSlot` in `src/lib/arkiv.ts`):
+To prevent automated developer probe and cost measurement entities from polluting the user-facing map and slot lists without suppressing valid user listings, SlotBazaar applies a strict `seed_batch`-only filter (`isProductionSlot` in `src/lib/arkiv.ts`):
 
-1. **Entity title**: Excluded if `title` (trimmed, lowercase) starts with `"test"`, `"cost-test"`, or `"cost_test"`.
-2. **Seed batch attribute**: Excluded if `seed_batch` (trimmed, lowercase) starts with `"test"` or `"cost"`.
-3. **Cluster attribute**: Excluded if `cluster` equals `"test"`.
+1. **Title & Cluster Never Filtered**: `isProductionSlot` **never** hides a slot based on its `title`, `description`, or `cluster`. A user slot titled "test slot" or situated in any custom cluster remains 100% visible.
+2. **Explicit Probe Batches Excluded**: An entity is hidden **only** if its `seed_batch` attribute matches one of the known developer probe batches:
+   - `dev-probe`
+   - `cost-measure`
+   - `fr005-retest`
+   - Or starts with `t06-` (automated end-to-end hot removal test harness).
 
-Production and synthetic demo slots created via `seed.ts` (tagged `seed_batch="seed-YYYY-MM-DD"`) remain visible and fully functional. On-chain data is untouched.
+All production user slots and synthetic demo slots created via `seed.ts` (tagged `seed_batch="seed-YYYY-MM-DD"`) remain visible and fully functional.
 
 ---
 
-*Last updated: 2026-10-13 IST*
+## 7. Schema V2 Specification (Phase 4: Book, Confirm, Reputation)
+
+Schema v2 extends the protocol to support decentralized, verifiable job completions with race-resistant winning bookings and two-sided cryptographic verification. Existing Schema v1 data remains backward-compatible.
+
+### 7.1 Entity: `booking` (v2)
+
+Bookings are independent immutable entities. Existing slots are **never mutated**.
+
+| Attribute | Arkiv Type | Encoding | Description |
+|-----------|------------|----------|-------------|
+| `project` | `StrValue` | UTF-8 `"slotbazaar"` | Project partition key |
+| `entity_type` | `StrValue` | UTF-8 `"booking"` | Entity type discriminant |
+| `schema_v` | `StrValue` | UTF-8 `"2"` | Schema version (`"1"` for legacy) |
+| `slot_key` | `KeyValue` | `key(slotKey)` | Foreign key referencing the slot entity |
+| `slot_creator` | `StrValue` | UTF-8 address string | Copied from live on-chain slot (lowercase) |
+| `slot_ends_at` | `U64Value` | `u64(BigInt(endsAt))` | Copied from live on-chain slot |
+| `booked_at` | `U64Value` | `u64(BigInt(sec))` | Unix timestamp when booking was created |
+| `synthetic` | `BoolValue` | `bool(boolean)` | `false` for user bookings |
+
+- **Expiration Policy**: 30 days from creation (`ExpirationTime.atDate(new Date(Date.now() + 30 * 86400 * 1000))`).
+- **Gas Cost**: ~0.000142 GLM (consistent with Arkiv's flat entity creation fee).
+- **Integrity Invariant**: Booking creation reads the live slot from Arkiv first; `slot_creator` and `slot_ends_at` are copied directly from the on-chain slot, never accepted from untrusted client input.
+
+### 7.2 Entity: `completion` (v2)
+
+Completions reference the specific **`booking_key`** (not `slot_key`), enabling post-expiry confirmation.
+
+| Attribute | Arkiv Type | Encoding | Description |
+|-----------|------------|----------|-------------|
+| `project` | `StrValue` | UTF-8 `"slotbazaar"` | Project partition key |
+| `entity_type` | `StrValue` | UTF-8 `"completion"` | Entity type discriminant |
+| `schema_v` | `StrValue` | UTF-8 `"2"` | Schema version |
+| `booking_key` | `KeyValue` | `key(bookingKey)` | Foreign key referencing the winning booking |
+| `role` | `StrValue` | UTF-8 `"seller"` or `"buyer"` | Role confirmed by signing wallet |
+| `completed_at` | `U64Value` | `u64(BigInt(sec))` | Unix timestamp when confirmation occurred |
+| `synthetic` | `BoolValue` | `bool(boolean)` | `false` for user completions |
+
+- **Post-Expiry Creation**: Because completions link to `booking_key` (which has a 30-day lifespan), sellers and buyers can confirm job completion **after the slot itself has expired on-chain**.
+
+---
+
+## 8. Two-Sided Reputation Rule & Sybil Caveat
+
+A job qualifies as a verified reputation point if and only if **ALL** of the following conditions hold:
+
+1. **Legitimate Winning Booking**:
+   - A booking exists for the slot.
+   - The booking's creator is **NOT** the `slot_creator` (self-booking fraud is rejected).
+   - The booking is the **winning booking** for its slot: confirmed in the earliest block (`createdAtBlock`). Tie-breaks between bookings in the same block are resolved lexicographically by entity key (`a.key.toLowerCase().localeCompare(b.key.toLowerCase())`).
+2. **Two-Sided Completion**:
+   - A completion with `role="seller"` exists on the `booking_key` whose creator equals `booking.slot_creator`.
+   - A completion with `role="buyer"` exists on the `booking_key` whose creator equals `booking.creator`.
+3. **Temporal Validity**:
+   - Neither completion was executed before `slot.startsAt`.
+4. **De-duplication**:
+   - Duplicate completions submitted by the same role/wallet do not double-count.
+
+### Honest Sybil Limitation
+> **Cryptographic / Economic Caveat**: On public EVM networks, generating new wallet addresses is essentially free. A malicious actor with testnet GLM could generate two separate addresses and execute synthetic self-trades to inflate reputation. Within SlotBazaar, reputation proves cryptographic consensus that **two distinct wallets both signed mutual agreement on a specific winning booking**. Full anti-sybil resistance in production requires proof-of-humanity or economic stake.
+
+---
+
+*Last updated: 2026-10-13 IST (Phase 4 Schema v2)*
+

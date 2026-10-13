@@ -26,6 +26,11 @@ import { FilterBar, type FilterState }   from "./components/FilterBar.js";
 import { MapView }                       from "./components/MapView.js";
 import { SlotDrawer }                    from "./components/SlotDrawer.js";
 import { PostSlotModal }                 from "./components/PostSlotModal.js";
+import { BookSlotModal }                 from "./components/BookSlotModal.js";
+import { ConfirmJobModal }               from "./components/ConfirmJobModal.js";
+import { MyJobsModal }                   from "./components/MyJobsModal.js";
+import { DemoGuideModal }                from "./components/DemoGuideModal.js";
+import type { BookingEntity } from "./lib/arkiv.js";
 import { useNow }                        from "./hooks/useNow.js";
 import { formatTimeLeft }                from "./lib/time.js";
 
@@ -40,6 +45,7 @@ interface SlideOverListProps {
   onSelect: (s: SlotEntity) => void;
   onFlyTo: (s: SlotEntity) => void;
   userAddress?: string | null;
+  winningBookingsBySlot?: Map<string, BookingEntity>;
 }
 
 function SlideOverList({
@@ -49,6 +55,7 @@ function SlideOverList({
   onSelect,
   onFlyTo,
   userAddress,
+  winningBookingsBySlot,
 }: SlideOverListProps): React.ReactElement | null {
   const now = useNow();
 
@@ -96,11 +103,18 @@ function SlideOverList({
             sorted.map((s) => {
               const remaining = s.endsAt - now;
               const isCritical = remaining > 0 && remaining <= 15 * 60;
+              const normUser = userAddress?.toLowerCase() ?? "";
               const isMine = Boolean(
-                userAddress &&
-                (s.creator.toLowerCase() === userAddress.toLowerCase() ||
-                 s.owner.toLowerCase() === userAddress.toLowerCase())
+                normUser &&
+                (s.creator.toLowerCase() === normUser ||
+                 s.owner.toLowerCase() === normUser)
               );
+              const winner = winningBookingsBySlot?.get(s.key.toLowerCase());
+              const isBooked = Boolean(winner);
+              const isBookedByYou = Boolean(
+                winner && normUser && winner.creator.toLowerCase() === normUser
+              );
+
               return (
                 <div
                   key={s.key}
@@ -127,7 +141,21 @@ function SlideOverList({
 
                   <div className="slideover-card__title">
                     {s.title}
-                    {isMine && (
+                    {isBookedByYou ? (
+                      <span
+                        style={{
+                          marginLeft: 6,
+                          background: "var(--c-teal)",
+                          color: "white",
+                          padding: "1px 5px",
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
+                          verticalAlign: "middle",
+                        }}
+                      >
+                        ★ You Booked
+                      </span>
+                    ) : isMine ? (
                       <span
                         className="my-slot-badge"
                         style={{
@@ -143,7 +171,21 @@ function SlideOverList({
                       >
                         ★ You
                       </span>
-                    )}
+                    ) : isBooked ? (
+                      <span
+                        style={{
+                          marginLeft: 6,
+                          background: "#9E9E9E",
+                          color: "white",
+                          padding: "1px 5px",
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
+                          verticalAlign: "middle",
+                        }}
+                      >
+                        🔒 Booked
+                      </span>
+                    ) : null}
                   </div>
 
                   <div className="slideover-card__footer">
@@ -184,7 +226,18 @@ function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => voi
 // ─────────────────────────────────────────────────────────────────────────────
 
 function AppInner(): React.ReactElement {
-  const { slots, loading, error, lastFetched, refresh } = useLiveSlots();
+  const {
+    slots,
+    bookings,
+    completions,
+    bookingsBySlot,
+    winningBookingsBySlot,
+    reputationByAddress,
+    loading,
+    error,
+    lastFetched,
+    refresh,
+  } = useLiveSlots();
   const { address, status } = useWallet();
 
   const isConnected = status === "connected" && Boolean(address);
@@ -199,6 +252,19 @@ function AppInner(): React.ReactElement {
 
   const [isListOpen, setIsListOpen]     = useState(false);
   const [isPostOpen, setIsPostOpen]     = useState(false);
+  const [isBookOpen, setIsBookOpen]     = useState(false);
+  const [slotToBook, setSlotToBook]     = useState<SlotEntity | null>(null);
+
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<{
+    slot: SlotEntity;
+    booking: BookingEntity;
+    role: "seller" | "buyer";
+  } | null>(null);
+
+  const [isMyJobsOpen, setIsMyJobsOpen]       = useState(false);
+  const [isDemoGuideOpen, setIsDemoGuideOpen] = useState(false);
+
   const [selectedSlot, setSelectedSlot] = useState<SlotEntity | null>(null);
   const [flyTarget, setFlyTarget]       = useState<[number, number] | null>(null);
   const [toast, setToast] = useState<{
@@ -210,6 +276,10 @@ function AppInner(): React.ReactElement {
   const flyRef = useRef<[number, number] | null>(null);
 
   const now = useNow();
+
+  const userReputation = useMemo(() => {
+    return address ? reputationByAddress.get(address.toLowerCase()) : undefined;
+  }, [address, reputationByAddress]);
 
   useEffect(() => {
     if (!toast) return;
@@ -260,6 +330,49 @@ function AppInner(): React.ReactElement {
     handleFlyTo(slot);
   }, [handleSelect, handleFlyTo]);
 
+  const handleOpenBook = useCallback((slot: SlotEntity) => {
+    setSlotToBook(slot);
+    setIsBookOpen(true);
+  }, []);
+
+  const handleOpenConfirmJob = useCallback(
+    (slot: SlotEntity, booking: BookingEntity, role: "seller" | "buyer") => {
+      setConfirmTarget({ slot, booking, role });
+      setIsConfirmOpen(true);
+    },
+    []
+  );
+
+  const handleBookingComplete = useCallback(
+    (booking: BookingEntity, isWinner: boolean) => {
+      refresh();
+      setToast({
+        message: isWinner ? "You booked this slot!" : "Booking submitted on Arkiv.",
+        type: isWinner ? "success" : "info",
+        link: {
+          text: `View Booking (${booking.key.slice(0, 8)}…) ↗`,
+          url: `https://tiramisu.explorer.arkiv.network/entity/${booking.key}`,
+        },
+      });
+    },
+    [refresh]
+  );
+
+  const handleCompletionDone = useCallback(
+    (completionKey: Hex) => {
+      refresh();
+      setToast({
+        message: "Job confirmation recorded on Arkiv!",
+        type: "success",
+        link: {
+          text: `View Receipt (${completionKey.slice(0, 8)}…) ↗`,
+          url: `https://tiramisu.explorer.arkiv.network/entity/${completionKey}`,
+        },
+      });
+    },
+    [refresh]
+  );
+
   const handleSlotCreated = useCallback(
     ({
       key,
@@ -287,7 +400,12 @@ function AppInner(): React.ReactElement {
   return (
     <div className="app-viewport">
       {/* 1. NAVBAR */}
-      <Header onPostSlot={() => setIsPostOpen(true)} />
+      <Header
+        onPostSlot={() => setIsPostOpen(true)}
+        verifiedJobsCount={userReputation?.verifiedJobsCount ?? 0}
+        onOpenMyJobs={() => setIsMyJobsOpen(true)}
+        onOpenDemoGuide={() => setIsDemoGuideOpen(true)}
+      />
 
       {/* Optional non-blocking error banner */}
       {error && <ErrorBanner message={error} onRetry={refresh} />}
@@ -313,6 +431,9 @@ function AppInner(): React.ReactElement {
           slots={filteredSlots}
           onSelectSlot={handleSelectAndFly}
           flyTarget={flyTarget}
+          winningBookingsBySlot={winningBookingsBySlot}
+          reputationByAddress={reputationByAddress}
+          userAddress={address}
         />
 
         {/* 4. SLIM ONE-LINE FOOTER ATTRIBUTION BAR OVERLAY */}
@@ -343,17 +464,73 @@ function AppInner(): React.ReactElement {
           onSelect={handleSelect}
           onFlyTo={handleFlyTo}
           userAddress={address}
+          winningBookingsBySlot={winningBookingsBySlot}
         />
       </main>
 
       {/* Slot Drawer modal for detailed booking / viewing */}
-      <SlotDrawer slot={selectedSlot} onClose={handleClose} />
+      <SlotDrawer
+        slot={selectedSlot}
+        onClose={handleClose}
+        winningBooking={selectedSlot ? winningBookingsBySlot.get(selectedSlot.key.toLowerCase()) : undefined}
+        userBookings={selectedSlot ? bookingsBySlot.get(selectedSlot.key.toLowerCase()) ?? [] : []}
+        completions={selectedSlot ? completions : []}
+        sellerReputation={selectedSlot ? reputationByAddress.get(selectedSlot.creator.toLowerCase()) : undefined}
+        onOpenBook={handleOpenBook}
+        onOpenConfirmJob={handleOpenConfirmJob}
+      />
 
       {/* Post Slot Modal */}
       <PostSlotModal
         open={isPostOpen}
         onClose={() => setIsPostOpen(false)}
         onSlotCreated={handleSlotCreated}
+      />
+
+      {/* Book Slot Modal */}
+      <BookSlotModal
+        open={isBookOpen}
+        slot={slotToBook}
+        onClose={() => {
+          setIsBookOpen(false);
+          setSlotToBook(null);
+        }}
+        onBookingComplete={handleBookingComplete}
+      />
+
+      {/* Confirm Job Modal */}
+      {confirmTarget && (
+        <ConfirmJobModal
+          open={isConfirmOpen}
+          slot={confirmTarget.slot}
+          booking={confirmTarget.booking}
+          role={confirmTarget.role}
+          onClose={() => {
+            setIsConfirmOpen(false);
+            setConfirmTarget(null);
+          }}
+          onCompletionDone={handleCompletionDone}
+        />
+      )}
+
+      {/* My Jobs Modal */}
+      <MyJobsModal
+        open={isMyJobsOpen}
+        onClose={() => setIsMyJobsOpen(false)}
+        userAddress={address}
+        slots={slots}
+        bookings={bookings}
+        completions={completions}
+        winningBookingsBySlot={winningBookingsBySlot}
+        reputation={userReputation}
+        onOpenConfirmJob={handleOpenConfirmJob}
+      />
+
+      {/* Two-Wallet Demo Guide Modal */}
+      <DemoGuideModal
+        open={isDemoGuideOpen}
+        onClose={() => setIsDemoGuideOpen(false)}
+        currentAddress={address}
       />
 
       {/* Toast Notification Container */}

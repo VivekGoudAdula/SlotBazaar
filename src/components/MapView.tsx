@@ -16,7 +16,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { MarkerClusterGroup } from "./MarkerClusterGroup.js";
 
-import type { SlotEntity } from "../lib/arkiv.js";
+import type { SlotEntity, BookingEntity, ReputationResult } from "../lib/arkiv.js";
 import { SlotCard } from "./SlotCard.js";
 import { useNow } from "../hooks/useNow.js";
 
@@ -46,10 +46,26 @@ const CATEGORY_ICONS: Record<string, string> = {
 const CRITICAL_SEC = 15 * 60;
 
 /**
- * Creates a DivIcon teardrop marker with the correct category colour.
+ * Creates a DivIcon teardrop marker with category colour.
  * Adds vermilion pulse ring when < 15 min remain.
+ * Adds hatched/dimmed style with "BOOKED" stamp for booked slots.
  */
-function createSlotIcon(slot: SlotEntity, now: number): L.DivIcon {
+function createSlotIcon(
+  slot: SlotEntity,
+  now: number,
+  winningBooking?: BookingEntity,
+  userAddress?: string | null
+): L.DivIcon {
+  const normUser = userAddress?.toLowerCase() ?? "";
+  const isMine = Boolean(
+    normUser &&
+    (slot.creator.toLowerCase() === normUser || slot.owner.toLowerCase() === normUser)
+  );
+  const isBooked = Boolean(winningBooking);
+  const isBookedByYou = Boolean(
+    winningBooking && normUser && winningBooking.creator.toLowerCase() === normUser
+  );
+
   const remaining  = slot.endsAt - now;
   const isCritical = remaining > 0 && remaining <= CRITICAL_SEC;
   const isExpired  = remaining <= 0;
@@ -60,13 +76,29 @@ function createSlotIcon(slot: SlotEntity, now: number): L.DivIcon {
 
   const markerColor = isCritical ? "#E8452C" : baseColor;
 
+  let extraClasses = "";
+  if (isCritical) extraClasses += " slot-marker--pulse";
+  if (isBooked) extraClasses += " slot-marker--booked";
+  if (isBookedByYou) extraClasses += " slot-marker--booked-by-you";
+  if (isMine) extraClasses += " slot-marker--mine";
+
+  let stampHtml = "";
+  if (isBookedByYou) {
+    stampHtml = `<div class="slot-marker__stamp slot-marker__stamp--yours">YOU</div>`;
+  } else if (isBooked) {
+    stampHtml = `<div class="slot-marker__stamp">BOOKED</div>`;
+  } else if (isMine) {
+    stampHtml = `<div class="slot-marker__stamp" style="background:var(--c-marigold);color:var(--c-ink)">MINE</div>`;
+  }
+
   const html = `
     <div
-      class="slot-marker${isCritical ? " slot-marker--pulse" : ""}"
+      class="slot-marker${extraClasses}"
       style="background:${markerColor};"
       title="${slot.title.replace(/"/g, "&quot;")}"
     >
       <div class="slot-marker__inner">${CATEGORY_ICONS[slot.category] ?? "📦"}</div>
+      ${stampHtml}
     </div>
   `;
 
@@ -138,9 +170,19 @@ export interface MapViewProps {
   onSelectSlot: (slot: SlotEntity) => void;
   /** When set, map flies to this [lat, lon] */
   flyTarget?:  [number, number] | null;
+  winningBookingsBySlot?: Map<string, BookingEntity>;
+  reputationByAddress?: Map<string, ReputationResult>;
+  userAddress?: string | null;
 }
 
-export function MapView({ slots, onSelectSlot, flyTarget = null }: MapViewProps): React.ReactElement {
+export function MapView({
+  slots,
+  onSelectSlot,
+  flyTarget = null,
+  winningBookingsBySlot,
+  reputationByAddress,
+  userAddress,
+}: MapViewProps): React.ReactElement {
   const now    = useNow();
   const fitted = useRef(false);
 
@@ -181,7 +223,11 @@ export function MapView({ slots, onSelectSlot, flyTarget = null }: MapViewProps)
         showCoverageOnHover={false}
       >
         {slots.map((slot) => {
-          const icon = createSlotIcon(slot, now);
+          const sKeyNorm = slot.key.toLowerCase();
+          const winningBooking = winningBookingsBySlot?.get(sKeyNorm);
+          const sellerRep = reputationByAddress?.get(slot.creator.toLowerCase());
+          const icon = createSlotIcon(slot, now, winningBooking, userAddress);
+
           return (
             <Marker
               key={slot.key}
@@ -190,7 +236,13 @@ export function MapView({ slots, onSelectSlot, flyTarget = null }: MapViewProps)
               title={slot.title}
             >
               <Popup closeButton={false} className="slot-popup">
-                <SlotCard slot={slot} onSelect={onSelectSlot} />
+                <SlotCard
+                  slot={slot}
+                  winningBooking={winningBooking}
+                  sellerReputation={sellerRep}
+                  userAddress={userAddress}
+                  onSelect={onSelectSlot}
+                />
               </Popup>
             </Marker>
           );

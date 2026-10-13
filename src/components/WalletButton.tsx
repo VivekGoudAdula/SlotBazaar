@@ -30,7 +30,17 @@ function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-export function WalletButton(): React.ReactElement {
+export interface WalletButtonProps {
+  verifiedJobsCount?: number;
+  onOpenMyJobs?: () => void;
+  onOpenDemoGuide?: () => void;
+}
+
+export function WalletButton({
+  verifiedJobsCount = 0,
+  onOpenMyJobs,
+  onOpenDemoGuide,
+}: WalletButtonProps = {}): React.ReactElement {
   const {
     status,
     address,
@@ -188,6 +198,13 @@ export function WalletButton(): React.ReactElement {
               <span className="wallet-popover__balance">{balance ?? "Fetching…"}</span>
             </div>
 
+            <div className="wallet-popover__row">
+              <span className="wallet-popover__label">Reputation:</span>
+              <span className="wallet-popover__balance" style={{ color: "var(--c-teal)", fontWeight: 700 }}>
+                🏆 {verifiedJobsCount ?? 0} Verified Jobs
+              </span>
+            </div>
+
             {isWrongNetwork && (
               <div className="wallet-popover__network-alert">
                 <span>Wrong network! Please switch to Tiramisu testnet.</span>
@@ -201,7 +218,33 @@ export function WalletButton(): React.ReactElement {
               </div>
             )}
 
-            <div className="wallet-popover__actions">
+            <div className="wallet-popover__actions" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {onOpenMyJobs && (
+                <button
+                  className="wallet-action-btn wallet-action-btn--secondary"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onOpenMyJobs();
+                  }}
+                  id="wallet-my-jobs-btn"
+                >
+                  📋 My Jobs & Proofs
+                </button>
+              )}
+
+              {onOpenDemoGuide && (
+                <button
+                  className="wallet-action-btn wallet-action-btn--secondary"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onOpenDemoGuide();
+                  }}
+                  id="wallet-demo-guide-btn"
+                >
+                  💡 Two-Wallet Demo Guide
+                </button>
+              )}
+
               <button
                 className="wallet-action-btn wallet-action-btn--secondary"
                 onClick={() => {
