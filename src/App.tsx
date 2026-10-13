@@ -49,6 +49,7 @@ interface SlideOverListProps {
   onFlyTo: (s: SlotEntity) => void;
   userAddress?: string | null;
   winningBookingsBySlot?: Map<string, BookingEntity>;
+  onResetFilters?: () => void;
 }
 
 function SlideOverList({
@@ -59,6 +60,7 @@ function SlideOverList({
   onFlyTo,
   userAddress,
   winningBookingsBySlot,
+  onResetFilters,
 }: SlideOverListProps): React.ReactElement | null {
   const now = useNow();
 
@@ -99,8 +101,38 @@ function SlideOverList({
 
         <div className="slideover-body" role="list">
           {slots.length === 0 ? (
-            <div className="slideover-empty">
-              <span>No slots match the current filters.</span>
+            <div
+              className="slideover-empty"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 12,
+                padding: "36px 16px",
+                textAlign: "center",
+              }}
+            >
+              <span style={{ fontSize: "0.95rem", color: "var(--c-text-muted)" }}>
+                No slots match the current filters.
+              </span>
+              {onResetFilters && (
+                <button
+                  type="button"
+                  onClick={onResetFilters}
+                  style={{
+                    cursor: "pointer",
+                    background: "var(--c-amber)",
+                    color: "#111",
+                    fontWeight: 700,
+                    padding: "7px 16px",
+                    borderRadius: "6px",
+                    border: "1px solid rgba(0,0,0,0.2)",
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  Clear all filters
+                </button>
+              )}
             </div>
           ) : (
             sorted.map((s) => {
@@ -434,7 +466,14 @@ function AppInner(): React.ReactElement {
       slot: SlotEntity;
     }) => {
       addSlot(slot);
-      setFilters((prev) => ({ ...prev, endingSoon: false }));
+      // Reset all filters to 'all' so the newly created slot is immediately visible on screen
+      setFilters({
+        category: "all",
+        cluster: "all",
+        priceBand: "all",
+        endingSoon: false,
+        mySlots: false,
+      });
       refresh();
       handleSelectAndFly(slot);
       setToast({
@@ -519,6 +558,15 @@ function AppInner(): React.ReactElement {
           onFlyTo={handleFlyTo}
           userAddress={address}
           winningBookingsBySlot={winningBookingsBySlot}
+          onResetFilters={() =>
+            setFilters({
+              category: "all",
+              cluster: "all",
+              priceBand: "all",
+              endingSoon: false,
+              mySlots: false,
+            })
+          }
         />
       </main>
 
