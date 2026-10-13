@@ -622,34 +622,31 @@ export async function getSlotEntity(
   client: PublicArkivClient = getArkivPublicClient()
 ): Promise<SlotEntity | null> {
   const normKey = slotKey.toLowerCase();
+
+  // 1. Direct state lookup via getEntity (fast & never hangs on SQL indexer)
   try {
-    const live = await fetchLiveSlots(client);
+    const raw = await client.getEntity(slotKey);
+    if (raw) {
+      const parsed = parseSlotEntity(raw);
+      if (parsed) return parsed;
+    }
+  } catch {
+    // fallback
+  }
+
+  // 2. Fallback to cached query with strict timeout
+  try {
+    const live = await Promise.race([
+      fetchLiveSlots(client),
+      new Promise<SlotEntity[]>((_, rej) => setTimeout(() => rej(new Error("Timeout")), 3000)),
+    ]);
     const found = live.find((s) => s.key.toLowerCase() === normKey);
     if (found) return found;
   } catch {
-    // fallback to broader query
+    // fallback
   }
 
-  try {
-    let page = await client
-      .select()
-      .where(and(
-        eq("project", str(PROJECT_NAMESPACE)),
-        eq("entity_type", str("slot"))
-      ))
-      .fetch();
-
-    const allRaw: Entity[] = [...page.entities];
-    while (page.hasNextPage()) {
-      page = await page.next();
-      allRaw.push(...page.entities);
-    }
-
-    const match = allRaw.find((e) => e.key && e.key.toLowerCase() === normKey);
-    return match ? parseSlotEntity(match) : null;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 /**
@@ -1082,6 +1079,8 @@ export async function createSlot(
 
 export interface CreateBookingInput {
   slotKey: Hex;
+  slotCreator?: Address;
+  slotEndsAt?: number;
   note?: string;
   synthetic?: boolean;
 }
@@ -1094,7 +1093,7 @@ export interface CreateBookingOutput {
 
 /**
  * Creates a booking entity on Arkiv Tiramisu (Schema v2).
- * Reads the live on-chain slot first, copying slot_creator and slot_ends_at from the real entity.
+ * Uses provided slotCreator and slotEndsAt or reads the slot live on-chain.
  * Expiry: 30 days.
  */
 export async function createBooking(
@@ -1104,12 +1103,22 @@ export async function createBooking(
 ): Promise<CreateBookingOutput> {
   acquireWriteLock("createBooking");
   try {
-    // 1. MUST first read the slot live and copy slot_creator and slot_ends_at
-    const slot = await getSlotEntity(input.slotKey, publicClient);
-    if (!slot) {
+    let slotCreator = input.slotCreator;
+    let slotEndsAt = input.slotEndsAt;
+
+    // If caller didn't pass slot details, lookup slot entity
+    if (!slotCreator || !slotEndsAt) {
+      const slot = await getSlotEntity(input.slotKey, publicClient);
+      if (slot) {
+        slotCreator = slot.creator;
+        slotEndsAt = slot.endsAt;
+      }
+    }
+
+    if (!slotCreator || !slotEndsAt) {
       throw new ArkivError(
         "INVALID_PAYLOAD",
-        `Cannot book slot: target slot entity ${input.slotKey} not found on Arkiv.`
+        `Cannot book slot: target slot entity ${input.slotKey} details could not be resolved.`
       );
     }
 
@@ -1133,8 +1142,8 @@ export async function createBooking(
         entity_type: str("booking"),
         schema_v: str("2"),
         slot_key: key(input.slotKey),
-        slot_creator: str(slot.creator.toLowerCase()),
-        slot_ends_at: u64(BigInt(slot.endsAt)),
+        slot_creator: str(slotCreator.toLowerCase()),
+        slot_ends_at: u64(BigInt(slotEndsAt)),
         booked_at: u64(BigInt(bookedAt)),
         synthetic: bool(synthetic),
       },

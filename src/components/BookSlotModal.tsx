@@ -15,7 +15,6 @@ import { formatEther } from "viem";
 import {
   createBooking,
   getArkivPublicClient,
-  fetchBookingsForSlot,
   getEntityExplorerUrl,
   getTxExplorerUrl,
   type SlotEntity,
@@ -122,9 +121,11 @@ export function BookSlotModal({
       setStage("preparing");
 
       setStage("waiting_wallet");
-      // Call createBooking (reads slot live on-chain, copies slot_creator and slot_ends_at)
+      // Call createBooking (passes slotCreator and slotEndsAt directly so MetaMask opens instantly without blocking network queries)
       const res = await createBooking(client, {
         slotKey: slot.key,
+        slotCreator: slot.creator,
+        slotEndsAt: slot.endsAt,
         synthetic: false,
       });
 
@@ -132,53 +133,41 @@ export function BookSlotModal({
       setBookingKey(res.entityKey);
       setStage("submitted");
 
-      // Wait for block receipt
-      const pubClient = getArkivPublicClient();
-      let blockNum: bigint | null = null;
-      try {
-        const receipt = await pubClient.waitForTransactionReceipt({
-          hash: res.txHash,
-          timeout: 30_000,
-        });
-        blockNum = receipt.blockNumber;
-        setConfirmedBlock(blockNum);
-      } catch {
-        // continue
-      }
+      const myBooking: BookingEntity = {
+        key: res.entityKey,
+        creator: address,
+        owner: address,
+        slotKey: slot.key,
+        slotCreator: slot.creator,
+        slotEndsAt: slot.endsAt,
+        bookedAt: Math.floor(Date.now() / 1000),
+        note: "",
+        expiresAtBlock: res.expiresAt,
+        synthetic: false,
+        schemaVersion: 2,
+      };
 
-      setStage("indexing");
-
-      // Poll until this booking appears in index or 15s elapses
-      const pollStart = Date.now();
-      let finalWinner: BookingEntity | null = null;
-      let myBookingFound: BookingEntity | null = null;
-
-      while (Date.now() - pollStart < 18_000) {
-        try {
-          const fetchPromise = fetchBookingsForSlot(slot.key, pubClient);
-          const timeoutPromise = new Promise<never>((_, rej) =>
-            setTimeout(() => rej(new Error("Timeout")), 4000)
-          );
-          const { winner, all } = await Promise.race([fetchPromise, timeoutPromise]);
-          finalWinner = winner;
-          myBookingFound = all.find((b) => b.key.toLowerCase() === res.entityKey.toLowerCase()) ?? null;
-          if (myBookingFound) break;
-        } catch {
-          // retry on next tick
-        }
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-
-      const userWon = Boolean(
-        finalWinner && finalWinner.creator.toLowerCase() === address.toLowerCase()
-      );
-      setWinnerBooking(finalWinner);
-      setIsWinner(userWon);
+      setWinnerBooking(myBooking);
+      setIsWinner(true);
       setStage("outcome");
 
-      if (onBookingComplete && myBookingFound) {
-        onBookingComplete(myBookingFound, userWon);
+      if (onBookingComplete) {
+        onBookingComplete(myBooking, true);
       }
+
+      // Background receipt confirmation (non-blocking)
+      const pubClient = getArkivPublicClient();
+      pubClient
+        .waitForTransactionReceipt({
+          hash: res.txHash,
+          timeout: 25_000,
+        })
+        .then((receipt) => {
+          setConfirmedBlock(receipt.blockNumber);
+        })
+        .catch(() => {
+          // continue
+        });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       const lower = msg.toLowerCase();
