@@ -652,19 +652,70 @@ export async function fetchCompletionsForSlot(
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 7a. REPUTATION HELPERS (pure functions, testable without chain)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Verifies whether a single slot qualifies as a "completed job" for reputation.
+ *
+ * All three conditions MUST hold:
+ *   (a) A winning booking exists, and the winning booking's creator is NOT
+ *       the same as the slot's creator (prevents self-booking reputation).
+ *   (b) A seller completion exists whose creator equals the slot's creator.
+ *   (c) A buyer completion exists whose creator equals the winning booking's creator.
+ *
+ * @returns The verified BookingEntity+CompletionPair, or null if any condition fails.
+ */
+export function verifyJobCompletion(
+  slot: { key: Hex; creator: Address },
+  winner: BookingEntity | null,
+  completions: CompletionEntity[]
+): { winner: BookingEntity; seller: CompletionEntity; buyer: CompletionEntity } | null {
+  // (a) There must be a winning booking and the winner must not be the slot creator
+  if (!winner) return null;
+  if (winner.creator.toLowerCase() === slot.creator.toLowerCase()) return null;
+
+  // (b) Seller completion must exist and its creator must equal the slot creator
+  const sellerCompletion = completions.find(
+    (c) =>
+      c.role === "seller" &&
+      c.slotKey.toLowerCase() === slot.key.toLowerCase() &&
+      c.creator.toLowerCase() === slot.creator.toLowerCase()
+  );
+  if (!sellerCompletion) return null;
+
+  // (c) Buyer completion must exist and its creator must equal the winning booking creator
+  const buyerCompletion = completions.find(
+    (c) =>
+      c.role === "buyer" &&
+      c.slotKey.toLowerCase() === slot.key.toLowerCase() &&
+      c.creator.toLowerCase() === winner.creator.toLowerCase()
+  );
+  if (!buyerCompletion) return null;
+
+  return { winner, seller: sellerCompletion, buyer: buyerCompletion };
+}
+
 /**
  * Computes an account's verified reputation score.
- * Rule: Count jobs where BOTH a seller completion and a buyer completion exist
- * from DIFFERENT creators for the same booked slot.
- * Reads are authenticated via `createdBy` filter.
+ *
+ * Reputation rule — ALL three conditions must hold for a job to count:
+ *   (a) A booking exists for the slot and the winning booking's creator is NOT
+ *       the slot's creator (blocks self-booking fraud).
+ *   (b) A "seller" completion exists whose creator equals the slot's creator.
+ *   (c) A "buyer" completion exists whose creator equals the winning booking's creator.
+ *
+ * Reads are authenticated via `createdBy` filter on the Arkiv index.
  */
 export async function getReputation(
   account: Address,
   client: PublicArkivClient = getArkivPublicClient()
 ): Promise<{ verifiedJobsCount: number; verifiedSlotKeys: Hex[] }> {
   try {
-    // 1. Fetch completions signed by this account
-    let page = await client
+    // Step 1 — Find all slots created by this account (potential seller role)
+    // and all slots for which this account has a completion (potential buyer role).
+    let completionsPage = await client
       .select()
       .where(and(
         eq("project", str(PROJECT_NAMESPACE)),
@@ -673,12 +724,13 @@ export async function getReputation(
       .createdBy(account)
       .fetch();
 
-    const myCompletionsRaw: Entity[] = [...page.entities];
-    while (page.hasNextPage()) {
-      page = await page.next();
-      myCompletionsRaw.push(...page.entities);
+    const myCompletionsRaw: Entity[] = [...completionsPage.entities];
+    while (completionsPage.hasNextPage()) {
+      completionsPage = await completionsPage.next();
+      myCompletionsRaw.push(...completionsPage.entities);
     }
 
+    // Collect the unique slot keys this account has submitted a completion for
     const uniqueSlotKeys = new Set<Hex>();
     for (const raw of myCompletionsRaw) {
       const parsed = parseCompletionEntity(raw);
@@ -687,20 +739,73 @@ export async function getReputation(
       }
     }
 
-    // 2. For each slot, verify counter-party completion
+    // Step 2 — Also include slots created by this account (seller perspective)
+    let slotsPage = await client
+      .select()
+      .where(and(
+        eq("project", str(PROJECT_NAMESPACE)),
+        eq("entity_type", str("slot"))
+      ))
+      .createdBy(account)
+      .fetch();
+
+    const mySlotsRaw: Entity[] = [...slotsPage.entities];
+    while (slotsPage.hasNextPage()) {
+      slotsPage = await slotsPage.next();
+      mySlotsRaw.push(...slotsPage.entities);
+    }
+
+    for (const raw of mySlotsRaw) {
+      const parsed = parseSlotEntity(raw);
+      if (parsed && parsed.key) {
+        uniqueSlotKeys.add(parsed.key);
+      }
+    }
+
+    // Step 3 — Verify each candidate slot against the three-part rule
     const verifiedSlotKeys: Hex[] = [];
 
     for (const slotKey of uniqueSlotKeys) {
-      const completions = await fetchCompletionsForSlot(slotKey, client);
-      const seller = completions.find((c) => c.role === "seller");
-      const buyer = completions.find((c) => c.role === "buyer");
+      // Fetch the slot entity (may be expired — use getEntity fallback or parse from index)
+      let slotCreator: Address | null = null;
 
-      // Must have both seller and buyer, and from different wallets
-      if (seller && buyer && seller.creator.toLowerCase() !== buyer.creator.toLowerCase()) {
-        const target = account.toLowerCase();
-        if (seller.creator.toLowerCase() === target || buyer.creator.toLowerCase() === target) {
-          verifiedSlotKeys.push(slotKey);
+      // Try reading from the "my slots" list first (if this account is the seller)
+      const fromMySlots = mySlotsRaw.find(
+        (r) => r.key && r.key.toLowerCase() === slotKey.toLowerCase()
+      );
+      if (fromMySlots) {
+        slotCreator = (fromMySlots.creator || null) as Address | null;
+      } else {
+        // Look up via a filtered query (slot may have been created by another wallet)
+        try {
+          const slotQuery = await client
+            .select()
+            .where(and(
+              eq("project", str(PROJECT_NAMESPACE)),
+              eq("entity_type", str("slot"))
+            ))
+            .fetch();
+          const match = slotQuery.entities.find(
+            (e) => e.key && e.key.toLowerCase() === slotKey.toLowerCase()
+          );
+          if (match) slotCreator = (match.creator || null) as Address | null;
+        } catch {
+          // slot may be expired; skip
+          continue;
         }
+      }
+
+      if (!slotCreator) continue;
+
+      const pseudoSlot = { key: slotKey, creator: slotCreator };
+
+      // Fetch bookings and completions for this slot
+      const { winner } = await fetchBookingsForSlot(slotKey, client);
+      const completions = await fetchCompletionsForSlot(slotKey, client);
+
+      const result = verifyJobCompletion(pseudoSlot, winner, completions);
+      if (result) {
+        verifiedSlotKeys.push(slotKey);
       }
     }
 

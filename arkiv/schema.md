@@ -118,10 +118,18 @@ Proof of job completion submitted by either the seller or buyer.
 - **Expiry**: `ExpirationTime.fromDays(365)` (1 year).
 - **Reasoning**: Completion records are persistent proof of performance powering on-chain reputation. They outlive the slot and booking so that historical reputation scores remain verifiable over long time horizons.
 
-#### Dual-Sided Reputation Verification
-- An account's verified reputation score is calculated as:
-  **Number of completed jobs where BOTH a seller completion and a buyer completion exist from DIFFERENT creator addresses for the same slot key.**
-- One-sided completion claims or self-dealing completions from the same wallet address are rejected.
+#### Dual-Sided Reputation Verification (Three-Part Rule — Phase 1 Lock)
+
+A job counts toward an account's reputation score **only if ALL three conditions hold**:
+
+| # | Condition | What it prevents |
+|---|-----------|------------------|
+| (a) | A winning booking exists for the slot **and** the winning booking's `creator` ≠ the slot's `creator` | Self-booking fraud |
+| (b) | A `seller` completion exists whose `creator` equals the slot's `creator` | Fake seller confirmations |
+| (c) | A `buyer` completion exists whose `creator` equals the winning booking's `creator` | Fake buyer confirmations |
+
+Implemented in `verifyJobCompletion()` (pure function) in `src/lib/arkiv.ts`.
+Unit-tested in `scripts/test-reputation.ts` (8 cases, 0 failures).
 
 ---
 
@@ -207,3 +215,14 @@ client.select()
   .createdBy(userAddress)
   .fetch()
 ```
+
+---
+
+## 4. Known Limitations
+
+| # | Limitation | Impact | Mitigation |
+|---|------------|--------|------------|
+| L-001 | **Expired slot creator lookup**: When `getReputation()` checks a slot that has expired from the Arkiv index, its `creator` address cannot be recovered via `select().where()` (entity is pruned). The function skips the slot silently. | A reputation score from a completed-but-expired slot is not counted. | Run reputation queries within the slot's lifetime window. Completions persist 365 days; slots expire at `ends_at`. Post-expiry reputation requires the slot creator address to be cached client-side or stored in the completion payload. |
+| L-002 | **No server-side ordering**: Arkiv's `select()` API does not support `orderBy`. All sorting (by `ends_at`, block number, etc.) is performed client-side in TypeScript after `fetch()`. | Pagination may return entities in non-deterministic order; full pagination needed before sorting. | Always exhaust `hasNextPage()` before sorting. |
+| L-003 | **1-block query expiry asymmetry** (FR-005): Query index drops an entity 1 block before `expiresAt`; `getEntity` drops it at `expiresAt`. | UI may show a slot as "about to expire" while the chain index has already removed it. | Add a 1-block (≈2s) buffer when evaluating near-expiry display logic. |
+| L-004 | **Single winning booking per slot**: The tie-break rule (earliest block + lexicographic key) is enforced client-side only. A malicious client could display a different winner. | Reputation depends on trust in client-side winner determination. | Future: Arkiv entity linking or a dedicated `award` entity signed by the seller could anchor the winner on-chain. |

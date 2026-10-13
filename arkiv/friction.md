@@ -255,6 +255,7 @@
 
 ---
 
+
 ## What worked well — Phase 1
 
 - **Sub-Second Index Propagation (Probe B)**: A newly minted entity appeared in `select().where(...)` queries in just **339ms** (first poll attempt) after block confirmation. Query freshness is remarkably fast.
@@ -262,4 +263,75 @@
 - **`createdAt` Block Available for Tie-Breaks**: Entities returned from `select()` carry `createdAt: bigint`, enabling robust, deterministic timestamping for concurrent claims and winner determination.
 - **Dual-Sided Cryptographic Reputation**: Signatures verified via `$creator` from two distinct on-chain wallets (Seller and Ephemeral Buyer) cleanly prevent self-dealing and power verifiable reputation scoring without backend verification servers.
 - **Clean Expired State Rejection (Probe C)**: Queries against expired slots reliably return 0 rows, and `getEntity` explicitly rejects expired entities with `NoEntityFoundError`.
+
+---
+
+### FR-009 · `getReputation` cannot recover slot creator after slot expires
+
+- **Date/time (IST):** 2026-10-13, ~09:30 IST
+- **Phase:** 1 (fix-ups)
+- **SDK + network versions:** `@arkiv-network/sdk@0.8.1`, viem `2.57.4`, Tiramisu testnet, chain ID `7738577`
+- **What I expected:**
+  The `getReputation(account)` function should count completed jobs even after the original slot entity has expired from the chain index. `completion` entities live for 365 days and reference `slot_key`, so there should be a stable way to determine the original slot creator (seller) for reputation purposes.
+- **What actually happened:**
+  When the slot entity has expired, `select().where(eq("entity_type", str("slot")))` returns 0 entities for that key; the index has purged it. The reputation function cannot determine `slotCreator` for condition (b) of the three-part rule and silently skips the slot:
+  ```
+  // slot may be expired; skip
+  continue;
+  ```
+  This means a fully legitimate completed job goes uncounted if the reputation query runs after `ends_at`.
+- **Steps to reproduce:**
+  1. Create a slot with `ends_at = now + 60` (1-minute slot).
+  2. Book it, confirm both seller and buyer completions.
+  3. Wait for slot to expire (>60s).
+  4. Call `getReputation(sellerAddress)` — returns `verifiedJobsCount: 0`.
+- **Severity:** medium — impacts reputation accuracy for short-duration slots (1h or less) if queried post-expiry.
+- **Workaround used:**
+  Document as L-001 in `arkiv/schema.md`. Reputation query is still correct within the slot's lifetime.
+- **Suggested fix (upstream):**
+  Two options: (A) Allow `getEntity(key)` to return basic metadata (creator, type) even for expired entities via an archival endpoint; (B) Developers can store `slot_creator` in the `completion` payload as an extra field at creation time, avoiding the post-expiry lookup problem entirely.
+- **Upstream issue link:** (not filed)
+
+---
+
+### FR-010 · `getBlockNumber()` not directly available on `PublicArkivClient`
+
+- **Date/time (IST):** 2026-10-13, ~09:45 IST
+- **Phase:** 2 (UI)
+- **SDK + network versions:** `@arkiv-network/sdk@0.8.1`, viem `2.57.4`, Tiramisu testnet, chain ID `7738577`
+- **What I expected:**
+  `PublicArkivClient` returned by `createPublicClient()` from `@arkiv-network/sdk` to expose the standard viem `getBlockNumber()` action directly (or inherit it), since it is a superset of viem's client for entity-oriented operations.
+- **What actually happened:**
+  TypeScript reports `getBlockNumber` as absent from the SDK's exported `PublicArkivClient` interface:
+  ```
+  Property 'getBlockNumber' does not exist on type 'PublicArkivClient'
+  ```
+  The underlying transport does support this call at runtime (the Tiramisu RPC responds to `eth_blockNumber`), but the TypeScript type surface does not expose it.
+- **Steps to reproduce:**
+  ```ts
+  import { createPublicClient } from "@arkiv-network/sdk";
+  import { tiramisu } from "@arkiv-network/sdk/chains";
+  import { http } from "viem";
+  const c = createPublicClient({ chain: tiramisu, transport: http() });
+  await c.getBlockNumber(); // TS error: Property does not exist
+  ```
+- **Severity:** papercut (type gap; runtime call works with cast)
+- **Workaround used:**
+  Cast to `unknown` then to the expected type in `useChainHead.ts`:
+  ```ts
+  const block = await (client as unknown as { getBlockNumber: () => Promise<bigint> }).getBlockNumber();
+  ```
+- **Suggested fix:**
+  Extend `PublicArkivClient` to include standard viem `PublicActions` (or re-export them), so developers don't need unsafe casts for basic EVM reads.
+- **Upstream issue link:** (not filed)
+
+---
+
+## What worked well — Phase 2
+
+- **Build pipeline clean**: `tsc -b && vite build` produced 0 TypeScript errors and 0 warnings across 506 modules on first attempt.
+- **`dist/` secrets-clean**: `grep` for 64-hex private key patterns in `dist/assets/*.js` returned 0 matches — no key leakage in the production bundle.
+- **Reputation unit tests (8/8)**: All eight `verifyJobCompletion()` edge cases pass with no chain calls, confirming the three-part rule is correctly enforced purely in TypeScript.
+- **React Leaflet integration**: `react-leaflet@4` + Carto Positron tiles work cleanly with Vite + React 19 with a single icon-path fix for the default Leaflet marker.
+
 
