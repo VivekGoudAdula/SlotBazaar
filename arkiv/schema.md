@@ -224,5 +224,26 @@ client.select()
 |---|------------|--------|------------|
 | L-001 | **Expired slot creator lookup**: When `getReputation()` checks a slot that has expired from the Arkiv index, its `creator` address cannot be recovered via `select().where()` (entity is pruned). The function skips the slot silently. | A reputation score from a completed-but-expired slot is not counted. | Run reputation queries within the slot's lifetime window. Completions persist 365 days; slots expire at `ends_at`. Post-expiry reputation requires the slot creator address to be cached client-side or stored in the completion payload. |
 | L-002 | **No server-side ordering**: Arkiv's `select()` API does not support `orderBy`. All sorting (by `ends_at`, block number, etc.) is performed client-side in TypeScript after `fetch()`. | Pagination may return entities in non-deterministic order; full pagination needed before sorting. | Always exhaust `hasNextPage()` before sorting. |
-| L-003 | **1-block query expiry asymmetry** (FR-005): Query index drops an entity 1 block before `expiresAt`; `getEntity` drops it at `expiresAt`. | UI may show a slot as "about to expire" while the chain index has already removed it. | Add a 1-block (≈2s) buffer when evaluating near-expiry display logic. |
+| L-003 | **2-block query expiry asymmetry** (FR-005, retested 2026-10-13): Query index drops an entity ~2 blocks before SDK-reported `expiresAt`. | UI may show a slot as "about to expire" while the chain index has already removed it. | Add a 2-block (≈4s) buffer when evaluating near-expiry display logic. |
 | L-004 | **Single winning booking per slot**: The tie-break rule (earliest block + lexicographic key) is enforced client-side only. A malicious client could display a different winner. | Reputation depends on trust in client-side winner determination. | Future: Arkiv entity linking or a dedicated `award` entity signed by the seller could anchor the winner on-chain. |
+| L-005 | **`getEntity` throws `Invalid key value`** (FR-011): Calling `getEntity({ key })` with a key returned by `createEntity` throws `Invalid key value` for at least some entity keys. | Cannot use `getEntity` to verify a specific entity's live status. | Use `select().where()` with attribute predicates to find entities instead of by key. |
+
+---
+
+## 5. Empirical Cost Data (Phase 2B, 2026-10-13)
+
+Measured with `scripts/measure-cost.ts` on Tiramisu testnet. Balance delta (before – after) per `createEntity` call:
+
+| Slot duration | GLM spent      | Wei spent        |
+|---------------|----------------|------------------|
+| 3 hours       | 0.000141824 GLM | 141824000283648 |
+| 24 hours      | 0.000141840 GLM | 141840000283680 |
+| Δ (3h vs 24h) | 0.000000016 GLM | 16000000032 wei  |
+
+**Interpretation:** Expiry duration has negligible cost impact (~0.011% difference between 3h and 24h). The cost is dominated by the base entity creation fee, not the expiration window.
+
+**Estimated cost for 40-slot seed run:** ~0.005673 GLM (based on 3h baseline × 40).
+
+---
+
+*Last updated: 2026-10-13 IST*

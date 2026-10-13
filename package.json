@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "scan:secrets": "node scripts/secret-scan.mjs"
+    "scan:secrets": "node scripts/secret-scan.mjs",
+    "test:report": "npx tsx scripts/test-report.ts"
   },
   "dependencies": {
     "@arkiv-network/sdk": "^0.8.1",

@@ -395,3 +395,29 @@
 - **Secret scan (PASS)**: `npm run scan:secrets` found no private key in `dist/`, `src/`, `scripts/`, `arkiv/`, `README.md`, `WALLETS.md`, or git history.
 - **FR-005 conclusive retest**: 1-second polling table confirms query index drops 2 blocks before SDK `expiresAt`. The gap is real and reproducible.
 - **Cost data collected**: 3h = 0.000141824 GLM, 24h = 0.000141840 GLM. 40-slot seed estimated at 0.00567296 GLM.
+- **T-01–T-06 automated test suite (7/7 PASS)**: Cold load 1094ms, warm fetch 291ms, bad RPC throws, empty namespace = 0 entities, ends_at precision confirmed, hot-removal confirmed at expiry boundary.
+
+---
+
+### FR-012 · Tiramisu RPC intermittently stalls on consecutive queries (no response, no error)
+
+- **Date/time (IST):** 2026-10-13, ~10:59 IST
+- **Phase:** 2B (test-report.ts run 1)
+- **SDK + network versions:** `@arkiv-network/sdk@0.8.1`, viem `2.57.4`, Tiramisu testnet
+- **What I expected:**
+  A second `select().where().fetch()` call made immediately after a successful first call on the same `PublicArkivClient` instance would resolve within a few seconds.
+- **What actually happened:**
+  On the first `test-report.ts` run, T-02 (second `fetchSlots` call) never resolved — the process hung indefinitely with no error thrown and no timeout from the SDK. The process had to be manually killed. On the second run with a 10-second application-level timeout, T-02 resolved in **291ms**.
+- **Reproduce:**
+  ```ts
+  const pub = createPublicClient({ chain: tiramisu, transport: http(RPC) });
+  await pub.select().where(and(eq("project", str("slotbazaar")), ...)).fetch(); // succeeds
+  await pub.select().where(and(eq("project", str("slotbazaar")), ...)).fetch(); // may hang indefinitely
+  ```
+  Reproduced once (first run); resolved on second attempt.
+- **Severity:** medium — intermittent hang with no error or timeout surfaced to the caller. The SDK does not set a default HTTP request timeout, so a stalled connection silently blocks the process.
+- **Workaround used:**
+  Wrap every RPC call with an application-level `Promise.race` timeout (10s used in `test-report.ts`). In the UI, the 8s poll interval partially mitigates this by creating a new fetch cycle.
+- **Suggested fix:**
+  Add a configurable `timeout` option (default: 8000ms) to `PublicArkivClient` transport or query builder, consistent with how viem exposes transport timeouts.
+- **Upstream issue link:** (not filed — intermittent, needs more data to reproduce reliably)
