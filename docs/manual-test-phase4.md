@@ -14,7 +14,7 @@
    - **Account 1 (Ravi - Seller)**: Funded with testnet GLM from `https://hub.arkiv.network/faucet`.
    - **Account 2 (Meena - Buyer)**: Funded with testnet GLM from `https://hub.arkiv.network/faucet`.
 3. **Application URL**: `http://localhost:5173`
-4. **Arkiv Explorer**: `https://explorer.tiramisu.arkiv.network`
+4. **Arkiv Explorer**: `https://data.arkiv.network/?chain=tiramisu`
 
 ---
 

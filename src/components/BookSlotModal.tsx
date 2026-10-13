@@ -16,6 +16,8 @@ import {
   createBooking,
   getArkivPublicClient,
   fetchBookingsForSlot,
+  getEntityExplorerUrl,
+  getTxExplorerUrl,
   type SlotEntity,
   type BookingEntity,
 } from "../lib/arkiv.js";
@@ -23,7 +25,6 @@ import { useWallet } from "../lib/wallet.js";
 import { formatDateTime, formatTimeLeft } from "../lib/time.js";
 import { useNow } from "../hooks/useNow.js";
 
-const EXPLORER_BASE = "https://explorer.tiramisu.arkiv.network";
 const FAUCET_URL = "https://hub.arkiv.network/faucet";
 
 export type BookingStepperStage =
@@ -262,7 +263,7 @@ export function BookSlotModal({
                     <div style={{ marginTop: 4, fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
                       Tx:{" "}
                       <a
-                        href={`${EXPLORER_BASE}/tx/${txHash}`}
+                        href={getTxExplorerUrl(txHash)}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ color: "var(--c-ink)", textDecoration: "underline" }}
@@ -415,7 +416,7 @@ export function BookSlotModal({
               <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", marginBottom: 16 }}>
                 Booking:{" "}
                 <a
-                  href={`${EXPLORER_BASE}/entity/${bookingKey}`}
+                  href={getEntityExplorerUrl(bookingKey)}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: "var(--c-ink)", textDecoration: "underline" }}

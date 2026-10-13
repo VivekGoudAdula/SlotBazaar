@@ -135,7 +135,7 @@ export function WalletProvider({ children }: { children: ReactNode }): React.Rea
                 chainName: "Arkiv Tiramisu",
                 rpcUrls: ["https://rpc.tiramisu.db-chain.testnet.arkiv.network"],
                 nativeCurrency: { name: "GLM", symbol: "GLM", decimals: 18 },
-                blockExplorerUrls: ["https://tiramisu.explorer.arkiv.network"],
+                blockExplorerUrls: ["https://data.arkiv.network/?chain=tiramisu"],
               },
             ],
           });

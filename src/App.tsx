@@ -19,8 +19,12 @@ import "leaflet/dist/leaflet.css";
 import type { Hex } from "viem";
 import { WalletProvider, useWallet } from "./lib/wallet.js";
 import { useLiveSlots }              from "./hooks/useLiveSlots.js";
-import type { SlotEntity }           from "./lib/arkiv.js";
-
+import {
+  type SlotEntity,
+  type BookingEntity,
+  getEntityExplorerUrl,
+  ARKIV_EXPLORER_HOME_URL,
+} from "./lib/arkiv.js";
 import { Header }                        from "./components/Header.js";
 import { FilterBar, type FilterState }   from "./components/FilterBar.js";
 import { MapView }                       from "./components/MapView.js";
@@ -30,7 +34,6 @@ import { BookSlotModal }                 from "./components/BookSlotModal.js";
 import { ConfirmJobModal }               from "./components/ConfirmJobModal.js";
 import { MyJobsModal }                   from "./components/MyJobsModal.js";
 import { DemoGuideModal }                from "./components/DemoGuideModal.js";
-import type { BookingEntity } from "./lib/arkiv.js";
 import { useNow }                        from "./hooks/useNow.js";
 import { formatTimeLeft }                from "./lib/time.js";
 
@@ -397,7 +400,7 @@ function AppInner(): React.ReactElement {
         type: isWinner ? "success" : "info",
         link: {
           text: `View Booking (${booking.key.slice(0, 8)}…) ↗`,
-          url: `https://tiramisu.explorer.arkiv.network/entity/${booking.key}`,
+          url: getEntityExplorerUrl(booking.key),
         },
       });
     },
@@ -412,7 +415,7 @@ function AppInner(): React.ReactElement {
         type: "success",
         link: {
           text: `View Receipt (${completionKey.slice(0, 8)}…) ↗`,
-          url: `https://tiramisu.explorer.arkiv.network/entity/${completionKey}`,
+          url: getEntityExplorerUrl(completionKey),
         },
       });
     },
@@ -436,7 +439,7 @@ function AppInner(): React.ReactElement {
         type: "success",
         link: {
           text: `View Entity (${key.slice(0, 8)}…) ↗`,
-          url: `https://tiramisu.explorer.arkiv.network/entity/${key}`,
+          url: getEntityExplorerUrl(key),
         },
       });
     },
@@ -496,7 +499,7 @@ function AppInner(): React.ReactElement {
           </a>{" "}
           (ODbL) · Powered by{" "}
           <a
-            href="https://tiramisu.explorer.arkiv.network"
+            href={ARKIV_EXPLORER_HOME_URL}
             target="_blank"
             rel="noopener noreferrer"
           >

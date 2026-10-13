@@ -17,7 +17,7 @@ This file tracks every wallet address used in SlotBazaar development.
 |-------|-------|
 | Entity key | `0xae9bcc84c5060776a107ccc0aedeb6b496ee5608e8f3e7cd51cd87001638918d` |
 | Tx hash | `0xe8bca88098bb0525dd4c865f28d757e383f04a44b2ff01fbbb2a1025cd069ed2` |
-| Explorer | https://tiramisu.explorer.arkiv.network/tx/0xe8bca88098bb0525dd4c865f28d757e383f04a44b2ff01fbbb2a1025cd069ed2 |
+| Explorer | https://data.arkiv.network/?q=0xe8bca88098bb0525dd4c865f28d757e383f04a44b2ff01fbbb2a1025cd069ed2&chain=tiramisu |
 | Expires at block | `489834` |
 | Created | 2026-10-12 IST |
 | Type | `project=slotbazaar, entity_type=slot, category=machine, cluster=surat` |
@@ -28,7 +28,7 @@ This file tracks every wallet address used in SlotBazaar development.
 |-------|-------|
 | Entity key | `0x40c9380d0ec3a4f3273544209436833fc1005bd7e61f5a37d755cabb8a0d3780` |
 | Tx hash | `0x6ba82dbc4c391f9c202b307a57ae21547f53b791814ba6e081ea55939a3bd5fb` |
-| Explorer | https://tiramisu.explorer.arkiv.network/tx/0x6ba82dbc4c391f9c202b307a57ae21547f53b791814ba6e081ea55939a3bd5fb |
+| Explorer | https://data.arkiv.network/?q=0x6ba82dbc4c391f9c202b307a57ae21547f53b791814ba6e081ea55939a3bd5fb&chain=tiramisu |
 | Expires at block | `484782` (CONFIRMED EXPIRED) |
 | Created | 2026-10-12 IST (~20:55 IST) |
 | Type | `project=slotbazaar, entity_type=expiry_test, synthetic=true` |
@@ -59,7 +59,7 @@ This file tracks every wallet address used in SlotBazaar development.
 
 > Keys live only in `.env` (git-ignored).  
 > All transactions are on the **Tiramisu testnet** (chain ID `7738577`).  
-> Explorer: https://tiramisu.explorer.arkiv.network
+> Explorer: https://data.arkiv.network/?chain=tiramisu
 
 ---
 

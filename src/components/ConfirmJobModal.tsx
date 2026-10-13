@@ -13,12 +13,13 @@ import { formatEther } from "viem";
 import {
   createCompletion,
   getArkivPublicClient,
+  getEntityExplorerUrl,
+  getTxExplorerUrl,
   type BookingEntity,
   type SlotEntity,
 } from "../lib/arkiv.js";
 import { useWallet } from "../lib/wallet.js";
 
-const EXPLORER_BASE = "https://explorer.tiramisu.arkiv.network";
 const FAUCET_URL = "https://hub.arkiv.network/faucet";
 
 export interface ConfirmJobModalProps {
@@ -221,7 +222,7 @@ export function ConfirmJobModal({
                     <div style={{ marginTop: 4, fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
                       Tx:{" "}
                       <a
-                        href={`${EXPLORER_BASE}/tx/${txHash}`}
+                        href={getTxExplorerUrl(txHash)}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ color: "var(--c-ink)", textDecoration: "underline" }}
@@ -360,7 +361,7 @@ export function ConfirmJobModal({
               <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", marginBottom: 14 }}>
                 Receipt:{" "}
                 <a
-                  href={`${EXPLORER_BASE}/entity/${completionKey}`}
+                  href={getEntityExplorerUrl(completionKey)}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: "var(--c-ink)", textDecoration: "underline" }}

@@ -49,7 +49,7 @@ Map tiles are served by [OpenStreetMap](https://www.openstreetmap.org/) contribu
 | WebSocket | `wss://rpc.tiramisu.db-chain.testnet.arkiv.network` |
 | Chain ID | `7738577` |
 | Symbol | GLM |
-| Block explorer | https://explorer.tiramisu.arkiv.network |
+| Block explorer | https://data.arkiv.network/?chain=tiramisu |
 
 ---
 

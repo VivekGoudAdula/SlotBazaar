@@ -26,6 +26,8 @@ import {
   createSlot,
   getArkivPublicClient,
   fetchLiveSlots,
+  getEntityExplorerUrl,
+  getTxExplorerUrl,
   type SlotCategory,
   type PriceBand,
   type CreateSlotInput,
@@ -40,7 +42,6 @@ import {
 
 import { findNearestCluster, type ClusterDef } from "../lib/clusters.js";
 
-const EXPLORER_BASE = "https://explorer.tiramisu.arkiv.network";
 const FAUCET_URL = "https://hub.arkiv.network/faucet";
 
 export type StepperStage =
@@ -519,7 +520,7 @@ export function PostSlotModal({
                     <div style={{ marginTop: 4, fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
                       Tx:{" "}
                       <a
-                        href={`${EXPLORER_BASE}/tx/${txHash}`}
+                        href={getTxExplorerUrl(txHash)}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ color: "var(--c-ink)", textDecoration: "underline" }}
@@ -560,7 +561,7 @@ export function PostSlotModal({
                     <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
                       Entity:{" "}
                       <a
-                        href={`${EXPLORER_BASE}/entity/${entityKey}`}
+                        href={getEntityExplorerUrl(entityKey)}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ color: "var(--c-ink)", textDecoration: "underline" }}

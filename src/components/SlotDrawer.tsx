@@ -16,11 +16,12 @@
  */
 
 import React, { useState, useCallback } from "react";
-import type {
-  SlotEntity,
-  BookingEntity,
-  CompletionEntity,
-  ReputationResult,
+import {
+  type SlotEntity,
+  type BookingEntity,
+  type CompletionEntity,
+  type ReputationResult,
+  getEntityExplorerUrl,
 } from "../lib/arkiv.js";
 import { formatTimeLeft, getUrgency, formatDateTime } from "../lib/time.js";
 import { useNow } from "../hooks/useNow.js";
@@ -37,8 +38,6 @@ const PRICE_BAND_LABELS: Record<string, string> = {
   mid:  "₹₹ Mid",
   high: "₹₹₹ High",
 };
-
-const EXPLORER_BASE = "https://explorer.tiramisu.arkiv.network";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COPY BUTTON
@@ -363,19 +362,19 @@ export function SlotDrawer({
                   <div key={p.bookingKey} style={{ borderBottom: idx < sellerReputation.proofs.length - 1 ? "1px dashed #ccc" : "none", paddingBottom: 4 }}>
                     <div>
                       <strong>Booking:</strong>{" "}
-                      <a href={`${EXPLORER_BASE}/entity/${p.bookingKey}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
+                      <a href={getEntityExplorerUrl(p.bookingKey)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
                         {p.bookingKey.slice(0, 10)}…{p.bookingKey.slice(-6)} ↗
                       </a>
                     </div>
                     <div>
                       <strong>Seller Signature:</strong>{" "}
-                      <a href={`${EXPLORER_BASE}/entity/${p.sellerCompletionKey}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
+                      <a href={getEntityExplorerUrl(p.sellerCompletionKey)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
                         {p.sellerCompletionKey.slice(0, 10)}…{p.sellerCompletionKey.slice(-6)} ↗
                       </a>
                     </div>
                     <div>
                       <strong>Buyer Signature:</strong>{" "}
-                      <a href={`${EXPLORER_BASE}/entity/${p.buyerCompletionKey}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
+                      <a href={getEntityExplorerUrl(p.buyerCompletionKey)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
                         {p.buyerCompletionKey.slice(0, 10)}…{p.buyerCompletionKey.slice(-6)} ↗
                       </a>
                     </div>
@@ -450,7 +449,7 @@ export function SlotDrawer({
                 <div className="proof-actions">
                   <CopyButton value={slot.key} label="entity key" />
                   <a
-                    href={`${EXPLORER_BASE}/entity/${slot.key}`}
+                    href={getEntityExplorerUrl(slot.key)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="explorer-link"

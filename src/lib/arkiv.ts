@@ -1215,3 +1215,23 @@ export async function createCompletion(
     releaseWriteLock();
   }
 }
+
+/**
+ * Canonical Arkiv Data Explorer URL for entities.
+ */
+export function getEntityExplorerUrl(entityKey: string): string {
+  return `https://data.arkiv.network/?q=${entityKey}&chain=tiramisu`;
+}
+
+/**
+ * Canonical Arkiv Data Explorer URL for transactions.
+ */
+export function getTxExplorerUrl(txHash: string): string {
+  return `https://data.arkiv.network/?q=${txHash}&chain=tiramisu`;
+}
+
+/**
+ * Base home URL for Arkiv Data Explorer on Tiramisu.
+ */
+export const ARKIV_EXPLORER_HOME_URL = "https://data.arkiv.network/?chain=tiramisu";
+

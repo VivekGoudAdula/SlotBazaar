@@ -11,16 +11,15 @@
 
 import React, { useState } from "react";
 import type { Hex, Address } from "viem";
-import type {
-  BookingEntity,
-  CompletionEntity,
-  SlotEntity,
-  ReputationResult,
+import {
+  type BookingEntity,
+  type CompletionEntity,
+  type SlotEntity,
+  type ReputationResult,
+  getEntityExplorerUrl,
 } from "../lib/arkiv.js";
 import { formatDateTime } from "../lib/time.js";
 import { useNow } from "../hooks/useNow.js";
-
-const EXPLORER_BASE = "https://explorer.tiramisu.arkiv.network";
 
 export interface MyJobsModalProps {
   open: boolean;
@@ -304,7 +303,7 @@ export function MyJobsModal({
                       <div>
                         <strong>Booking:</strong>{" "}
                         <a
-                          href={`${EXPLORER_BASE}/entity/${job.booking.key}`}
+                          href={getEntityExplorerUrl(job.booking.key)}
                           target="_blank"
                           rel="noopener noreferrer"
                           style={{ textDecoration: "underline", color: "var(--c-ink)" }}
@@ -316,7 +315,7 @@ export function MyJobsModal({
                         <div>
                           <strong>Seller Receipt:</strong>{" "}
                           <a
-                            href={`${EXPLORER_BASE}/entity/${job.sellerCompletion.key}`}
+                            href={getEntityExplorerUrl(job.sellerCompletion.key)}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{ textDecoration: "underline", color: "var(--c-ink)" }}
@@ -329,7 +328,7 @@ export function MyJobsModal({
                         <div>
                           <strong>Buyer Receipt:</strong>{" "}
                           <a
-                            href={`${EXPLORER_BASE}/entity/${job.buyerCompletion.key}`}
+                            href={getEntityExplorerUrl(job.buyerCompletion.key)}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{ textDecoration: "underline", color: "var(--c-ink)" }}

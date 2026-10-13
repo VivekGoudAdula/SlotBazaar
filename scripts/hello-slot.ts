@@ -104,12 +104,11 @@ async function main() {
   });
 
   // ── Print results ──────────────────────────────────────────────────────────
-  const explorerBase = "https://tiramisu.explorer.arkiv.network";
   console.log("\n✅ Entity created!");
   console.log(`Entity key : ${entityKey}`);
   console.log(`Tx hash    : ${txHash}`);
   console.log(`Expires at : block ${expiresAt}`);
-  console.log(`Tx link    : ${explorerBase}/tx/${txHash}`);
+  console.log(`Explorer   : https://data.arkiv.network/?q=${entityKey}&chain=tiramisu`);
   console.log(`\nWallet address for WALLETS.md: ${account.address}`);
 }
 
