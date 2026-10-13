@@ -240,6 +240,7 @@ function AppInner(): React.ReactElement {
     error,
     lastFetched,
     refresh,
+    addSlot,
   } = useLiveSlots();
   const { address, status } = useWallet();
 
@@ -432,6 +433,8 @@ function AppInner(): React.ReactElement {
       lon: number;
       slot: SlotEntity;
     }) => {
+      addSlot(slot);
+      setFilters((prev) => ({ ...prev, endingSoon: false }));
       refresh();
       handleSelectAndFly(slot);
       setToast({
@@ -443,7 +446,7 @@ function AppInner(): React.ReactElement {
         },
       });
     },
-    [refresh, handleSelectAndFly]
+    [addSlot, refresh, handleSelectAndFly]
   );
 
   return (

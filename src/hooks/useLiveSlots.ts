@@ -38,10 +38,37 @@ export interface UseLiveSlotsResult {
   error: string | null;
   lastFetched: Date | null;
   refresh: () => void;
+  addSlot: (slot: SlotEntity) => void;
+}
+
+const LOCAL_STORAGE_KEY = "slotbazaar_recent_slots";
+
+function loadLocalRecentSlots(): SlotEntity[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as SlotEntity[];
+    const nowSec = Math.floor(Date.now() / 1000);
+    return parsed.filter((s) => s.endsAt > nowSec);
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalRecentSlots(slots: SlotEntity[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const valid = slots.filter((s) => s.endsAt > nowSec);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(valid));
+  } catch {
+    // ignore
+  }
 }
 
 export function useLiveSlots(): UseLiveSlotsResult {
-  const [slots, setSlots] = useState<SlotEntity[]>([]);
+  const [slots, setSlots] = useState<SlotEntity[]>(() => loadLocalRecentSlots());
   const [bookings, setBookings] = useState<BookingEntity[]>([]);
   const [completions, setCompletions] = useState<CompletionEntity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,6 +77,19 @@ export function useLiveSlots(): UseLiveSlotsResult {
 
   const client = useRef(getArkivPublicClient()).current;
   const isMounted = useRef(true);
+  const localSlotsRef = useRef<SlotEntity[]>(loadLocalRecentSlots());
+
+  const addSlot = useCallback((newSlot: SlotEntity) => {
+    localSlotsRef.current = [
+      newSlot,
+      ...localSlotsRef.current.filter((s) => s.key.toLowerCase() !== newSlot.key.toLowerCase()),
+    ];
+    saveLocalRecentSlots(localSlotsRef.current);
+    setSlots((prev) => [
+      newSlot,
+      ...prev.filter((s) => s.key.toLowerCase() !== newSlot.key.toLowerCase()),
+    ]);
+  }, []);
 
   // Fixed 3 queries per refresh cycle: 1 slots + 1 bookings + 1 completions
   const queryCount = 3;
@@ -57,17 +97,40 @@ export function useLiveSlots(): UseLiveSlotsResult {
   const doFetch = useCallback(async () => {
     try {
       setError(null);
-      // Batch fetch with Promise.all: exactly 3 queries
+      const withTimeout = <T>(p: Promise<T>, ms = 8000): Promise<T> =>
+        Promise.race([
+          p,
+          new Promise<never>((_, rej) =>
+            setTimeout(() => rej(new Error("RPC query timed out")), ms)
+          ),
+        ]);
+
+      // Batch fetch with Promise.all: exactly 3 queries, each guarded by timeout
       const [freshSlots, freshBookings, freshCompletions] = await Promise.all([
-        fetchLiveSlots(client),
-        fetchAllBookings(client),
-        fetchAllCompletions(client),
+        withTimeout(fetchLiveSlots(client)).catch(() => [] as SlotEntity[]),
+        withTimeout(fetchAllBookings(client)).catch(() => [] as BookingEntity[]),
+        withTimeout(fetchAllCompletions(client)).catch(() => [] as CompletionEntity[]),
       ]);
 
       if (isMounted.current) {
-        setSlots(freshSlots);
-        setBookings(freshBookings);
-        setCompletions(freshCompletions);
+        const nowSec = Math.floor(Date.now() / 1000);
+        localSlotsRef.current = localSlotsRef.current.filter((s) => s.endsAt > nowSec);
+        saveLocalRecentSlots(localSlotsRef.current);
+
+        const slotMap = new Map<string, SlotEntity>();
+        for (const s of freshSlots) {
+          slotMap.set(s.key.toLowerCase(), s);
+        }
+        for (const s of localSlotsRef.current) {
+          if (!slotMap.has(s.key.toLowerCase())) {
+            slotMap.set(s.key.toLowerCase(), s);
+          }
+        }
+
+        const mergedSlots = Array.from(slotMap.values()).sort((a, b) => a.endsAt - b.endsAt);
+        setSlots(mergedSlots);
+        if (freshBookings.length > 0) setBookings(freshBookings);
+        if (freshCompletions.length > 0) setCompletions(freshCompletions);
         setLastFetched(new Date());
       }
     } catch (err) {
@@ -222,5 +285,6 @@ export function useLiveSlots(): UseLiveSlotsResult {
     error,
     lastFetched,
     refresh: doFetch,
+    addSlot,
   };
 }
