@@ -298,7 +298,6 @@ function AppInner(): React.ReactElement {
         const uLon = pos.coords.longitude;
         const accuracy = Math.round(pos.coords.accuracy);
         setUserLocation({ lat: uLat, lon: uLon, accuracy });
-        setFlyTarget([uLat, uLon]);
       },
       () => {
         // User denied/dismissed — native browser permission is enough, no extra banner

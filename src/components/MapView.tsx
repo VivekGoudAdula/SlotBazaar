@@ -149,53 +149,55 @@ export interface UserLocationState {
   accuracy?: number;
 }
 
-// ─── Auto-fit to slot bounds (maxZoom 7 prevents village-level zoom) ──────────
-function FitBounds({
+// ─── Unified, stable Map View Controller ─────────────────────────────────────
+function MapViewController({
   slots,
-  fitted,
   userLocation,
+  flyTarget,
 }: {
   slots: SlotEntity[];
-  fitted: React.MutableRefObject<boolean>;
   userLocation?: UserLocationState | null;
+  flyTarget?: [number, number] | null;
 }): null {
   const map = useMap();
+  const hasInitialized = useRef(false);
+  const lastFlyTarget = useRef<[number, number] | null>(null);
+
+  // 1. Initial positioning: runs once only to prevent bouncing / fighting
   useEffect(() => {
-    // If user granted location, smoothly center to user's exact location on initial load
-    if (userLocation && !fitted.current) {
-      map.flyTo([userLocation.lat, userLocation.lon], 12, { duration: 1.2 });
-      fitted.current = true;
+    if (hasInitialized.current) return;
+
+    if (userLocation) {
+      map.setView([userLocation.lat, userLocation.lon], 12);
+      hasInitialized.current = true;
       return;
     }
-    if (slots.length === 0) {
-      if (fitted.current) {
-        map.setView(INDIA_CENTER, INDIA_ZOOM);
-        fitted.current = false;
-      }
-      return;
-    }
-    if (!fitted.current) {
+
+    if (slots.length > 0) {
       const bounds = L.latLngBounds(slots.map((s) => [s.lat, s.lon]));
       if (bounds.isValid()) {
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 7 });
-        fitted.current = true;
+        hasInitialized.current = true;
       }
     }
-  }, [map, slots, fitted, userLocation]);
-  return null;
-}
+  }, [map, userLocation, slots]);
 
-// ─── Fly-to controller (fires when flyTarget changes) ─────────────────────────
-function FlyController({
-  target,
-}: {
-  target: [number, number] | null;
-}): null {
-  const map = useMap();
+  // 2. Explicit User Fly-To Requests (e.g. clicking a slot or My Location button)
   useEffect(() => {
-    if (!target) return;
-    map.flyTo(target, Math.max(map.getZoom(), 11), { duration: 0.9 });
-  }, [map, target]);
+    if (!flyTarget) return;
+
+    if (
+      lastFlyTarget.current &&
+      lastFlyTarget.current[0] === flyTarget[0] &&
+      lastFlyTarget.current[1] === flyTarget[1]
+    ) {
+      return;
+    }
+
+    lastFlyTarget.current = flyTarget;
+    map.flyTo(flyTarget, Math.max(map.getZoom(), 12), { duration: 0.8 });
+  }, [map, flyTarget]);
+
   return null;
 }
 
@@ -223,8 +225,7 @@ export function MapView({
   userLocation = null,
   onRecenterUser,
 }: MapViewProps): React.ReactElement {
-  const now    = useNow();
-  const fitted = useRef(false);
+  const now = useNow();
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
@@ -268,8 +269,11 @@ export function MapView({
           errorTileUrl="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
         />
 
-        <FitBounds slots={slots} fitted={fitted} userLocation={userLocation} />
-        <FlyController target={flyTarget} />
+        <MapViewController
+          slots={slots}
+          userLocation={userLocation}
+          flyTarget={flyTarget}
+        />
 
         {/* ─── YOU ARE HERE User Location Pin ─────────────────────── */}
         {userLocation && (
