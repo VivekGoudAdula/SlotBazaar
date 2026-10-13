@@ -134,10 +134,10 @@ export function FilterBar({
         ].join(" ")}
         onClick={() => set("endingSoon", !filters.endingSoon)}
         aria-pressed={filters.endingSoon}
-        aria-label="Show only slots ending in the next 30 minutes"
-        title="Ending in < 30 min"
+        aria-label="Show only slots ending in the next 15 minutes"
+        title="Ending in < 15 min"
       >
-        🔴 Ending soon
+        🔴 Ending soon (&lt;15 min)
       </button>
 
       {/* Count + refresh */}

@@ -113,9 +113,11 @@ body {
   gap: var(--sp-4);
   padding: 0 var(--sp-6);
   height: 56px;
-  background: var(--c-ink);
-  color: var(--c-paper);
+  /* Phase 2C: light paper background, ink border, hard shadow */
+  background: var(--c-paper);
+  color: var(--c-ink);
   border-bottom: var(--border-3);
+  box-shadow: 0 4px 0 var(--c-ink);
   z-index: var(--z-ui);
   flex-shrink: 0;
 }
@@ -131,12 +133,13 @@ body {
 }
 
 .header__logo span {
-  color: var(--c-paper);
+  /* Phase 2C: ink colour on light bg */
+  color: var(--c-ink);
 }
 
 .header__tagline {
   font-size: 0.75rem;
-  color: rgba(251, 247, 240, 0.55);
+  color: var(--c-ink-light);
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
@@ -156,8 +159,9 @@ body {
   gap: var(--sp-1);
   font-family: var(--font-mono);
   font-size: 0.7rem;
-  color: rgba(251, 247, 240, 0.6);
-  border: 1px solid rgba(251, 247, 240, 0.2);
+  /* Phase 2C: adapt for light header */
+  color: var(--c-ink-light);
+  border: 1px solid var(--c-ink-light);
   padding: var(--sp-1) var(--sp-2);
   border-radius: 4px;
 }
@@ -306,13 +310,14 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-.filter-chip--machine  { --chip-color: var(--c-indigo); }
-.filter-chip--transport { --chip-color: var(--c-sage); }
-.filter-chip--freelance { --chip-color: var(--c-teal); }
+/* Phase 2C spec colours: machine=marigold, transport=peacock teal, freelance=indigo */
+.filter-chip--machine   { --chip-color: var(--c-marigold); }
+.filter-chip--transport { --chip-color: var(--c-teal); }
+.filter-chip--freelance { --chip-color: var(--c-indigo); }
 
-.filter-chip--active.filter-chip--machine  { background: var(--c-indigo);  border-color: var(--c-indigo); color: white; }
-.filter-chip--active.filter-chip--transport { background: var(--c-sage);    border-color: var(--c-sage);   color: white; }
-.filter-chip--active.filter-chip--freelance { background: var(--c-teal);    border-color: var(--c-teal);   color: white; }
+.filter-chip--active.filter-chip--machine   { background: var(--c-marigold); border-color: var(--c-marigold-d); color: var(--c-ink); }
+.filter-chip--active.filter-chip--transport { background: var(--c-teal);     border-color: var(--c-teal-d);     color: white; }
+.filter-chip--active.filter-chip--freelance { background: var(--c-indigo);   border-color: var(--c-indigo);     color: white; }
 
 .filter-bar__count {
   margin-left: auto;
@@ -360,17 +365,76 @@ body {
    6. MAP CONTAINER
 ───────────────────────────────────────────────────────────── */
 
+/* ─── Phase 2C LAYOUT ──────────────────────────────────────── */
+
+/* Two-column body: sidebar 40% | map 60% */
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.app-sidebar {
+  width: 40%;
+  min-width: 280px;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: var(--border-3);
+  flex-shrink: 0;
+  background: var(--c-paper);
+}
+
+.slot-list-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  border-top: var(--border);
+}
+
 .map-wrapper {
   flex: 1;
   position: relative;
   z-index: var(--z-map);
   overflow: hidden;
+  min-height: 400px;
+}
+
+@media (max-width: 767px) {
+  .app-body {
+    flex-direction: column;
+  }
+  .app-sidebar {
+    width: 100%;
+    max-width: none;
+    border-right: none;
+    border-bottom: var(--border-3);
+    /* On mobile: sidebar is hero + filters only (compact) */
+    flex-shrink: 0;
+    overflow: visible;
+  }
+  .slot-list-wrapper {
+    /* Hidden on mobile — bottom sheet is used instead */
+    display: none;
+  }
+  .map-wrapper {
+    height: 55vh;
+    flex: none;
+  }
 }
 
 .leaflet-container {
   width: 100%;
   height: 100%;
-  background: #E8E0D5;
+  /* Paper fallback if tiles fail */
+  background: var(--c-paper);
+}
+
+/* ─── OSM Tile Tinting ──────────────────────────────────────── */
+/* Tints OSM tiles toward the paper/print aesthetic */
+.leaflet-tile-pane {
+  filter: grayscale(0.8) sepia(0.2) brightness(1.05) contrast(0.95);
 }
 
 /* Custom cluster icon */
@@ -403,11 +467,12 @@ body {
   line-height: 1;
 }
 
-.slot-marker--machine  { background: var(--c-indigo);   }
-.slot-marker--transport { background: var(--c-sage);     }
-.slot-marker--freelance { background: var(--c-teal);     }
-.slot-marker--critical  { background: var(--c-vermilion);}
-.slot-marker--urgent    { background: var(--c-marigold); }
+/* Phase 2C spec colours on markers */
+.slot-marker--machine   { background: var(--c-marigold);  }
+.slot-marker--transport { background: var(--c-teal);      }
+.slot-marker--freelance { background: var(--c-indigo);    }
+.slot-marker--critical  { background: var(--c-vermilion); }
+.slot-marker--urgent    { background: var(--c-marigold);  }
 
 /* Leaflet popup override */
 .leaflet-popup-content-wrapper {
@@ -1457,13 +1522,121 @@ body {
   color: var(--c-ink-light);
 }
 
-/* App shell needs to scroll when footer is visible */
+/* Phase 2C: app-shell is a column flex; body handles internal scroll */
 .app-shell {
-  overflow-y: auto;
+  overflow: hidden;
 }
 
-/* Map wrapper must have a minimum height, not just flex:1 */
-.map-wrapper {
-  min-height: 420px;
+/* ─── Slot List (desktop sidebar) ───────────────────────────── */
+
+.slot-list {
+  display: flex;
+  flex-direction: column;
 }
 
+.slot-list__empty {
+  padding: var(--sp-6);
+  text-align: center;
+  color: var(--c-ink-light);
+  font-size: 0.85rem;
+  font-family: var(--font-display);
+}
+
+.slot-list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--c-paper-dark);
+  cursor: pointer;
+  transition: background 80ms;
+  user-select: none;
+}
+
+.slot-list-row:hover {
+  background: var(--c-paper-dark);
+}
+
+.slot-list-row:active {
+  background: var(--c-paper-dark);
+}
+
+.slot-list-row--critical {
+  background: rgba(232, 69, 44, 0.07);
+  border-left: 3px solid var(--c-vermilion);
+}
+
+.slot-list-row--critical:hover {
+  background: rgba(232, 69, 44, 0.12);
+}
+
+/* Category colour dot */
+.slot-list-row__dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--c-ink);
+}
+
+.slot-list-row__dot--machine   { background: var(--c-marigold); }
+.slot-list-row__dot--transport { background: var(--c-teal); }
+.slot-list-row__dot--freelance { background: var(--c-indigo); }
+
+.slot-list-row__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.slot-list-row__title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.82rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--c-ink);
+}
+
+.slot-list-row__sub {
+  font-size: 0.7rem;
+  color: var(--c-ink-light);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  text-transform: capitalize;
+}
+
+.slot-list-row__synthetic {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  background: var(--c-indigo-bg);
+  color: var(--c-indigo);
+  border: 1px solid var(--c-indigo);
+  padding: 0 4px;
+  border-radius: 2px;
+  letter-spacing: 0.04em;
+}
+
+.slot-list-row__time {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--c-ink-light);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.slot-list-row__time--critical {
+  color: var(--c-vermilion);
+  font-weight: 700;
+  animation: flash-bg 0.9s ease-in-out infinite alternate;
+}
+
+/* OSM attribution overrides to keep it visible */
+.leaflet-control-attribution {
+  font-size: 0.65rem !important;
+  background: rgba(251, 247, 240, 0.88) !important;
+  padding: 2px 6px !important;
+}

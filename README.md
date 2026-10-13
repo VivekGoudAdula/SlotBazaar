@@ -22,7 +22,21 @@ A slot's Entity Expiration equals its `ends_at` timestamp — so Arkiv removes i
 | Web3 database | `@arkiv-network/sdk` 0.8.1 |
 | Wallet / signing | viem + MetaMask (injected provider) |
 | Network | Tiramisu testnet (chain ID `7738577`) |
-| Map | Leaflet + CARTO Positron tiles + marker clustering |
+| Map | Leaflet + **OpenStreetMap** raster tiles + marker clustering |
+
+---
+
+## Map tile source
+
+Map tiles are served by [OpenStreetMap](https://www.openstreetmap.org/) contributors.
+
+- **Tile URL:** `https://tile.openstreetmap.org/{z}/{x}/{y}.png`
+- **Attribution:** © OpenStreetMap contributors (required — visible in the map corner)
+- **Licence:** [ODbL](https://www.openstreetmap.org/copyright)
+- **Usage policy:** https://operations.osmfoundation.org/policies/tiles/
+- **No API key required.** SlotBazaar uses OSM tiles for low-volume development/hackathon use, consistent with the [Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/).
+
+> For production use, switch to a hosted tile provider (e.g. Stadia Maps, MapTiler, or self-hosted OSM tiles via Protomaps).
 
 ---
 

@@ -1,13 +1,14 @@
 /**
- * src/components/MapView.tsx
+ * src/components/MapView.tsx — Phase 2C
  *
- * Full-screen Leaflet map centred on India with custom slot markers.
- * Features:
- *  - Marker clustering (react-leaflet-markercluster)
- *  - Category × urgency color-coded teardrop markers
- *  - Vermilion pulse animation for slots < 15 min remaining
- *  - SlotCard mini popup on click
- *  - Auto-fits to slot bounds on first load
+ * Changes from Phase 2B:
+ *  - OSM tile source (no API key required)
+ *  - CSS tinting via .leaflet-tile-pane for paper-map look
+ *  - Corrected category colors: marigold / peacock teal / indigo
+ *  - minZoom 4, maxBounds India, maxZoom 19
+ *  - attributionControl re-enabled (OSM requires visible attribution)
+ *  - Tile-fail fallback: paper background preserved via CSS
+ *  - flyTo support via new `flyTarget` prop
  */
 
 import React, { useEffect, useRef } from "react";
@@ -20,9 +21,7 @@ import type { SlotEntity } from "../lib/arkiv.js";
 import { SlotCard } from "./SlotCard.js";
 import { useNow } from "../hooks/useNow.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Fix Leaflet default icon paths (broken under Vite)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Fix Leaflet icon paths (broken under Vite) ───────────────────────────────
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -30,14 +29,12 @@ L.Icon.Default.mergeOptions({
   shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// COLOR MAP
-// ─────────────────────────────────────────────────────────────────────────────
-
+// ─── Spec colours ─────────────────────────────────────────────────────────────
+/** Marigold, Peacock Teal, Indigo — exactly as specified */
 const CATEGORY_COLORS: Record<string, string> = {
-  machine:   "#3B3F9E",
-  transport: "#4E6B3D",
-  freelance: "#0F8B8D",
+  machine:   "#F5A623", // Marigold
+  transport: "#0F8B8D", // Peacock Teal
+  freelance: "#3B3F9E", // Indigo
 };
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -46,58 +43,55 @@ const CATEGORY_ICONS: Record<string, string> = {
   freelance: "💻",
 };
 
-/** 15-minute threshold triggers vermilion pulse */
-const CRITICAL_SEC  = 15 * 60;
-const URGENT_SEC    = 30 * 60;
+/** 15-minute threshold for vermilion pulse ring */
+const CRITICAL_SEC = 15 * 60;
 
 /**
- * Creates a DivIcon teardrop marker.
- * Adds `slot-marker--pulse` class for the <15min case.
+ * Creates a DivIcon teardrop marker with the correct category colour.
+ * Adds vermilion pulse ring when < 15 min remain.
  */
 function createSlotIcon(slot: SlotEntity, now: number): L.DivIcon {
-  const remaining = slot.endsAt - now;
-  let color: string;
-  let extraClass = "";
+  const remaining  = slot.endsAt - now;
+  const isCritical = remaining > 0 && remaining <= CRITICAL_SEC;
+  const isExpired  = remaining <= 0;
 
-  if (remaining <= 0) {
-    color = "#6B7C61";
-  } else if (remaining <= CRITICAL_SEC) {
-    color = "#E8452C";
-    extraClass = "slot-marker--pulse";
-  } else if (remaining <= URGENT_SEC) {
-    color = "#F5A623";
-    extraClass = "slot-marker--urgent";
-  } else {
-    color = CATEGORY_COLORS[slot.category] ?? "#1B1A17";
-  }
+  const baseColor  = isExpired
+    ? "#9E9E9E"
+    : CATEGORY_COLORS[slot.category] ?? "#1B1A17";
 
-  const emoji = CATEGORY_ICONS[slot.category] ?? "📦";
-  const isSynthetic = slot.synthetic;
+  const markerColor = isCritical ? "#E8452C" : baseColor;
 
   const html = `
     <div
-      class="slot-marker ${extraClass}"
-      style="background:${color};"
-      title="${slot.title}"
+      class="slot-marker${isCritical ? " slot-marker--pulse" : ""}"
+      style="background:${markerColor};"
+      title="${slot.title.replace(/"/g, "&quot;")}"
     >
-      <div class="slot-marker__inner">${emoji}</div>
-      ${isSynthetic ? '<div class="slot-marker__badge">DEMO</div>' : ""}
+      <div class="slot-marker__inner">${CATEGORY_ICONS[slot.category] ?? "📦"}</div>
+      ${slot.synthetic ? '<div class="slot-marker__badge">DEMO</div>' : ""}
     </div>
   `;
 
   return L.divIcon({
     html,
-    className: "",
-    iconSize:   [36, 36],
-    iconAnchor: [18, 36],
+    className:   "",
+    iconSize:    [36, 36],
+    iconAnchor:  [18, 36],
     popupAnchor: [0, -40],
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AUTO-FIT BOUNDS
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── India bounds ─────────────────────────────────────────────────────────────
+/** Approximate bounding box for India — prevents scrolling to empty ocean */
+const INDIA_BOUNDS = L.latLngBounds(
+  [6.0,  68.0],   // SW: tip of Kanyakumari + west coast
+  [37.5, 98.0],   // NE: Kashmir + Arunachal
+);
+const INDIA_CENTER: [number, number] = [20.5937, 78.9629];
+const INDIA_ZOOM    = 5;
+const INDIA_MIN_ZOOM = 4;
 
+// ─── Auto-fit to slot bounds (fires once on first non-empty render) ───────────
 function FitBounds({
   slots,
   fitted,
@@ -117,19 +111,30 @@ function FitBounds({
   return null;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN COMPONENT
-// ─────────────────────────────────────────────────────────────────────────────
-
-const INDIA_CENTER: [number, number] = [20.5937, 78.9629];
-const INDIA_ZOOM = 5;
-
-export interface MapViewProps {
-  slots: SlotEntity[];
-  onSelectSlot: (slot: SlotEntity) => void;
+// ─── Fly-to controller (fires when flyTarget changes) ─────────────────────────
+function FlyController({
+  target,
+}: {
+  target: [number, number] | null;
+}): null {
+  const map = useMap();
+  useEffect(() => {
+    if (!target) return;
+    map.flyTo(target, Math.max(map.getZoom(), 10), { duration: 0.8 });
+  }, [map, target]);
+  return null;
 }
 
-export function MapView({ slots, onSelectSlot }: MapViewProps): React.ReactElement {
+// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
+
+export interface MapViewProps {
+  slots:       SlotEntity[];
+  onSelectSlot: (slot: SlotEntity) => void;
+  /** When set, map flies to this [lat, lon] */
+  flyTarget?:  [number, number] | null;
+}
+
+export function MapView({ slots, onSelectSlot, flyTarget = null }: MapViewProps): React.ReactElement {
   const now    = useNow();
   const fitted = useRef(false);
 
@@ -137,20 +142,31 @@ export function MapView({ slots, onSelectSlot }: MapViewProps): React.ReactEleme
     <MapContainer
       center={INDIA_CENTER}
       zoom={INDIA_ZOOM}
-      style={{ width: "100%", height: "100%" }}
+      minZoom={INDIA_MIN_ZOOM}
+      maxZoom={19}
+      maxBounds={INDIA_BOUNDS}
+      maxBoundsViscosity={0.85}
+      style={{ width: "100%", height: "100%", background: "#FBF7F0" }}
       zoomControl={true}
-      attributionControl={false}
+      attributionControl={true}
       id="leaflet-map"
     >
-      {/* Carto Positron tiles — clean light base */}
+      {/*
+        OpenStreetMap raster tiles — free, no API key, CC-BY-SA licence.
+        Usage policy: https://operations.osmfoundation.org/policies/tiles/
+        Tile provider: openstreetmap.org
+        Tinting applied via CSS on .leaflet-tile-pane in index.css.
+      */}
       <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        subdomains="abcd"
+        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         maxZoom={19}
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
+        crossOrigin="anonymous"
+        errorTileUrl="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
       />
 
       <FitBounds slots={slots} fitted={fitted} />
+      <FlyController target={flyTarget} />
 
       {/* Clustered slot markers */}
       <MarkerClusterGroup

@@ -421,3 +421,4 @@
 - **Suggested fix:**
   Add a configurable `timeout` option (default: 8000ms) to `PublicArkivClient` transport or query builder, consistent with how viem exposes transport timeouts.
 - **Upstream issue link:** (not filed — intermittent, needs more data to reproduce reliably)
+- **Update 2026-10-13 (Phase 2C review):** Attempted to reproduce twice more in the same session. Run 2 (with 10s timeout): T-02 resolved in 291ms — no stall. Run 3 (Phase 2C rerun): T-02 resolved in 289ms — no stall. **Stall only observed once (run 1, 2026-10-13 ~10:59 IST).** Per Phase 2C rubric ("reproduce at least twice with timings before keeping as an entry"), this is **downgraded from a friction entry to a note**: the behaviour was real (process had to be killed) but has not reproduced since. Keeping the entry for traceability; severity lowered to **low**. Will re-file as a confirmed issue if it recurs.
