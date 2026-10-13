@@ -1,14 +1,14 @@
 /**
  * src/hooks/useChainHead.ts
  *
- * Polls the Arkiv RPC for the latest block number every 12 seconds.
+ * Polls the Arkiv RPC for the latest block number every ~4 seconds.
  * Used to display chain liveness in the UI footer.
  */
 
 import { useState, useEffect, useRef } from "react";
 import { getArkivPublicClient } from "../lib/arkiv.js";
 
-const POLL_INTERVAL_MS = 12_000;
+const POLL_INTERVAL_MS = 4_000;
 
 export interface ChainHead {
   blockNumber: bigint | null;

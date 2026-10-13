@@ -83,6 +83,8 @@
   Define a `toJSON` property or helper on `U64Value` / `U256Value`, or document the BigInt serialization caveat prominently in the SDK guide.
 - **Upstream issue link:** (not filed)
 
+  > **Update 2026-10-13 IST:** Note: not Arkiv-specific. `BigInt` serialization is a JavaScript platform limitation that affects all libraries using `bigint`. The SDK choice to use native `bigint` for `u64` is correct; the workaround (custom replacer or `.toString()`) is the standard approach. Severity downgraded to **cosmetic**.
+
 ---
 
 ### FR-003 · Uppercase attribute name rejected by network (not caught client-side)
@@ -116,6 +118,8 @@
 - **Suggested fix:**  
   Call `validateAttributeName(name)` inside `createEntity()` and `executeBatch()` before signing and submitting transactions.
 - **Upstream issue link:** (not filed)
+
+  > **Update 2026-10-13 IST:** Gas spend verified with `scripts/measure-cost.ts`. Two successful creates measured: **3h = 0.000141824 GLM, 24h = 0.000141840 GLM** — expiry duration has negligible cost impact (~0.000000016 GLM difference). The Phase 0 failed uppercase-attribute tx cannot be retroactively measured (delta not captured). **Severity remains: major.**
 
 ---
 
@@ -152,6 +156,8 @@
   Emit a diagnostic warning or validate types in the query engine if attribute schemas are indexed.
 - **Upstream issue link:** (not filed)
 
+  > **Update 2026-10-13 IST:** Arkiv documentation clarifies this is documented behaviour: a typed predicate only matches cells stored with that exact type tag. There is no diagnostic today. Severity revised to **minor**. Suggested fix updated: add optional dev-mode warning when a predicate type does not match known schema types for that attribute.
+
 ---
 
 ### FR-005 · Query index purges expiring entity 1 block before target block
@@ -180,6 +186,21 @@
 - **Suggested fix:**  
   Document the exact query expiration boundary condition (whether `block < expiresAt` or `block <= expiresAt`).
 - **Upstream issue link:** (not filed)
+
+  > **Update 2026-10-13 IST:** FR-005 **RE-TESTED** at 1-second polling intervals using `scripts/fr005-expiry-retest.ts`. Full block-level table recorded in task-555.log. Key findings:
+  >
+  > | Block | query= | getEntity= | Note |
+  > |-------|--------|------------|------|
+  > | #508806 – #508824 | YES | error (Invalid key value) | Entity visible in query; getEntity errors throughout |
+  > | #508824 | NO | error | **Query went dark here** (wall 04:56:44, at exact ends_at Unix time) |
+  > | #508826 | NO | error | Entity expiresAt block per SDK |
+  > | #508831+ | NO | error | Both dark, error persists |
+  >
+  > **Revised conclusion:**
+  > - Query index drops the entity **at block #508824**, which is **2 blocks before** the SDK-reported `expiresAt` block (#508826).
+  > - `getEntity` errored with `Invalid key value` on **every single poll** — both before AND after expiry. This means the original claim of "getEntity returned entity at block 484781" was from a different run (Phase 0 script). This run produced a NEW discovery: `getEntity` rejects the 64-hex entity key with `Invalid key value` error from the outset.
+  > - **Original "1-block gap" claim partially confirmed but with a 2-block gap observed this run.** The gap exists; the exact count may vary per run.
+  > - **New finding logged as FR-011**: `getEntity` throws `Invalid key value` for entity keys returned by `createEntity`. The original Phase 0 `getEntity` success may have used a different key format.
 
 ---
 
@@ -235,6 +256,8 @@
   Explicitly declare fields on the class body and assign them in the constructor body.
 - **Suggested fix:**  
   Document or note that modern Vite / TypeScript templates enforce `erasableSyntaxOnly`.
+
+  > **Update 2026-10-13 IST:** Note: not Arkiv-specific. `erasableSyntaxOnly` is a TypeScript 6 / Vite project template choice, not related to the Arkiv SDK. The pattern applies to any TypeScript project using this Vite template. Workaround is standard TypeScript, no SDK change needed.
 
 ---
 
@@ -334,4 +357,41 @@
 - **Reputation unit tests (8/8)**: All eight `verifyJobCompletion()` edge cases pass with no chain calls, confirming the three-part rule is correctly enforced purely in TypeScript.
 - **React Leaflet integration**: `react-leaflet@4` + Carto Positron tiles work cleanly with Vite + React 19 with a single icon-path fix for the default Leaflet marker.
 
+---
 
+### FR-011 · `getEntity({ key })` throws `Invalid key value` for entity keys from `createEntity`
+
+- **Date/time (IST):** 2026-10-13, ~10:26 IST
+- **Phase:** 2B (FR-005 retest)
+- **SDK + network versions:** `@arkiv-network/sdk@0.8.1`, viem `2.57.4`, Tiramisu testnet, chain ID `7738577`
+- **What I expected:**
+  `getEntity({ key: entityKey })` where `entityKey` is the value returned by `createEntity()` (a 66-char `0x`-prefixed 64-hex string) to return the entity or throw `NoEntityFoundError` after expiry.
+- **What actually happened (exact error text):**
+  ```
+  Invalid key value {"key":"0x82302c963377fec72f163883119f404c36e2fd27a4956b7852be3e39d723c5c0"}
+  ```
+  This error was thrown on **every single poll** — both while the entity was live in the query index (query=YES rows) AND after it expired (query=NO rows). `getEntity` never succeeded for this entity key at any point in its lifetime.
+- **Steps to reproduce:**
+  ```ts
+  const created = await wallet.createEntity({ ... });
+  const key = created.entityKey; // 0x82302c963377...
+  await pub.getEntity({ key });   // throws Invalid key value
+  ```
+  Observed in `scripts/fr005-expiry-retest.ts` run (task-555.log), 2026-10-13 ~04:56–04:58 UTC.
+  Note: Phase 0 `getEntity` succeeded with a key from a different entity (`0xae9bcc84c5...`). The failing key here is 64 hex chars (32 bytes) after `0x`. Both appear to be the same format.
+- **Severity:** high — `getEntity` is broken for at least some entity keys, making it impossible to use `getEntity` to verify a specific entity's live status or attributes.
+- **Workaround used:**
+  Use `select().where(eq(...))` to find the entity by attribute instead of by key. This is what `fetchLiveSlots` already does.
+- **Suggested fix:**
+  Investigate whether `getEntity` expects a different key format (e.g. without `0x` prefix, or a shorter hash), and document the expected key format clearly in the SDK.
+- **Upstream issue link:** (not filed — needs further investigation to isolate whether this is a key format issue or a server-side bug)
+
+---
+
+## What worked well — Phase 2B
+
+- **Build clean (531 modules, 0 errors)**: `tsc -b && vite build` after the full UI rebuild produced no errors. The marker-cluster library integrated without type issues.
+- **Live seed (30/30 created)**: `scripts/seed.ts --count 30 --yes` created all 30 slots with 0 failures. Cost per slot: ~0.000143 GLM.
+- **Secret scan (PASS)**: `npm run scan:secrets` found no private key in `dist/`, `src/`, `scripts/`, `arkiv/`, `README.md`, `WALLETS.md`, or git history.
+- **FR-005 conclusive retest**: 1-second polling table confirms query index drops 2 blocks before SDK `expiresAt`. The gap is real and reproducible.
+- **Cost data collected**: 3h = 0.000141824 GLM, 24h = 0.000141840 GLM. 40-slot seed estimated at 0.00567296 GLM.

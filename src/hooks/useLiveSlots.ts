@@ -1,14 +1,14 @@
 /**
  * src/hooks/useLiveSlots.ts
  *
- * Read-only hook that polls the Arkiv index for live slots every 30 seconds.
+ * Read-only hook that polls the Arkiv index for live slots every 8 seconds.
  * Returns all slots sorted by earliest expiry (chain source of truth only).
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getArkivPublicClient, fetchLiveSlots, type SlotEntity } from "../lib/arkiv.js";
 
-const POLL_INTERVAL_MS = 30_000;
+const POLL_INTERVAL_MS = 8_000;
 
 export interface UseLiveSlotsResult {
   slots: SlotEntity[];

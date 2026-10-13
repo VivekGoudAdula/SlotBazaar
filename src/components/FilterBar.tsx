@@ -1,81 +1,152 @@
 /**
  * src/components/FilterBar.tsx
  *
- * Category filter chips + slot count + manual refresh button.
+ * Filter chips: category, cluster, price band, "ending soon" (< 30 min).
+ * Also shows live slot count, last-fetch time, and refresh button.
  */
 
 import React from "react";
 import type { SlotCategory } from "../lib/arkiv.js";
 
-const CATEGORY_LABELS: Record<SlotCategory | "all", { label: string; icon: string }> = {
-  all:       { label: "All Slots",  icon: "🗺" },
-  machine:   { label: "Machine",    icon: "⚙️" },
-  transport: { label: "Transport",  icon: "🚚" },
-  freelance: { label: "Freelance",  icon: "💻" },
-};
+export type PriceBandFilter = "all" | "low" | "mid" | "high";
+
+export interface FilterState {
+  category: SlotCategory | "all";
+  cluster:  string;           // "all" = no filter
+  priceBand: PriceBandFilter;
+  endingSoon: boolean;        // < 30 min remaining
+}
 
 export interface FilterBarProps {
-  /** Currently active filter ("all" | SlotCategory) */
-  active: SlotCategory | "all";
-  /** Called when the user clicks a filter chip */
-  onChange: (next: SlotCategory | "all") => void;
-  /** Total number of visible slots (after filtering) */
+  filters: FilterState;
+  onChange: (f: FilterState) => void;
+  clusters: string[];         // unique cluster names from loaded slots
   slotCount: number;
-  /** Whether a background fetch is in progress */
+  totalCount: number;
   loading: boolean;
-  /** ISO string of last successful fetch */
   lastFetched: Date | null;
-  /** Triggered by the refresh button */
   onRefresh: () => void;
 }
 
+const CATEGORY_OPTS: { value: SlotCategory | "all"; label: string; icon: string }[] = [
+  { value: "all",       label: "All",       icon: "🗺"  },
+  { value: "machine",   label: "Machine",   icon: "⚙️" },
+  { value: "transport", label: "Transport", icon: "🚚" },
+  { value: "freelance", label: "Freelance", icon: "💻" },
+];
+
+const PRICE_OPTS: { value: PriceBandFilter; label: string }[] = [
+  { value: "all",  label: "Any price" },
+  { value: "low",  label: "₹ Low"    },
+  { value: "mid",  label: "₹₹ Mid"   },
+  { value: "high", label: "₹₹₹ High" },
+];
+
 export function FilterBar({
-  active,
+  filters,
   onChange,
+  clusters,
   slotCount,
+  totalCount,
   loading,
   lastFetched,
   onRefresh,
 }: FilterBarProps): React.ReactElement {
-  const categories: Array<SlotCategory | "all"> = ["all", "machine", "transport", "freelance"];
 
-  const lastFetchedLabel = lastFetched
-    ? `Updated ${lastFetched.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
+  function set<K extends keyof FilterState>(key: K, val: FilterState[K]) {
+    onChange({ ...filters, [key]: val });
+  }
+
+  const lastLabel = lastFetched
+    ? lastFetched.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
     : "—";
 
   return (
-    <div className="filter-bar" role="toolbar" aria-label="Slot category filters">
-      <span className="filter-bar__label" aria-hidden="true">Filter:</span>
+    <div className="filter-bar" role="toolbar" aria-label="Slot filters">
+      {/* Category chips */}
+      <span className="filter-bar__label" aria-hidden="true">Type:</span>
+      {CATEGORY_OPTS.map(({ value, label, icon }) => (
+        <button
+          key={value}
+          id={`filter-chip-${value}`}
+          className={[
+            "filter-chip",
+            value !== "all" ? `filter-chip--${value}` : "",
+            filters.category === value ? "filter-chip--active" : "",
+          ].filter(Boolean).join(" ")}
+          onClick={() => set("category", value)}
+          aria-pressed={filters.category === value}
+          aria-label={`Filter by ${label}`}
+        >
+          <span aria-hidden="true">{icon}</span>
+          {label}
+        </button>
+      ))}
 
-      {categories.map((cat) => {
-        const { label, icon } = CATEGORY_LABELS[cat];
-        const isActive = active === cat;
-        return (
-          <button
-            key={cat}
-            id={`filter-chip-${cat}`}
-            className={[
-              "filter-chip",
-              cat !== "all" ? `filter-chip--${cat}` : "",
-              isActive ? "filter-chip--active" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            onClick={() => onChange(cat)}
-            aria-pressed={isActive}
-            aria-label={`Filter: ${label}`}
-            title={label}
+      {/* Divider */}
+      <span className="filter-bar__divider" aria-hidden="true" />
+
+      {/* Cluster select */}
+      {clusters.length > 0 && (
+        <>
+          <span className="filter-bar__label" aria-hidden="true">City:</span>
+          <select
+            id="filter-cluster"
+            className="filter-select"
+            value={filters.cluster}
+            onChange={(e) => set("cluster", e.target.value)}
+            aria-label="Filter by cluster"
           >
-            <span aria-hidden="true">{icon}</span>
-            {label}
-          </button>
-        );
-      })}
+            <option value="all">All cities</option>
+            {clusters.map((c) => (
+              <option key={c} value={c} style={{ textTransform: "capitalize" }}>
+                {c.charAt(0).toUpperCase() + c.slice(1)}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
 
-      <span className="filter-bar__count" aria-live="polite" aria-label={`${slotCount} slots visible`}>
-        {slotCount} slot{slotCount !== 1 ? "s" : ""}
-        {" · "}
-        <span style={{ opacity: 0.65, fontSize: "0.68rem" }}>{lastFetchedLabel}</span>
+      {/* Price band */}
+      <span className="filter-bar__label" aria-hidden="true">Price:</span>
+      {PRICE_OPTS.map(({ value, label }) => (
+        <button
+          key={value}
+          id={`filter-price-${value}`}
+          className={[
+            "filter-chip filter-chip--sm",
+            filters.priceBand === value ? "filter-chip--active" : "",
+          ].join(" ")}
+          onClick={() => set("priceBand", value)}
+          aria-pressed={filters.priceBand === value}
+          aria-label={`Filter by price: ${label}`}
+        >
+          {label}
+        </button>
+      ))}
+
+      {/* Ending soon */}
+      <button
+        id="filter-ending-soon"
+        className={[
+          "filter-chip filter-chip--sm",
+          filters.endingSoon ? "filter-chip--ending-soon-active" : "filter-chip--ending-soon",
+        ].join(" ")}
+        onClick={() => set("endingSoon", !filters.endingSoon)}
+        aria-pressed={filters.endingSoon}
+        aria-label="Show only slots ending in the next 30 minutes"
+        title="Ending in < 30 min"
+      >
+        🔴 Ending soon
+      </button>
+
+      {/* Count + refresh */}
+      <span
+        className="filter-bar__count"
+        aria-live="polite"
+        aria-label={`${slotCount} of ${totalCount} slots visible`}
+      >
+        {slotCount}/{totalCount} slots · <span style={{ opacity: 0.65, fontSize: "0.68rem" }}>{lastLabel}</span>
       </span>
 
       <button
@@ -84,10 +155,10 @@ export function FilterBar({
         onClick={onRefresh}
         disabled={loading}
         aria-label="Refresh slots from Arkiv"
-        title="Refresh slots from Arkiv"
+        title="Refresh"
       >
         <span className={loading ? "spin" : ""} aria-hidden="true">⟳</span>
-        {loading ? "Fetching…" : "Refresh"}
+        {loading ? "…" : "Refresh"}
       </button>
     </div>
   );

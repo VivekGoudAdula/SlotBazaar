@@ -2,24 +2,26 @@
  * src/components/MapView.tsx
  *
  * Full-screen Leaflet map centred on India with custom slot markers.
- * Each marker:
- *   - Uses a colored teardrop icon (category × urgency coded)
- *   - Opens a mini SlotCard in a Leaflet Popup
- *   - Clicking "View Details" opens the SlotDrawer
- *
- * Read-only in Phase 2.
+ * Features:
+ *  - Marker clustering (react-leaflet-markercluster)
+ *  - Category × urgency color-coded teardrop markers
+ *  - Vermilion pulse animation for slots < 15 min remaining
+ *  - SlotCard mini popup on click
+ *  - Auto-fits to slot bounds on first load
  */
 
 import React, { useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
+// @ts-expect-error — no types for this package
+import MarkerClusterGroup from "@changey/react-leaflet-markercluster";
+import "@changey/react-leaflet-markercluster/dist/styles.min.css";
 import type { SlotEntity } from "../lib/arkiv.js";
-import { getUrgency } from "../lib/time.js";
 import { SlotCard } from "./SlotCard.js";
 import { useNow } from "../hooks/useNow.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fix Leaflet's broken default icon paths (Vite doesn't inline them)
+// Fix Leaflet default icon paths (broken under Vite)
 // ─────────────────────────────────────────────────────────────────────────────
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -29,18 +31,13 @@ L.Icon.Default.mergeOptions({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CUSTOM MARKER ICON FACTORY
+// COLOR MAP
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CATEGORY_COLORS: Record<string, string> = {
-  machine:   "#3B3F9E",   // Indigo
-  transport: "#4E6B3D",   // Sage
-  freelance: "#0F8B8D",   // Teal
-};
-
-const URGENCY_OVERRIDE: Record<string, string> = {
-  critical: "#E8452C",  // Vermilion
-  urgent:   "#F5A623",  // Marigold
+  machine:   "#3B3F9E",
+  transport: "#4E6B3D",
+  freelance: "#0F8B8D",
 };
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -49,52 +46,74 @@ const CATEGORY_ICONS: Record<string, string> = {
   freelance: "💻",
 };
 
+/** 15-minute threshold triggers vermilion pulse */
+const CRITICAL_SEC  = 15 * 60;
+const URGENT_SEC    = 30 * 60;
+
 /**
- * Creates a custom DivIcon teardrop marker for a slot.
+ * Creates a DivIcon teardrop marker.
+ * Adds `slot-marker--pulse` class for the <15min case.
  */
-function createSlotIcon(slot: SlotEntity, urgency: string): L.DivIcon {
-  const color = URGENCY_OVERRIDE[urgency] ?? CATEGORY_COLORS[slot.category] ?? "#1B1A17";
+function createSlotIcon(slot: SlotEntity, now: number): L.DivIcon {
+  const remaining = slot.endsAt - now;
+  let color: string;
+  let extraClass = "";
+
+  if (remaining <= 0) {
+    color = "#6B7C61";
+  } else if (remaining <= CRITICAL_SEC) {
+    color = "#E8452C";
+    extraClass = "slot-marker--pulse";
+  } else if (remaining <= URGENT_SEC) {
+    color = "#F5A623";
+    extraClass = "slot-marker--urgent";
+  } else {
+    color = CATEGORY_COLORS[slot.category] ?? "#1B1A17";
+  }
+
   const emoji = CATEGORY_ICONS[slot.category] ?? "📦";
+  const isSynthetic = slot.synthetic;
 
   const html = `
-    <div class="slot-marker slot-marker--${urgency === "critical" || urgency === "urgent" ? urgency : slot.category}"
-         style="background:${color}; border-color:#1B1A17;"
-         title="${slot.title}">
+    <div
+      class="slot-marker ${extraClass}"
+      style="background:${color};"
+      title="${slot.title}"
+    >
       <div class="slot-marker__inner">${emoji}</div>
+      ${isSynthetic ? '<div class="slot-marker__badge">DEMO</div>' : ""}
     </div>
   `;
 
   return L.divIcon({
     html,
     className: "",
-    iconSize:  [36, 36],
+    iconSize:   [36, 36],
     iconAnchor: [18, 36],
-    popupAnchor: [0, -38],
+    popupAnchor: [0, -40],
   });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAP BOUNDS FITTER — fits to marker bounds when slots load
+// AUTO-FIT BOUNDS
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface FitBoundsProps {
+function FitBounds({
+  slots,
+  fitted,
+}: {
   slots: SlotEntity[];
   fitted: React.MutableRefObject<boolean>;
-}
-
-function FitBounds({ slots, fitted }: FitBoundsProps): null {
+}): null {
   const map = useMap();
-
   useEffect(() => {
     if (fitted.current || slots.length === 0) return;
-
     const bounds = L.latLngBounds(slots.map((s) => [s.lat, s.lon]));
     if (bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [48, 48], maxZoom: 10 });
+      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 10 });
       fitted.current = true;
     }
   }, [map, slots, fitted]);
-
   return null;
 }
 
@@ -102,7 +121,6 @@ function FitBounds({ slots, fitted }: FitBoundsProps): null {
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 
-// India bounds for initial view
 const INDIA_CENTER: [number, number] = [20.5937, 78.9629];
 const INDIA_ZOOM = 5;
 
@@ -115,13 +133,6 @@ export function MapView({ slots, onSelectSlot }: MapViewProps): React.ReactEleme
   const now    = useNow();
   const fitted = useRef(false);
 
-  // Reset fit when a new set of slots arrives for the first time
-  useEffect(() => {
-    if (slots.length > 0) {
-      // Allow re-fit on first non-empty load only
-    }
-  }, [slots.length]);
-
   return (
     <MapContainer
       center={INDIA_CENTER}
@@ -131,7 +142,7 @@ export function MapView({ slots, onSelectSlot }: MapViewProps): React.ReactEleme
       attributionControl={false}
       id="leaflet-map"
     >
-      {/* Carto Positron — clean, light, no roads noise */}
+      {/* Carto Positron tiles — clean light base */}
       <TileLayer
         url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -139,33 +150,30 @@ export function MapView({ slots, onSelectSlot }: MapViewProps): React.ReactEleme
         maxZoom={19}
       />
 
-      {/* Auto-fit bounds on first slot load */}
       <FitBounds slots={slots} fitted={fitted} />
 
-      {/* Slot markers */}
-      {slots.map((slot) => {
-        const urgency = getUrgency(slot.endsAt, now);
-        const icon    = createSlotIcon(slot, urgency);
-
-        return (
-          <Marker
-            key={slot.key}
-            position={[slot.lat, slot.lon]}
-            icon={icon}
-            title={slot.title}
-          >
-            <Popup
-              closeButton={false}
-              className="slot-popup"
+      {/* Clustered slot markers */}
+      <MarkerClusterGroup
+        chunkedLoading
+        maxClusterRadius={50}
+        showCoverageOnHover={false}
+      >
+        {slots.map((slot) => {
+          const icon = createSlotIcon(slot, now);
+          return (
+            <Marker
+              key={slot.key}
+              position={[slot.lat, slot.lon]}
+              icon={icon}
+              title={slot.title}
             >
-              <SlotCard
-                slot={slot}
-                onSelect={onSelectSlot}
-              />
-            </Popup>
-          </Marker>
-        );
-      })}
+              <Popup closeButton={false} className="slot-popup">
+                <SlotCard slot={slot} onSelect={onSelectSlot} />
+              </Popup>
+            </Marker>
+          );
+        })}
+      </MarkerClusterGroup>
     </MapContainer>
   );
 }

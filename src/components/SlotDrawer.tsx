@@ -1,13 +1,21 @@
 /**
  * src/components/SlotDrawer.tsx
  *
- * Right-side drawer that shows full slot details when a map marker is clicked.
- * Shows: description, time grid, entity key, and action buttons (connect wallet to use).
+ * Right-side detail drawer opened when a map marker is clicked.
  *
- * Read-only in Phase 2. Booking / completion write actions will be wired in Phase 3.
+ * Sections:
+ *  - Live countdown (vermilion <15 min)
+ *  - Description
+ *  - Metadata grid (category, cluster, price band, seller, start/end)
+ *  - Proof panel: entity key (copyable), $creator, Entity Expiration block,
+ *                 created-at block, explorer link
+ *  - Action buttons (Book / Confirm Seller) — disabled with tooltip when
+ *    wallet is not connected
+ *
+ * Phase 2 read-only: write stubs present but commented.
  */
 
-import React from "react";
+import React, { useState, useCallback } from "react";
 import type { SlotEntity } from "../lib/arkiv.js";
 import { formatTimeLeft, getUrgency, formatDateTime } from "../lib/time.js";
 import { useNow } from "../hooks/useNow.js";
@@ -25,6 +33,38 @@ const PRICE_BAND_LABELS: Record<string, string> = {
   high: "₹₹₹ High",
 };
 
+const EXPLORER_BASE = "https://explorer.tiramisu.arkiv.network";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COPY BUTTON
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CopyButton({ value, label }: { value: string; label: string }): React.ReactElement {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  }, [value]);
+
+  return (
+    <button
+      className="copy-btn"
+      onClick={handleCopy}
+      aria-label={copied ? "Copied!" : `Copy ${label}`}
+      title={copied ? "Copied!" : `Copy ${label}`}
+    >
+      {copied ? "✓ Copied" : "⎘ Copy"}
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface SlotDrawerProps {
   slot: SlotEntity | null;
   onClose: () => void;
@@ -38,40 +78,32 @@ export function SlotDrawer({ slot, onClose }: SlotDrawerProps): React.ReactEleme
 
   const urgency  = getUrgency(slot.endsAt, now);
   const timeLeft = formatTimeLeft(slot.endsAt, now);
-  const expired  = slot.endsAt <= now;
+  const remaining = slot.endsAt - now;
+  const expired  = remaining <= 0;
+  const isCritical = remaining > 0 && remaining <= 15 * 60;
 
-  const explorerBase = "https://explorer.tiramisu.arkiv.network";
-
-  function handleOverlayClick(e: React.MouseEvent) {
-    if (e.target === e.currentTarget) onClose();
-  }
-
-  function handleBookClick() {
-    if (wallet.status !== "connected") {
-      void wallet.connect();
-    }
-    // Phase 3: wire up actual createBooking call here
-  }
+  const walletConnected = wallet.status === "connected";
+  const noWalletTip = "Connect MetaMask to use this action";
 
   return (
     <>
-      {/* Overlay */}
+      {/* Backdrop */}
       <div
         className="drawer-overlay"
-        onClick={handleOverlayClick}
-        aria-hidden="true"
         id="drawer-overlay"
+        onClick={onClose}
+        aria-hidden="true"
       />
 
-      {/* Drawer panel */}
+      {/* Panel */}
       <aside
         className="drawer"
         role="complementary"
         aria-label={`Slot details: ${slot.title}`}
         id="slot-drawer"
       >
-        {/* Sticky header */}
-        <div className="drawer__header">
+        {/* Header */}
+        <div className={`drawer__header${isCritical ? " drawer__header--critical" : ""}`}>
           <button
             className="drawer__close"
             onClick={onClose}
@@ -80,53 +112,52 @@ export function SlotDrawer({ slot, onClose }: SlotDrawerProps): React.ReactEleme
           >
             ✕
           </button>
-          <h2 className="drawer__title">{slot.title}</h2>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 className="drawer__title">{slot.title}</h2>
+            {slot.synthetic && (
+              <span className="synthetic-badge">⚗ Synthetic demo data</span>
+            )}
+          </div>
         </div>
 
         <div className="drawer__body">
-          {/* Live countdown */}
+          {/* ── Countdown ── */}
           <div
             className={`slot-card__countdown slot-card__countdown--${urgency}`}
-            style={{ fontSize: "1rem" }}
+            style={{ fontSize: "1rem", fontWeight: 700 }}
             aria-label={`Time remaining: ${timeLeft}`}
             aria-live="polite"
           >
             <span aria-hidden="true">
               {urgency === "critical" ? "🔴" : urgency === "urgent" ? "🟡" : "🟢"}
             </span>
-            <strong>{timeLeft}</strong>
+            {timeLeft}
             {expired && " — Expired on Arkiv"}
           </div>
 
-          {/* Description */}
-          <section aria-labelledby="drawer-desc-label">
-            <p className="drawer__section-label" id="drawer-desc-label">Description</p>
+          {/* ── Description ── */}
+          <section aria-labelledby="desc-label">
+            <p className="drawer__section-label" id="desc-label">Description</p>
             <p className="drawer__description">
               {slot.description || "No description provided."}
             </p>
           </section>
 
-          {/* Metadata grid */}
-          <section aria-labelledby="drawer-meta-label">
-            <p className="drawer__section-label" id="drawer-meta-label">Details</p>
+          {/* ── Metadata grid ── */}
+          <section aria-labelledby="meta-label">
+            <p className="drawer__section-label" id="meta-label">Details</p>
             <div className="drawer__meta-grid">
               <div className="drawer__meta-item">
                 <div className="drawer__meta-key">Category</div>
-                <div className="drawer__meta-value">
-                  {CATEGORY_LABELS[slot.category] ?? slot.category}
-                </div>
+                <div className="drawer__meta-value">{CATEGORY_LABELS[slot.category] ?? slot.category}</div>
               </div>
               <div className="drawer__meta-item">
                 <div className="drawer__meta-key">Cluster</div>
-                <div className="drawer__meta-value" style={{ textTransform: "capitalize" }}>
-                  {slot.cluster}
-                </div>
+                <div className="drawer__meta-value" style={{ textTransform: "capitalize" }}>{slot.cluster}</div>
               </div>
               <div className="drawer__meta-item">
                 <div className="drawer__meta-key">Price Band</div>
-                <div className="drawer__meta-value">
-                  {PRICE_BAND_LABELS[slot.priceBand] ?? slot.priceBand}
-                </div>
+                <div className="drawer__meta-value">{PRICE_BAND_LABELS[slot.priceBand] ?? slot.priceBand}</div>
               </div>
               <div className="drawer__meta-item">
                 <div className="drawer__meta-key">Seller</div>
@@ -141,116 +172,144 @@ export function SlotDrawer({ slot, onClose }: SlotDrawerProps): React.ReactEleme
                 <div className="drawer__meta-value">{formatDateTime(slot.endsAt)}</div>
               </div>
               <div className="drawer__meta-item">
-                <div className="drawer__meta-key">Coordinates</div>
-                <div className="drawer__meta-value" style={{ fontFamily: "var(--font-mono)", fontSize: "0.72rem" }}>
+                <div className="drawer__meta-key">Lat / Lon</div>
+                <div className="drawer__meta-value" style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem" }}>
                   {slot.lat.toFixed(4)}, {slot.lon.toFixed(4)}
                 </div>
               </div>
-              {slot.createdAtBlock && (
+              {slot.synthetic && (
                 <div className="drawer__meta-item">
-                  <div className="drawer__meta-key">Created Block</div>
-                  <div className="drawer__meta-value">
-                    #{slot.createdAtBlock.toLocaleString()}
-                  </div>
+                  <div className="drawer__meta-key">Data</div>
+                  <div className="drawer__meta-value" style={{ color: "var(--c-sage)" }}>⚗ Synthetic</div>
                 </div>
               )}
             </div>
           </section>
 
-          {/* Entity key + explorer link */}
-          <section aria-labelledby="drawer-key-label">
-            <p className="drawer__section-label" id="drawer-key-label">Arkiv Entity Key</p>
-            <div className="drawer__key-box" aria-label={`Entity key: ${slot.key}`}>
-              {slot.key}
+          {/* ── PROOF PANEL ── */}
+          <section aria-labelledby="proof-label" className="proof-panel">
+            <p className="drawer__section-label" id="proof-label">🔐 On-Chain Proof</p>
+
+            {/* Entity Key */}
+            <div className="proof-row">
+              <div className="proof-key">Entity Key</div>
+              <div className="proof-val-wrap">
+                <div className="drawer__key-box" aria-label={`Entity key: ${slot.key}`}>
+                  {slot.key}
+                </div>
+                <div className="proof-actions">
+                  <CopyButton value={slot.key} label="entity key" />
+                  <a
+                    href={`${EXPLORER_BASE}/entity/${slot.key}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="explorer-link"
+                    id="drawer-explorer-link"
+                    aria-label="View on Arkiv Explorer (opens new tab)"
+                  >
+                    Explorer ↗
+                  </a>
+                </div>
+              </div>
             </div>
-            <a
-              href={`${explorerBase}/entity/${slot.key}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: "inline-block",
-                marginTop: "0.5rem",
-                fontSize: "0.72rem",
-                fontFamily: "var(--font-mono)",
-                color: "var(--c-teal)",
-                textDecoration: "underline",
-              }}
-              id="drawer-explorer-link"
-              aria-label="View entity on Arkiv Explorer (opens new tab)"
-            >
-              View on Explorer ↗
-            </a>
+
+            {/* Creator */}
+            <div className="proof-row">
+              <div className="proof-key">$creator (seller)</div>
+              <div className="proof-val-wrap">
+                <div className="drawer__key-box" style={{ fontSize: "0.65rem" }} aria-label={`Creator: ${slot.creator}`}>
+                  {slot.creator}
+                </div>
+                <CopyButton value={slot.creator} label="creator address" />
+              </div>
+            </div>
+
+            {/* Entity Expiration Block */}
+            {slot.expiresAtBlock !== undefined && (
+              <div className="proof-row">
+                <div className="proof-key">Entity Expiration Block</div>
+                <div className="proof-val">#{slot.expiresAtBlock.toLocaleString()}</div>
+              </div>
+            )}
+
+            {/* Created-at Block */}
+            {slot.createdAtBlock !== undefined && (
+              <div className="proof-row">
+                <div className="proof-key">Created-at Block</div>
+                <div className="proof-val">#{slot.createdAtBlock.toLocaleString()}</div>
+              </div>
+            )}
           </section>
 
-          {/* Creator address */}
-          <section aria-labelledby="drawer-creator-label">
-            <p className="drawer__section-label" id="drawer-creator-label">Slot Creator (immutable $creator)</p>
-            <div
-              className="drawer__key-box"
-              style={{ fontSize: "0.7rem" }}
-              aria-label={`Creator wallet: ${slot.creator}`}
-            >
-              {slot.creator}
-            </div>
-          </section>
-
-          {/* Action buttons */}
-          <div className="drawer__actions" aria-label="Slot actions">
+          {/* ── ACTIONS ── */}
+          <div className="drawer__actions">
             {expired ? (
-              <p
-                style={{
-                  fontSize: "0.82rem",
-                  color: "var(--c-vermilion)",
-                  fontWeight: 600,
-                  textAlign: "center",
-                  padding: "var(--sp-3)",
-                  border: "2px solid var(--c-vermilion)",
-                  background: "#FEE2DC",
-                }}
-              >
+              <p className="expired-notice">
                 🔴 This slot has expired and been removed from Arkiv.
               </p>
             ) : (
               <>
-                <button
-                  id="drawer-book-btn"
-                  className="btn-primary"
-                  onClick={handleBookClick}
-                  aria-label={
-                    wallet.status === "connected"
-                      ? "Book this slot (sign Arkiv transaction)"
-                      : "Connect wallet to book this slot"
-                  }
+                {/* Book button */}
+                <div
+                  title={walletConnected ? "Book this slot on-chain" : noWalletTip}
+                  style={{ width: "100%" }}
                 >
-                  {wallet.status === "connected" ? (
-                    <>🤝 Book This Slot</>
-                  ) : (
-                    <>🦊 Connect Wallet to Book</>
-                  )}
-                </button>
+                  <button
+                    id="drawer-book-btn"
+                    className="btn-primary"
+                    disabled={!walletConnected}
+                    onClick={() => {
+                      /* Phase 3: createBooking() */
+                    }}
+                    aria-label={walletConnected ? "Book this slot (on-chain)" : noWalletTip}
+                    aria-disabled={!walletConnected}
+                    style={{ width: "100%" }}
+                  >
+                    🤝 Book This Slot
+                    {!walletConnected && (
+                      <span className="btn-tooltip">Connect wallet first</span>
+                    )}
+                  </button>
+                </div>
 
-                {wallet.status === "connected" && (
+                {/* Confirm seller button */}
+                <div
+                  title={walletConnected ? "Mark slot as fulfilled (seller)" : noWalletTip}
+                  style={{ width: "100%" }}
+                >
                   <button
                     id="drawer-complete-seller-btn"
                     className="btn-secondary"
+                    disabled={!walletConnected}
                     onClick={() => {
                       /* Phase 3: createCompletion("seller") */
                     }}
-                    aria-label="Confirm slot as seller"
+                    aria-label={walletConnected ? "Confirm as seller" : noWalletTip}
+                    aria-disabled={!walletConnected}
+                    style={{ width: "100%" }}
                   >
                     ✅ Confirm as Seller
+                    {!walletConnected && (
+                      <span className="btn-tooltip">Connect wallet first</span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Wallet connect prompt */}
+                {!walletConnected && (
+                  <button
+                    id="drawer-connect-wallet-btn"
+                    className="btn-primary"
+                    onClick={() => void wallet.connect()}
+                    style={{ width: "100%", background: "var(--c-teal)" }}
+                    aria-label="Connect MetaMask"
+                  >
+                    🦊 Connect Wallet
                   </button>
                 )}
 
-                <p
-                  style={{
-                    fontSize: "0.68rem",
-                    color: "var(--c-ink-light)",
-                    textAlign: "center",
-                  }}
-                >
-                  All actions are on-chain Arkiv transactions (Tiramisu testnet, chain 7738577).
-                  {wallet.status !== "connected" && " Connect MetaMask to proceed."}
+                <p className="drawer__footnote">
+                  All actions are Arkiv transactions on Tiramisu testnet (chain 7738577).
                 </p>
               </>
             )}
