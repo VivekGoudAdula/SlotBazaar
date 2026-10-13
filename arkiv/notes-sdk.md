@@ -252,16 +252,28 @@ const payload = stringToPayload("hello")
 
 ---
 
-## 9. Possible mismatches / things to verify at runtime
+## 10. Injected Provider / MetaMask Browser Pattern (Verified in Phase 3)
 
-| Claim | Source | Confidence |
-|-------|--------|------------|
-| Plain string `"value"` in attributes auto-wraps to `str()` | Docs example code | Low — need to test |
-| `fromMinutes(10)` works for short-lived entity | Type sig says ≥1 block (2s) | High |
-| `i32(-10)` works for negative lat/lon | Type shows I32_MIN | High |
-| Uppercase attribute name is rejected client-side | `InvalidAttributeNameError` class | High |
-| String > 128 bytes is rejected | `MAX_STRING_BYTES` constant | High |
-| Query without filter throws error | Docs rule | Need to observe exact error |
-| `ownedBy(address)` is a filter method | Not seen in type declarations | Low — may not exist |
+The installed `@arkiv-network/sdk@0.8.1` builds wallet clients using standard Viem client composition:
 
-> **Friction candidates** for runtime probing are logged in `arkiv/friction.md`
+```ts
+import { createWalletClient } from "@arkiv-network/sdk"; // re-exported from viem
+import { tiramisu } from "@arkiv-network/sdk/chains";
+import { custom } from "viem";
+
+// Injected provider from EIP-6963 discovery or window.ethereum
+const provider = window.ethereum;
+const accounts = await provider.request({ method: "eth_requestAccounts" });
+
+const walletClient = createWalletClient({
+  chain: tiramisu,
+  transport: custom(provider),
+  account: accounts[0] as `0x${string}`,
+});
+```
+
+### Verified Properties
+1. **EIP-6963 Compatibility**: Works seamlessly with modern multi-wallet discovery events (`eip6963:announceProvider` / `eip6963:requestProvider`) and legacy `window.ethereum`.
+2. **Transaction Signing**: Calls to `walletClient.createEntity(...)` automatically trigger MetaMask's confirmation popup (`eth_sendTransaction`), correctly computing gas and prompt parameters.
+3. **Chain ID**: Must be verified as `7738577` (hex: computed in code as `"0x" + Number(7738577).toString(16)`); `wallet_switchEthereumChain` and fallback `wallet_addEthereumChain` (on error 4902) handle network alignment cleanly.
+

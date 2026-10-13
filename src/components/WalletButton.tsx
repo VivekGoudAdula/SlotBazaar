@@ -11,16 +11,16 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { formatEther } from "viem";
-import { useWallet } from "../lib/wallet.js";
+import {
+  useWallet,
+  TIRAMISU_CHAIN_ID_DEC,
+} from "../lib/wallet.js";
 import { getArkivPublicClient } from "../lib/arkiv.js";
-
-const TIRAMISU_CHAIN_ID_DEC = 7738577;
-const TIRAMISU_CHAIN_ID_HEX = "0x761591";
 
 const NETWORK_DETAILS = {
   name: "Arkiv Tiramisu",
   rpc: "https://rpc.tiramisu.db-chain.testnet.arkiv.network",
-  chainId: "7738577",
+  chainId: String(TIRAMISU_CHAIN_ID_DEC),
   symbol: "GLM",
   explorer: "https://tiramisu.explorer.arkiv.network",
   faucet: "https://hub.arkiv.network/faucet",
@@ -31,18 +31,25 @@ function truncateAddress(addr: string): string {
 }
 
 export function WalletButton(): React.ReactElement {
-  const { status, address, connect, disconnect } = useWallet();
+  const {
+    status,
+    address,
+    connect,
+    disconnect,
+    isWrongNetwork,
+    switchNetwork,
+    hasProvider,
+  } = useWallet();
 
   const [helpOpen, setHelpOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [balance, setBalance] = useState<string | null>(null);
-  const [isWrongNetwork, setIsWrongNetwork] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // ─── Fetch GLM Balance & Check Network ──────────────────────────────────────
-  const fetchBalanceAndNetwork = useCallback(async () => {
+  // ─── Fetch GLM Balance ─────────────────────────────────────────────────────
+  const fetchBalance = useCallback(async () => {
     if (!address) return;
     try {
       const publicClient = getArkivPublicClient();
@@ -52,27 +59,17 @@ export function WalletButton(): React.ReactElement {
     } catch {
       setBalance(null);
     }
-
-    if (typeof window !== "undefined" && (window as unknown as { ethereum?: { chainId?: string } }).ethereum) {
-      const eth = (window as unknown as { ethereum: { chainId?: string } }).ethereum;
-      const currentChain = eth.chainId;
-      if (currentChain && parseInt(currentChain, 16) !== TIRAMISU_CHAIN_ID_DEC) {
-        setIsWrongNetwork(true);
-      } else {
-        setIsWrongNetwork(false);
-      }
-    }
   }, [address]);
 
   useEffect(() => {
     if (status === "connected" && address) {
-      void fetchBalanceAndNetwork();
-      const interval = setInterval(fetchBalanceAndNetwork, 10_000);
+      void fetchBalance();
+      const interval = setInterval(fetchBalance, 10_000);
       return () => clearInterval(interval);
     } else {
       setBalance(null);
     }
-  }, [status, address, fetchBalanceAndNetwork]);
+  }, [status, address, fetchBalance]);
 
   // ─── Outside Click & Escape Handlers ────────────────────────────────────────
   useEffect(() => {
@@ -116,38 +113,24 @@ export function WalletButton(): React.ReactElement {
     copyToClipboard(text, "all");
   }, [copyToClipboard]);
 
-  // ─── Switch Network Helper ──────────────────────────────────────────────────
-  const switchNetwork = useCallback(async () => {
-    if (typeof window === "undefined") return;
-    const eth = (window as unknown as { ethereum?: { request: (args: unknown) => Promise<unknown> } }).ethereum;
-    if (!eth) return;
-    try {
-      await eth.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: TIRAMISU_CHAIN_ID_HEX }],
-      });
-      setIsWrongNetwork(false);
-    } catch (err: unknown) {
-      const code = (err as { code?: number })?.code;
-      if (code === 4902) {
-        try {
-          await eth.request({
-            method: "wallet_addEthereumChain",
-            params: [{
-              chainId: TIRAMISU_CHAIN_ID_HEX,
-              chainName: NETWORK_DETAILS.name,
-              rpcUrls: [NETWORK_DETAILS.rpc],
-              nativeCurrency: { name: "GLM", symbol: "GLM", decimals: 18 },
-              blockExplorerUrls: [NETWORK_DETAILS.explorer],
-            }],
-          });
-          setIsWrongNetwork(false);
-        } catch {
-          // User rejected
-        }
-      }
-    }
-  }, []);
+  // ─── UNINSTALLED VIEW ───────────────────────────────────────────────────────
+  if (!hasProvider || status === "not_installed") {
+    return (
+      <div className="wallet-container" ref={containerRef}>
+        <a
+          id="wallet-btn-install"
+          className="wallet-btn wallet-btn--connect"
+          href="https://metamask.io/download/"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Install MetaMask extension"
+        >
+          <span aria-hidden="true">🦊</span>
+          <span>Install MetaMask ↗</span>
+        </a>
+      </div>
+    );
+  }
 
   // ─── CONNECTED VIEW ─────────────────────────────────────────────────────────
   if (status === "connected" && address) {

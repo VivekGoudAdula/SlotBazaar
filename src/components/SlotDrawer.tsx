@@ -85,6 +85,12 @@ export function SlotDrawer({ slot, onClose }: SlotDrawerProps): React.ReactEleme
   const walletConnected = wallet.status === "connected";
   const noWalletTip = "Connect MetaMask to use this action";
 
+  const isMySlot = Boolean(
+    wallet.address &&
+    (slot.creator.toLowerCase() === wallet.address.toLowerCase() ||
+     slot.owner.toLowerCase() === wallet.address.toLowerCase())
+  );
+
   return (
     <>
       {/* Backdrop */}
@@ -114,9 +120,26 @@ export function SlotDrawer({ slot, onClose }: SlotDrawerProps): React.ReactEleme
           </button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 className="drawer__title">{slot.title}</h2>
-            {slot.synthetic && (
-              <span className="synthetic-badge">⚗ Synthetic demo data</span>
-            )}
+            <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
+              {slot.synthetic && (
+                <span className="synthetic-badge">⚗ Synthetic demo data</span>
+              )}
+              {isMySlot && (
+                <span
+                  className="my-slot-badge"
+                  style={{
+                    background: "var(--c-marigold)",
+                    color: "var(--c-ink)",
+                    border: "var(--border)",
+                    padding: "2px 6px",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                  }}
+                >
+                  ★ Your Slot
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -219,6 +242,11 @@ export function SlotDrawer({ slot, onClose }: SlotDrawerProps): React.ReactEleme
               <div className="proof-val-wrap">
                 <div className="drawer__key-box" style={{ fontSize: "0.65rem" }} aria-label={`Creator: ${slot.creator}`}>
                   {slot.creator}
+                  {isMySlot && (
+                    <span style={{ marginLeft: 6, color: "var(--c-teal)", fontWeight: 700 }}>
+                      (You)
+                    </span>
+                  )}
                 </div>
                 <CopyButton value={slot.creator} label="creator address" />
               </div>

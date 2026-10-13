@@ -25,9 +25,17 @@ export interface HeaderProps {
 
 export function Header({ onPostSlot }: HeaderProps): React.ReactElement {
   const { blockNumber, loading: chainLoading, error: chainError } = useChainHead();
-  const { status, address } = useWallet();
+  const { status, address, isWrongNetwork, hasProvider } = useWallet();
 
-  const isConnected = status === "connected" && Boolean(address);
+  const isConnectedOnTiramisu = status === "connected" && Boolean(address) && !isWrongNetwork;
+
+  const postSlotTitle = !hasProvider
+    ? "Install MetaMask to post a slot"
+    : status !== "connected" || !address
+    ? "Connect wallet to post a slot"
+    : isWrongNetwork
+    ? "Switch to Arkiv Tiramisu to post a slot"
+    : "Post a new slot to Arkiv";
 
   const blockLabel = chainError
     ? "RPC err"
@@ -73,9 +81,9 @@ export function Header({ onPostSlot }: HeaderProps): React.ReactElement {
         <button
           id="header-post-slot-btn"
           className="header__post-btn"
-          disabled={!isConnected}
+          disabled={!isConnectedOnTiramisu}
           onClick={onPostSlot}
-          title={isConnected ? "Post a new slot to Arkiv" : "Connect wallet to post a slot"}
+          title={postSlotTitle}
           aria-label="Post a slot"
         >
           + Post a slot

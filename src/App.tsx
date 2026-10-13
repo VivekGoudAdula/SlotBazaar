@@ -13,9 +13,10 @@
  *  └────────────────────────────────────────────────────────────┘
  */
 
-import React, { useState, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 
+import type { Hex } from "viem";
 import { WalletProvider, useWallet } from "./lib/wallet.js";
 import { useLiveSlots }              from "./hooks/useLiveSlots.js";
 import type { SlotEntity }           from "./lib/arkiv.js";
@@ -24,6 +25,7 @@ import { Header }                        from "./components/Header.js";
 import { FilterBar, type FilterState }   from "./components/FilterBar.js";
 import { MapView }                       from "./components/MapView.js";
 import { SlotDrawer }                    from "./components/SlotDrawer.js";
+import { PostSlotModal }                 from "./components/PostSlotModal.js";
 import { useNow }                        from "./hooks/useNow.js";
 import { formatTimeLeft }                from "./lib/time.js";
 
@@ -37,6 +39,7 @@ interface SlideOverListProps {
   slots: SlotEntity[];
   onSelect: (s: SlotEntity) => void;
   onFlyTo: (s: SlotEntity) => void;
+  userAddress?: string | null;
 }
 
 function SlideOverList({
@@ -45,6 +48,7 @@ function SlideOverList({
   slots,
   onSelect,
   onFlyTo,
+  userAddress,
 }: SlideOverListProps): React.ReactElement | null {
   const now = useNow();
 
@@ -92,6 +96,11 @@ function SlideOverList({
             sorted.map((s) => {
               const remaining = s.endsAt - now;
               const isCritical = remaining > 0 && remaining <= 15 * 60;
+              const isMine = Boolean(
+                userAddress &&
+                (s.creator.toLowerCase() === userAddress.toLowerCase() ||
+                 s.owner.toLowerCase() === userAddress.toLowerCase())
+              );
               return (
                 <div
                   key={s.key}
@@ -116,7 +125,26 @@ function SlideOverList({
                     </span>
                   </div>
 
-                  <div className="slideover-card__title">{s.title}</div>
+                  <div className="slideover-card__title">
+                    {s.title}
+                    {isMine && (
+                      <span
+                        className="my-slot-badge"
+                        style={{
+                          marginLeft: 6,
+                          background: "var(--c-marigold)",
+                          color: "var(--c-ink)",
+                          border: "var(--border)",
+                          padding: "1px 5px",
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
+                          verticalAlign: "middle",
+                        }}
+                      >
+                        ★ You
+                      </span>
+                    )}
+                  </div>
 
                   <div className="slideover-card__footer">
                     <span className="slideover-card__cluster">📍 {s.cluster}</span>
@@ -129,45 +157,6 @@ function SlideOverList({
         </div>
       </aside>
     </>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST SLOT MODAL (Simple feedback when Post a Slot is clicked)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function PostSlotModal({ open, onClose }: { open: boolean; onClose: () => void }): React.ReactElement | null {
-  if (!open) return null;
-  return (
-    <div className="post-modal-backdrop" onClick={onClose}>
-      <div
-        className="post-modal"
-        role="dialog"
-        aria-label="Post a slot info"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="post-modal__header">
-          <h3>Post a New Slot</h3>
-          <button className="post-modal__close" onClick={onClose} aria-label="Close modal">✕</button>
-        </div>
-        <div className="post-modal__body">
-          <p>
-            Connected wallet detected on <strong>Arkiv Tiramisu</strong>.
-          </p>
-          <p>
-            Slot posting broadcasts a new immutable <code>slot</code> entity with attributes <code>category</code>, <code>cluster</code>, <code>starts_at</code>, <code>ends_at</code>, and geo-coordinates directly to the Arkiv chain.
-          </p>
-          <div className="post-modal__note">
-            💡 For synthetic demo slots, you can run the seed script:
-            <br />
-            <code>npx tsx scripts/seed.ts --count 5 --yes</code>
-          </div>
-        </div>
-        <div className="post-modal__footer">
-          <button className="post-modal__btn" onClick={onClose}>Got it</button>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -212,9 +201,21 @@ function AppInner(): React.ReactElement {
   const [isPostOpen, setIsPostOpen]     = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<SlotEntity | null>(null);
   const [flyTarget, setFlyTarget]       = useState<[number, number] | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error" | "info";
+    link?: { text: string; url: string };
+  } | null>(null);
+
   const flyRef = useRef<[number, number] | null>(null);
 
   const now = useNow();
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 8000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   /** Unique sorted cluster names */
   const clusters = useMemo<string[]>(
@@ -258,6 +259,30 @@ function AppInner(): React.ReactElement {
     handleSelect(slot);
     handleFlyTo(slot);
   }, [handleSelect, handleFlyTo]);
+
+  const handleSlotCreated = useCallback(
+    ({
+      key,
+      slot,
+    }: {
+      key: Hex;
+      lat: number;
+      lon: number;
+      slot: SlotEntity;
+    }) => {
+      refresh();
+      handleSelectAndFly(slot);
+      setToast({
+        message: "Slot successfully posted to Arkiv!",
+        type: "success",
+        link: {
+          text: `View Entity (${key.slice(0, 8)}…) ↗`,
+          url: `https://tiramisu.explorer.arkiv.network/entity/${key}`,
+        },
+      });
+    },
+    [refresh, handleSelectAndFly]
+  );
 
   return (
     <div className="app-viewport">
@@ -317,14 +342,57 @@ function AppInner(): React.ReactElement {
           slots={filteredSlots}
           onSelect={handleSelect}
           onFlyTo={handleFlyTo}
+          userAddress={address}
         />
       </main>
 
       {/* Slot Drawer modal for detailed booking / viewing */}
       <SlotDrawer slot={selectedSlot} onClose={handleClose} />
 
-      {/* Post Slot Info Modal */}
-      <PostSlotModal open={isPostOpen} onClose={() => setIsPostOpen(false)} />
+      {/* Post Slot Modal */}
+      <PostSlotModal
+        open={isPostOpen}
+        onClose={() => setIsPostOpen(false)}
+        onSlotCreated={handleSlotCreated}
+      />
+
+      {/* Toast Notification Container */}
+      {toast && (
+        <div className="toast-container" role="status" aria-live="polite">
+          <div className={`toast toast--${toast.type}`}>
+            <div style={{ flex: 1 }}>
+              <div>{toast.message}</div>
+              {toast.link && (
+                <div style={{ marginTop: 4 }}>
+                  <a
+                    href={toast.link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "var(--c-paper)", textDecoration: "underline", fontSize: "0.75rem" }}
+                  >
+                    {toast.link.text}
+                  </a>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setToast(null)}
+              aria-label="Dismiss notification"
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--c-paper)",
+                cursor: "pointer",
+                padding: 0,
+                fontSize: "1rem",
+                lineHeight: 1,
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
