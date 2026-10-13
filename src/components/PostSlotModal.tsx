@@ -38,7 +38,7 @@ import {
   type SlotFormValues,
 } from "../lib/slotValidation.js";
 
-import { CLUSTERS } from "../lib/clusters.js";
+import { findNearestCluster, type ClusterDef } from "../lib/clusters.js";
 
 const EXPLORER_BASE = "https://explorer.tiramisu.arkiv.network";
 const FAUCET_URL = "https://hub.arkiv.network/faucet";
@@ -51,6 +51,14 @@ export type StepperStage =
   | "confirmed"
   | "indexing"
   | "success";
+
+export type GeoStatus =
+  | "idle"
+  | "detecting"
+  | "granted"
+  | "denied"
+  | "unsupported"
+  | "error";
 
 export interface PostSlotModalProps {
   open: boolean;
@@ -79,9 +87,6 @@ export function PostSlotModal({
   // Unique accessible IDs
   const titleId = useId();
   const descId = useId();
-  const clusterId = useId();
-  const latId = useId();
-  const lonId = useId();
   const startsAtId = useId();
   const endsAtId = useId();
   const piiCheckId = useId();
@@ -90,9 +95,6 @@ export function PostSlotModal({
   const [category, setCategory] = useState<SlotCategory>("machine");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [cluster, setCluster] = useState("jaipur");
-  const [lat, setLat] = useState(26.9124);
-  const [lon, setLon] = useState(75.7873);
   const [startsAtStr, setStartsAtStr] = useState(() => toDateTimeLocalString(new Date()));
   const [endsAtStr, setEndsAtStr] = useState(() => {
     const d = new Date(Date.now() + 4 * 3600 * 1000); // +4h default
@@ -100,6 +102,15 @@ export function PostSlotModal({
   });
   const [priceBand, setPriceBand] = useState<PriceBand>("mid");
   const [confirmedNoPii, setConfirmedNoPii] = useState(false);
+
+  // Auto-detected Geolocation states (strictly permission-based, no manual entry)
+  const [geoStatus, setGeoStatus] = useState<GeoStatus>("idle");
+  const [geoErrorMsg, setGeoErrorMsg] = useState<string | null>(null);
+  const [lat, setLat] = useState<number | null>(null);
+  const [lon, setLon] = useState<number | null>(null);
+  const [cluster, setCluster] = useState<string>("");
+  const [nearestClusterDef, setNearestClusterDef] = useState<ClusterDef | null>(null);
+  const [geoAccuracyMeters, setGeoAccuracyMeters] = useState<number | null>(null);
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -115,7 +126,63 @@ export function PostSlotModal({
   const [indexingTimeoutWarning, setIndexingTimeoutWarning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Reset form when modal opens
+  /**
+   * Request browser geolocation permission and auto-detect coordinates & nearest cluster.
+   */
+  const requestLocation = useCallback(() => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      setGeoStatus("unsupported");
+      setGeoErrorMsg("Geolocation is not supported by your browser.");
+      return;
+    }
+
+    setGeoStatus("detecting");
+    setGeoErrorMsg(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const userLat = position.coords.latitude;
+        const userLon = position.coords.longitude;
+        const accuracy = position.coords.accuracy;
+
+        const nearest = findNearestCluster(userLat, userLon);
+
+        setLat(userLat);
+        setLon(userLon);
+        setCluster(nearest.name);
+        setNearestClusterDef(nearest);
+        setGeoAccuracyMeters(Math.round(accuracy));
+        setGeoStatus("granted");
+        setGeoErrorMsg(null);
+      },
+      (err) => {
+        setGeoStatus("denied");
+        if (err.code === 1) {
+          // PERMISSION_DENIED
+          setGeoErrorMsg(
+            "Location access was denied. SlotBazaar requires browser location permission to auto-pin your slot to the live industrial map."
+          );
+        } else if (err.code === 2) {
+          // POSITION_UNAVAILABLE
+          setGeoErrorMsg(
+            "GPS location signal is unavailable. Please check your device location services and retry."
+          );
+        } else if (err.code === 3) {
+          // TIMEOUT
+          setGeoErrorMsg("Location detection request timed out. Please retry.");
+        } else {
+          setGeoErrorMsg(err.message || "Failed to auto-detect location.");
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 30000,
+      }
+    );
+  }, []);
+
+  // Reset form & auto-trigger location detection when modal opens
   useEffect(() => {
     if (open) {
       setStage("idle");
@@ -131,19 +198,11 @@ export function PostSlotModal({
       const now = new Date();
       setStartsAtStr(toDateTimeLocalString(now));
       setEndsAtStr(toDateTimeLocalString(new Date(now.getTime() + 4 * 3600 * 1000)));
-    }
-  }, [open]);
 
-  // Handle cluster change -> prefill coords
-  const handleClusterChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    setCluster(val);
-    const found = CLUSTERS.find((c) => c.name === val);
-    if (found) {
-      setLat(found.lat);
-      setLon(found.lon);
+      // Auto-detect location immediately
+      requestLocation();
     }
-  }, []);
+  }, [open, requestLocation]);
 
   // Fetch balance for error message if needed
   useEffect(() => {
@@ -179,8 +238,8 @@ export function PostSlotModal({
   const endsAtSec = Math.floor(new Date(endsAtStr).getTime() / 1000);
 
   // Computed integer attributes
-  const latE4 = Math.round(lat * 10000);
-  const lonE4 = Math.round(lon * 10000);
+  const latE4 = lat !== null ? Math.round(lat * 10000) : null;
+  const lonE4 = lon !== null ? Math.round(lon * 10000) : null;
 
   /**
    * Main form submission flow
@@ -193,6 +252,15 @@ export function PostSlotModal({
     setIsSubmitting(true);
     setErrorNotice(null);
     setErrorCode(null);
+
+    // 0. Auto-detected Location Guard
+    if (geoStatus !== "granted" || lat === null || lon === null || !cluster) {
+      setErrorNotice(
+        "Auto-detected location is required. Please allow browser location access before posting."
+      );
+      setIsSubmitting(false);
+      return;
+    }
 
     // 1. Validate Form Values
     const formValues: SlotFormValues = {
@@ -670,79 +738,164 @@ export function PostSlotModal({
               )}
             </div>
 
-            {/* Cluster dropdown + Coordinates */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-              <div style={{ gridColumn: "1 / -1" }}>
-                <label htmlFor={clusterId} style={{ display: "block", fontWeight: 700, marginBottom: 4, fontSize: "0.85rem" }}>
-                  Cluster / City <span style={{ color: "var(--c-vermilion)" }}>*</span>
-                </label>
-                <select
-                  id={clusterId}
-                  disabled={isSubmitting}
-                  value={cluster}
-                  onChange={handleClusterChange}
-                  style={{
-                    width: "100%",
-                    padding: "8px 10px",
-                    border: "var(--border)",
-                    background: "var(--c-paper)",
-                    fontFamily: "inherit",
-                    fontSize: "0.88rem",
-                  }}
-                >
-                  {CLUSTERS.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.label} ({c.lat.toFixed(4)}, {c.lon.toFixed(4)})
-                    </option>
-                  ))}
-                </select>
+            {/* Auto-detected Location Card (Permission-based GPS, No manual entry) */}
+            <div
+              style={{
+                border:
+                  geoStatus === "denied" || geoStatus === "error" || geoStatus === "unsupported"
+                    ? "2px solid var(--c-vermilion)"
+                    : geoStatus === "granted"
+                    ? "2px solid var(--c-forest)"
+                    : "var(--border)",
+                background:
+                  geoStatus === "denied" || geoStatus === "error" || geoStatus === "unsupported"
+                    ? "#fff5f5"
+                    : geoStatus === "granted"
+                    ? "var(--c-paper-dark)"
+                    : "var(--c-paper)",
+                padding: "12px 14px",
+                boxShadow: "var(--shadow-sm)",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: "1.05rem" }}>📍</span>
+                  <span style={{ fontWeight: 800, fontSize: "0.88rem", letterSpacing: "-0.01em" }}>
+                    Slot Location <span style={{ fontSize: "0.75rem", fontWeight: 600, opacity: 0.7 }}>(Auto-Detected GPS)</span>
+                  </span>
+                </div>
+
+                {geoStatus === "granted" && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      color: "var(--c-forest)",
+                      background: "#e8f5e9",
+                      padding: "2px 8px",
+                      border: "1px solid var(--c-forest)",
+                    }}
+                  >
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--c-forest)" }} />
+                    GPS Verified
+                  </span>
+                )}
+
+                {geoStatus === "detecting" && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      color: "var(--c-navy)",
+                      background: "var(--c-sand)",
+                      padding: "2px 8px",
+                    }}
+                  >
+                    <span className="chain-pulse" style={{ width: 6, height: 6 }} />
+                    Detecting GPS…
+                  </span>
+                )}
               </div>
 
-              <div>
-                <label htmlFor={latId} style={{ display: "block", fontWeight: 700, marginBottom: 4, fontSize: "0.85rem" }}>
-                  Latitude (lat_e4: {latE4})
-                </label>
-                <input
-                  id={latId}
-                  type="number"
-                  step="0.0001"
-                  disabled={isSubmitting}
-                  value={lat}
-                  onChange={(e) => setLat(parseFloat(e.target.value) || 0)}
-                  style={{
-                    width: "100%",
-                    padding: "8px 10px",
-                    border: errors.lat ? "2px solid var(--c-vermilion)" : "var(--border)",
-                    background: "var(--c-paper)",
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "0.85rem",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
+              {geoStatus === "detecting" && (
+                <div style={{ fontSize: "0.82rem", color: "var(--c-ink)", opacity: 0.85, padding: "6px 0" }}>
+                  Requesting browser location permission to automatically pin your capacity…
+                </div>
+              )}
 
-              <div>
-                <label htmlFor={lonId} style={{ display: "block", fontWeight: 700, marginBottom: 4, fontSize: "0.85rem" }}>
-                  Longitude (lon_e4: {lonE4})
-                </label>
-                <input
-                  id={lonId}
-                  type="number"
-                  step="0.0001"
-                  disabled={isSubmitting}
-                  value={lon}
-                  onChange={(e) => setLon(parseFloat(e.target.value) || 0)}
-                  style={{
-                    width: "100%",
-                    padding: "8px 10px",
-                    border: errors.lon ? "2px solid var(--c-vermilion)" : "var(--border)",
-                    background: "var(--c-paper)",
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "0.85rem",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
+              {geoStatus === "granted" && lat !== null && lon !== null && nearestClusterDef && (
+                <div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: "10px", marginTop: 4 }}>
+                    <div style={{ background: "var(--c-paper)", padding: "8px 10px", border: "1px solid var(--c-ink)" }}>
+                      <div style={{ fontSize: "0.7rem", textTransform: "uppercase", fontWeight: 700, opacity: 0.65 }}>
+                        Matched Industrial Hub
+                      </div>
+                      <div style={{ fontWeight: 800, fontSize: "0.92rem", color: "var(--c-ink)", marginTop: 2 }}>
+                        {nearestClusterDef.label}
+                      </div>
+                      <div style={{ fontSize: "0.73rem", opacity: 0.75 }}>
+                        {nearestClusterDef.state} • {nearestClusterDef.industry}
+                      </div>
+                    </div>
+
+                    <div style={{ background: "var(--c-paper)", padding: "8px 10px", border: "1px solid var(--c-ink)" }}>
+                      <div style={{ fontSize: "0.7rem", textTransform: "uppercase", fontWeight: 700, opacity: 0.65 }}>
+                        GPS Coordinates
+                      </div>
+                      <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.82rem", fontWeight: 700, marginTop: 2 }}>
+                        {lat.toFixed(4)}°, {lon.toFixed(4)}°
+                      </div>
+                      <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem", opacity: 0.7 }}>
+                        e4: {latE4}, {lonE4} {geoAccuracyMeters ? `(±${geoAccuracyMeters}m)` : ""}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                    <span style={{ fontSize: "0.72rem", opacity: 0.7, fontStyle: "italic" }}>
+                      Auto-detected via device GPS. Manual coordinate entry disabled.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={requestLocation}
+                      disabled={isSubmitting}
+                      style={{
+                        background: "none",
+                        border: "1px solid var(--c-ink)",
+                        padding: "3px 8px",
+                        fontSize: "0.72rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      🔄 Refresh GPS
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {(geoStatus === "denied" || geoStatus === "error" || geoStatus === "unsupported") && (
+                <div style={{ marginTop: 4 }}>
+                  <div style={{ color: "var(--c-vermilion)", fontSize: "0.82rem", lineHeight: 1.4, fontWeight: 600 }}>
+                    {geoErrorMsg || "Location permission required to post a slot."}
+                  </div>
+                  <div style={{ fontSize: "0.75rem", opacity: 0.8, marginTop: 4, lineHeight: 1.35 }}>
+                    To prevent location spoofing and ensure authentic capacity on the map, SlotBazaar automatically detects your device coordinates upon permission.
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={requestLocation}
+                      disabled={isSubmitting}
+                      className="btn-secondary"
+                      style={{
+                        fontSize: "0.8rem",
+                        padding: "6px 12px",
+                        fontWeight: 700,
+                        background: "var(--c-paper)",
+                        border: "2px solid var(--c-vermilion)",
+                        color: "var(--c-vermilion)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      📍 Allow / Retry Location Access
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {errors.lat && (
+                <div style={{ color: "var(--c-vermilion)", fontSize: "0.75rem", marginTop: 4 }}>
+                  {errors.lat}
+                </div>
+              )}
             </div>
 
             {/* Time schedule */}
@@ -868,11 +1021,11 @@ export function PostSlotModal({
                 type="submit"
                 id="submit-post-slot-btn"
                 className="post-modal__btn"
-                disabled={isSubmitting || Boolean(titlePii) || Boolean(descPii)}
+                disabled={isSubmitting || geoStatus !== "granted" || Boolean(titlePii) || Boolean(descPii)}
                 style={{
                   minHeight: 44,
-                  opacity: isSubmitting ? 0.7 : 1,
-                  cursor: isSubmitting ? "not-allowed" : "pointer",
+                  opacity: isSubmitting || geoStatus !== "granted" ? 0.7 : 1,
+                  cursor: isSubmitting || geoStatus !== "granted" ? "not-allowed" : "pointer",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 8,
@@ -883,6 +1036,10 @@ export function PostSlotModal({
                     <span className="chain-pulse" style={{ width: 8, height: 8 }} />
                     Broadcasting…
                   </>
+                ) : geoStatus === "detecting" ? (
+                  "Detecting Location…"
+                ) : geoStatus === "denied" || geoStatus === "error" || geoStatus === "unsupported" ? (
+                  "Location Permission Required"
                 ) : (
                   "Post to Arkiv"
                 )}
