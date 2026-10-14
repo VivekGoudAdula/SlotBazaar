@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/logo.png" alt="SlotBazaar Logo" width="340" />
+  <img src="public/og-image.png" alt="SlotBazaar — Real-Time Expiring Industrial Capacity & Portable MSME Reputation on Arkiv" width="100%" />
 </p>
 
 # SlotBazaar
