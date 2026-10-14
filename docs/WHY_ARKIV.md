@@ -12,8 +12,8 @@ When building a decentralized bazaar for perishable SME capacity (machine hours,
 
 ### A. What Breaks on PostgreSQL / Centralized Databases
 * **Operator Monopoly & Feed Manipulation:** In a centralized database, the platform operator controls what users see. The operator can shadow-ban competing MSMEs, artificially demote listings, or front-run attractive time-slot reservations.
-* **Revision of Historical Truth:** Centralized database administrators can alter past job records or fabricate artificial 5-star seller ratings. On SlotBazaar, job completions are sealed by two cryptographic signatures (seller and buyer) stored immutably on Arkiv; even the SlotBazaar team cannot alter a merchant's verified reputation.
-* **Platform Extortion (The Illustrative 20–30% Cut):** Web2 aggregators in India (Urban Company, JustDial, IndiaMART) capture network effects and extract an illustrative 20–30% broker fees. A decentralized data layer eliminates platform rent extraction.
+* **Revision of Historical Truth:** Centralized database administrators can alter past job records or fabricate artificial 5-star seller ratings. On SlotBazaar, job completions are sealed by two cryptographic signatures (seller and buyer): SlotBazaar's front end cannot forge another wallet's signed entity; Tiramisu currently has a single sequencer, so Arkiv node operators remain a trust assumption.
+* **Platform Intermediary Fees:** Traditional Web2 aggregators capture network effects and extract steep broker commissions. A decentralized data layer eliminates platform rent extraction.
 
 ### B. What Breaks on IPFS & Arweave
 * **No Dynamic Attribute Querying:** IPFS and Arweave store static blobs indexed by Content Identifier (CID). You cannot execute structured range queries such as:
@@ -28,8 +28,8 @@ When building a decentralized bazaar for perishable SME capacity (machine hours,
 * **Zero Native Entity Expiration:** IPFS content persists as long as pinned. Perishable time slots (e.g., a 2-hour CNC lathe slot expiring at 2:00 PM) would pollute IPFS storage indefinitely, forcing clients to download gigabytes of dead slots.
 
 ### C. What Breaks on The Graph / Subgraphs
-* **Subgraphs are Event Indexers, Not Application Data Stores:** The Graph indexes Ethereum contract event logs into GraphQL. It cannot receive direct data writes from browser clients. Posting a time slot would require invoking an EVM smart contract on L1/L2, paying high Ethereum or Arbitrum gas fees ($0.20–$5.00 per slot) for data that expires in 3 hours.
-* **Lagging Indexer Latency:** Subgraph indexing pipelines often lag by multiple blocks, breaking real-time reservation races where the earliest confirmed block must claim the slot.
+* **Subgraphs are Event Indexers, Not Application Data Stores:** The Graph indexes Ethereum contract event logs into GraphQL. It cannot receive direct data writes from browser clients. Posting a time slot would require smart contract execution on an L1/L2 and subsequent indexing pipelines for temporary data that expires in a few hours.
+* **Indexer Latency:** Subgraph indexing pipelines introduce delay between block confirmation and query availability, whereas Arkiv index updates are near-instantaneous.
 
 ### D. What Breaks on a Custom Server / REST API
 * **Trust Dependency:** If the startup running the API ceases operations or suffers a database wipe, small business merchants lose their verified reputation and trade histories. With Arkiv, any developer can fork the open-source front-end and immediately query the exact same on-chain state without our permission.
@@ -94,3 +94,5 @@ In adherence to hackathon friction rules, we document existing protocol constrai
    * Today, Arkiv Tiramisu runs a single sequencer node. Production mainnet deployment will require decentralized block validation to ensure high availability under network partitions.
 3. **Public Unencrypted Metadata:**
    * All entity payloads on Tiramisu are publicly readable. While suitable for open capacity bazaars, confidential corporate booking contracts would require client-side zero-knowledge proofs or threshold encryption.
+4. **No In-App Contact Channel:**
+   * SlotBazaar does not provide an in-app messaging or contact channel. Buyers and sellers coordinate job details and physical handover out of band. No personal data (phone numbers, emails, addresses, GSTIN, Aadhaar) is permitted or stored on Arkiv.

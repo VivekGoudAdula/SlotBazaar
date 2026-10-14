@@ -8,61 +8,61 @@
 
 ## Friction Summary Table (Judges Quick Reference)
 
-### 1. Arkiv & SDK Friction
+### 1. Arkiv & SDK Friction (5 genuine findings)
 
-| ID | Title | Severity | Status | Upstream Issue Link |
+| ID | Title | Severity | Status | Upstream Issue Link / Note |
 |---|---|---|---|---|
-| **FR-001** | `InvalidPredicateError` not exported from root `@arkiv-network/sdk` | Minor | Workaround applied (import from `/query`) | [Issue #3 in issues-to-file.md](file:///c:/HACKATHONS/70.%20GLOBAL%20TOUR%20DEVCON%20-%20ARKIV/APP/arkiv/issues-to-file.md#issue-3-invalidpredicateerror-is-not-exported-from-the-main-arkiv-networksdk-entry-point-fr-001) |
-| **FR-003** | Uppercase attribute name burns gas before on-chain rejection | High | Fixed in app via client-side regex check | [Issue #1 in issues-to-file.md](file:///c:/HACKATHONS/70.%20GLOBAL%20TOUR%20DEVCON%20-%20ARKIV/APP/arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-silently-burns-gas-before-on-chain-rejection-fr-003) |
-| **FR-004** | Range query with mismatched numeric type returns 0 rows silently | Minor | Fixed via strict typed attributes | [Issue #2 in issues-to-file.md (Feature Request)](file:///c:/HACKATHONS/70.%20GLOBAL%20TOUR%20DEVCON%20-%20ARKIV/APP/arkiv/issues-to-file.md#issue-2-feature-request-developer-warning-or-type-inference-when-query-predicate-type-differs-from-stored-attribute-fr-004) |
-| **FR-010** | Gas estimation spikes during rapid sequential entity broadcasts | Medium | Solved via client-side retry & nonce sequence | Solved in client layer |
-| **FR-011** | `getEntity({ key })` throws `Invalid key value` for 64-hex entity keys | High | Workaround applied (`select().where()`) | Documented in FR-011 |
-| **FR-012** | Tiramisu RPC intermittently hangs on rapid consecutive queries | Medium | Solved via 8s timeout wrapper & backoff | Solved in client layer |
-| **FR-017** | Passive entity expiration emits no on-chain event logs | Medium | Solved via 1s client ticker with 4s margin | Documented in FR-017 |
+| **FR-001** | `InvalidPredicateError` not exported from main package | Minor | Workaround applied (import from `/query`) | [Issue #3 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-3-invalidpredicateerror-is-not-exported-from-the-main-arkiv-networksdk-entry-point-fr-001) |
+| **FR-004** | Wrong number type in range query silently returns 0 results | Minor | Solved via strict typed attributes in src/lib/arkiv.ts | [Issue #2 in arkiv/issues-to-file.md (Feature Request)](arkiv/issues-to-file.md#issue-2-feature-request-developer-warning-or-type-inference-when-query-predicate-type-differs-from-stored-attribute-fr-004) |
+| **FR-010** | `getBlockNumber()` not directly available on `PublicArkivClient` | Papercut | Solved via type cast in useChainHead.ts | Type gap on PublicArkivClient |
+| **FR-012** | Tiramisu RPC intermittently stalls on consecutive queries (reproduced once) | Low | Solved via 8s timeout wrapper & backoff | Observed once; not reproduced since |
+| **FR-017** | `watchEntityEvents` silently falls back to HTTP polling if fromBlock is supplied; passive expiration emits no log events | Medium | Solved via 1s client ticker with 4s margin | Documented in FR-017 (silent passive expiry) |
 
-### 2. Documentation Gaps
+### 2. Documentation Gaps (3 documentation items)
 
 | ID | Title | Severity | Status | Upstream Note |
 |---|---|---|---|---|
-| **FR-005** | Query index drops entity 2 blocks before SDK `expiresAt` block | Medium | Solved with 4s proactive pruning | Documented in FR-005 |
-| **FR-006** | `fromMinutes(10)` rounds up to next whole block boundary | Low | Solved; documented in schema | Documented in FR-006 |
-| **FR-016** | `explorer.tiramisu.arkiv.network` returns NXDOMAIN | Medium | Solved: migrated to `data.arkiv.network` | Documented in FR-016 |
+| **FR-005** | Query index expiration semantics at block boundary (retested without ends_at predicate) | Minor | Verified on-chain: 0-block drop without ends_at predicate | Documented in FR-005 |
+| **FR-006** | Typo in `InvalidPredicateError` message | Cosmetic | Cosmetic typo in SDK error string | Documented in FR-006 |
+| **FR-016** | explorer.tiramisu.arkiv.network returns NXDOMAIN; official explorer is data.arkiv.network/?q=${key}&chain=tiramisu | Medium | Solved: migrated to data.arkiv.network | Documented in FR-016 |
 
-### 3. Notes, Ecosystem & Not-Friction Items
+### 3. Notes, Ecosystem & Withdrawn Items (9 items)
 
 | ID | Title | Severity | Status | Upstream Note |
 |---|---|---|---|---|
-| **FR-002** | `BigInt` attribute values (`u64`) throw in standard `JSON.stringify` | Minor | Solved via custom BigInt replacer | Standard JavaScript BigInt behavior |
-| **FR-007** | `@types/leaflet.markercluster` type incompatibility with React 19 | Medium | Solved via custom component wrapper | React 19 ecosystem gap |
-| **FR-008** | MetaMask EIP-712 typed signature format on Tiramisu | Medium | Solved via viem `signTypedData` | Standard EVM tooling |
-| **FR-009** | Injected provider reload handling in Vite dev server | Low | Solved in `wallet.ts` | Front-end dev server behavior |
-| **FR-013** | Dynamic schema attributes allowed on-chain | Info | Not friction (valid Arkiv flexibility) | Documented update in FR-013 |
-| **FR-014** | Zero-balance edge case formatting in UI | Low | Solved in `WalletButton.tsx` | Front-end edge case |
-| **FR-015** | `fetchSlotsByTimeWindow` cut off valid future slots | Medium | Solved: replaced with client-side filter | Application query pattern |
+| **FR-002** | `BigInt` attribute values (`u64`) throw in `JSON.stringify` | Papercut | Solved via custom BigInt replacer | Standard JavaScript BigInt behavior |
+| **FR-003** | Uppercase attribute name rejected client-side with EntityMutationError (0 gas spent) | Minor | Rejected client-side; 0 gas burned | [Issue #1 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-silently-burns-gas-before-on-chain-rejection-fr-003) |
+| **FR-007** | `erasableSyntaxOnly` compiler flag rejects class constructor parameter properties | Papercut | Solved via constructor field assignment | TypeScript / Vite configuration |
+| **FR-008** | Native token transfers require standard viem client rather than Arkiv wallet client | Minor | Solved via viem client for transfers | Standard EVM tooling |
+| **FR-009** | `getReputation` cannot recover slot creator after slot expires | Medium | Solved by Schema v2 storing creator in booking | Schema v1 design limitation |
+| **FR-011** | `getEntity({ key })` throws `Invalid key value` (withdrawn: positional call `getEntity(key)` succeeds) | Withdrawn | Withdrawn: our own call-shape error ({ key } vs key) | Withdrawn; positional getEntity(key) succeeds |
+| **FR-013** | Storage rent between 14-day and 30-day entity expiry has zero marginal cost impact | Info / Note | 30-day expiry adopted for Schema v2 | Storage rent pricing observation |
+| **FR-014** | Same-block racing entity creations lack execution index in query attributes | Minor | Solved via deterministic tie-breaker in getWinningBooking | Block execution ordering observation |
+| **FR-015** | Schema v1 post-expiry reputation failure permanently solved by Schema v2 decoupling | Info / Note | Solved by Schema v2 decoupling | Architecture design note |
 
 ### Why We Trust These Entries (Empirical Reproduction Register)
 
-Every entry in this register was reproduced empirically at least twice on Arkiv Tiramisu (`chainId: 7738577`) or during static SDK evaluation. Notes that describe standard EVM/JS behavior rather than Arkiv issues are clearly labelled in Section 3 above.
+This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or during SDK evaluation. Run counts are recorded only where backed by logged script outputs or test executions; unproven historical counts are honestly labeled "not recorded".
 
 | Friction ID | Primary Reproduction Script / Test Harness | Run Count | Validation Result |
 |---|---|:---:|---|
 | **FR-001** | `scripts/query-slots.ts` | 2 | Confirmed `SyntaxError` on import from `@arkiv-network/sdk`. |
-| **FR-002** | `src/lib/arkiv.ts` + `scripts/test-phase4-unit.ts` | 5+ | Confirmed `TypeError: Do not know how to serialize a BigInt`. *(JS language behavior)* |
-| **FR-003** | `scripts/probe-upper-attr.ts` / `scripts/test-phase4-unit.ts` | 3 | Confirmed transaction confirmation but silent on-chain rejection with gas burned. |
-| **FR-004** | `scripts/query-slots.ts` | 3 | Confirmed 0 rows returned silently when passing `i32` predicate to `u64` attribute. |
-| **FR-005** | `scripts/retest-fr017-expiry-evidence.ts` & `measure-cost.ts` | 4 | Confirmed query index drops entity ~2 blocks before reported `expiresAtBlock`. |
-| **FR-006** | `scripts/measure-cost.ts` | 3 | Confirmed block height difference is ceiling-rounded. |
-| **FR-007** | `npm run build` | 4 | Confirmed TypeScript React 19 JSX typing clash. *(Ecosystem gap)* |
-| **FR-008** | In-app wallet signing tests | 3 | Confirmed MetaMask typed data parameter expectations. *(Standard EVM tooling)* |
-| **FR-009** | Browser manual tests in Chrome/Brave | 4 | Confirmed provider re-instantiation across Vite HMR. *(Dev server behavior)* |
-| **FR-010** | `scripts/seed.ts` (Phase 2) | 4 | Confirmed `estimateGas` spikes during tight loops without nonce spacing. |
-| **FR-011** | `scripts/retest-fr017-expiry-evidence.ts` | 5 | Confirmed `getEntity({ key })` throws `Invalid key value` on valid 64-hex keys. |
-| **FR-012** | `scripts/query-slots.ts` & foreground browser loads | 6 | Confirmed intermittent RPC socket stall on rapid burst queries. |
-| **FR-013** | Exploration in Phase 3 | 2 | Confirmed Arkiv allows dynamic schema evolution without prior registration. *(Info)* |
-| **FR-014** | In-app UI testing on 0-balance account | 2 | Confirmed `NaN GLM` display without BigInt balance fallback. *(Front-end bug)* |
-| **FR-015** | `scripts/query-slots.ts` | 3 | Confirmed compound time window query pruned future slots. *(Application query bug)* |
-| **FR-016** | `curl` to `https://explorer.tiramisu.arkiv.network` | 4 | Confirmed DNS query returned `NXDOMAIN`. |
-| **FR-017** | `scripts/retest-fr017-expiry-evidence.ts` & `verify-passive-expiry-batch.ts` | 3 | Confirmed 5/5 expiries emitted 0 EVM log events over 65s observation window. |
+| **FR-002** | `src/lib/arkiv.ts` | not recorded | Confirmed `TypeError: Do not know how to serialize a BigInt`. *(JS language behavior)* |
+| **FR-003** | Phase 9 controlled balance measurement | 1 | Confirmed SDK throws `EntityMutationError` client-side; `0` gas burned. |
+| **FR-004** | `scripts/query-slots.ts` | 2 | Confirmed 0 rows returned silently when passing `i32` predicate to `u64` attribute. |
+| **FR-005** | `scripts/retest-fr017-expiry-evidence.ts` & Phase 9 block audit | 2 | Confirmed query index drops at exact expiry block when no `ends_at` filter is passed. |
+| **FR-006** | SDK inspection | not recorded | Confirmed mismatched quote in error string. |
+| **FR-007** | `tsconfig.app.json` | not recorded | Confirmed `erasableSyntaxOnly` rejects constructor property syntax. *(TS/Vite config)* |
+| **FR-008** | In-app wallet signing | not recorded | Confirmed viem client required for standard EVM transfers. *(Standard EVM tooling)* |
+| **FR-009** | Schema v1 test | not recorded | Confirmed post-expiry slot creator unrecoverable in Schema v1; solved in Schema v2. |
+| **FR-010** | SDK TypeScript interface | not recorded | Confirmed `getBlockNumber` missing on `PublicArkivClient` type. |
+| **FR-011** | Phase 9 positional call verification | 3 | Confirmed positional `getEntity(key)` succeeds on 3 live entities; withdrawn as our own call-shape error. |
+| **FR-012** | `test-report.ts` run 1 | 1 | Intermittent RPC stall observed once; did not recur on subsequent runs. Severity: Low. |
+| **FR-013** | Phase 4 rent observation | not recorded | Confirmed storage rent delta between 14d and 30d is 0 wei on testnet. *(Info)* |
+| **FR-014** | Same-block booking races | not recorded | Confirmed identical block numbers handled via lexicographical entity key tie-breaker. *(Application rule)* |
+| **FR-015** | Schema v2 decoupling | not recorded | Confirmed Schema v2 solves post-expiry reputation by recording creator on booking. *(Architecture note)* |
+| **FR-016** | Phase 9 DNS check & HTTP GET | 1 | Confirmed `explorer.tiramisu` returns NXDOMAIN; `data.arkiv.network` returns HTTP 200 (single machine/network). |
+| **FR-017** | `scripts/test-ws-latency.ts` & `verify-passive-expiry-batch.ts` | 2 | Confirmed 5/5 expiries emitted 0 EVM log events over 65s observation window. |
 
 ---
 
@@ -145,41 +145,46 @@ Every entry in this register was reproduced empirically at least twice on Arkiv 
 
   > **Update 2026-10-13 IST:** Note: not Arkiv-specific. `BigInt` serialization is a JavaScript platform limitation that affects all libraries using `bigint`. The SDK choice to use native `bigint` for `u64` is correct; the workaround (custom replacer or `.toString()`) is the standard approach. Severity downgraded to **cosmetic**.
 
----
-
-### FR-003 · Uppercase attribute name rejected by network (not caught client-side)
+### FR-003 · Uppercase attribute name rejected client-side with EntityMutationError (0 gas spent)
 
 - **Date/time (IST):** 2026-10-12, ~21:25 IST
 - **Phase:** 0
 - **SDK + network versions:** `@arkiv-network/sdk@0.8.1`, viem `2.57.4`, Tiramisu testnet, chain ID `7738577`
 - **What I expected (cite the doc page or type declaration):**  
-  The SDK exports `InvalidAttributeNameError` and `validateAttributeName()`. The type declaration for `createEntity` specifies: `@throws {InvalidAttributeNameError} If a name violates the attribute-name grammar.` I expected attribute names with uppercase letters (e.g. `ProjectName`) to be validated client-side *before* any transaction is broadcast to the network.
+  The SDK exports `InvalidAttributeNameError` and `validateAttributeName()`. The type declaration for `createEntity` specifies: `@throws {InvalidAttributeNameError} If a name violates the attribute-name grammar.` I expected attribute names with uppercase letters (e.g. `UppercaseAttr`) to throw `InvalidAttributeNameError` client-side before any network interaction.
 - **What actually happened (exact error text or output):**  
-  The transaction was broadcast to the network, confirmed on-chain, and failed at the consensus/execution layer:
+  The SDK threw `EntityMutationError` synchronously during serialization before transaction broadcast:
   ```
-  EntityMutationError: Transaction failed: an attribute name holds "P" (0x50) at byte 0, which is outside the name charset ("A"-"Z", "a"-"z", "0"-"9", ".", "-" and "_", with a letter first)
-      at async main (scripts/edge-probes.ts:46:27)
+  EntityMutationError: Transaction failed: an attribute name holds "U" (0x55) at byte 0, which is outside the name charset ("A"-"Z", "a"-"z", "0"-"9", ".", "-" and "_", with a letter first)
   ```
-  This consumed test GLM gas for a transaction that was statically invalid.
+  No transaction was broadcast to the network and zero gas was burned.
 - **Steps to reproduce (exact commands/code, minimal):**
   ```ts
   await wallet.createEntity({
     payload: jsonToPayload({ note: "test" }),
     contentType: "application/json",
-    attributes: { ProjectName: str("test"), project: str("slotbazaar") },
+    attributes: { UppercaseAttr: str("test"), project: str("slotbazaar") },
     expires: ExpirationTime.fromMinutes(10),
   });
   ```
   Run: `npx tsx scripts/edge-probes.ts`
-  Reproduced twice on 2026-10-12.
-- **Severity:** major — consumes user gas for an entirely client-validatable error. On mainnet, this wastes real gas.
+- **Severity:** minor (developer DX / client validation error type; zero gas spent, never reached chain)
 - **Workaround used:**  
   Enforce strict lowercase snake_case attribute names in app code and pre-validate before calling SDK methods.
 - **Suggested fix:**  
-  Call `validateAttributeName(name)` inside `createEntity()` and `executeBatch()` before signing and submitting transactions.
-- **Upstream issue link:** (not filed)
+  Throw the specific `InvalidAttributeNameError` exported by the SDK rather than generic `EntityMutationError`.
+- **Upstream issue link:** [Issue #1 in issues-to-file.md](issues-to-file.md#issue-1-uppercase-attribute-name-silently-burns-gas-before-on-chain-rejection-fr-003)
 
-  > **Update 2026-10-13 IST:** Gas spend verified with `scripts/measure-cost.ts`. Two successful creates measured: **3h = 0.000141824 GLM, 24h = 0.000141840 GLM** — expiry duration has negligible cost impact (~0.000000016 GLM difference). The Phase 0 failed uppercase-attribute tx cannot be retroactively measured (delta not captured). **Severity remains: major.**
+  > **Update 2026-10-14 IST (Phase 9 Controlled Balance Measurement):**
+  > Controlled retest run against Tiramisu testnet wallet `0x5349...a6e9`:
+  > - **Wallet Balance Before:** `29919742669947485340 wei` (29.91974266994748534 GLM)
+  > - **Call:** `wallet.createEntity({ ..., attributes: { UppercaseAttr: str("val") } })`
+  > - **Result:** Threw `EntityMutationError: Transaction failed: an attribute name holds "U" (0x55) at byte 0, which is outside the name charset` client-side before transaction submission.
+  > - **Tx Hash:** None (never broadcast to RPC or mined on-chain)
+  > - **Gas Used:** `0`
+  > - **Wallet Balance After:** `29919742669947485340 wei` (29.91974266994748534 GLM)
+  > - **Balance Delta:** `0 wei / 0 GLM`
+  > - **Correction:** The original Phase 0 hypothesis that uppercase attributes burn gas on-chain was incorrect. The SDK serializes and validates client-side, throwing before broadcast. Zero gas was spent. **Severity downgraded to Minor.**
 
 ---
 
@@ -209,7 +214,7 @@ Every entry in this register was reproduced empirically at least twice on Arkiv 
   ```
   Run: `npx tsx scripts/query-slots.ts`
   Reproduced twice on 2026-10-12.
-- **Severity:** major — silent data omission. Developers querying with `i32` or `number` will receive 0 rows instead of a schema error.
+- **Severity:** minor (developer DX / silent data omission; documented tag matching)
 - **Workaround used:**  
   Strictly maintain schema typing wrappers (`u64` timestamps, `i32` coordinate factors) in a dedicated library layer (`src/lib/arkiv.ts`).
 - **Suggested fix:**  
@@ -220,47 +225,37 @@ Every entry in this register was reproduced empirically at least twice on Arkiv 
 
 ---
 
-### FR-005 · Query index purges expiring entity 1 block before target block
+### FR-005 · Query index expiration semantics at block boundary (retested without ends_at predicate)
 
 - **Date/time (IST):** 2026-10-12, 21:05 IST
 - **Phase:** 0
 - **SDK + network versions:** `@arkiv-network/sdk@0.8.1`, viem `2.57.4`, Tiramisu testnet, chain ID `7738577`
 - **What I expected:**  
-  An entity scheduled to expire at block `484782` would remain visible in queries through block `484782`, and disappear at block `484783`.
+  An entity scheduled to expire at block `targetBlock` would remain visible in queries through `targetBlock`, and disappear at `targetBlock + 1`.
 - **What actually happened (exact error text or output):**  
-  There is a 1-block asymmetry between the query index and `getEntity`:
-  - **At block 484781 (1 block BEFORE target block 484782)**:
-    - `getEntity`: succeeded! Returned entity with `expiresAt=484782`.
-    - `select().where(...)`: returned `0` entities (`entity no longer in results`).
-  - **At block 484797 (after target block 484782)**:
-    - `getEntity` threw:
-      ```
-      NoEntityFoundError: No live entity with key 0x40c9380d0ec3a4f3273544209436833fc1005bd7e61f5a37d755cabb8a0d3780. It was never created, or it has been deleted or has expired.
-      ```
-- **Steps to reproduce:**
-  Run `npx tsx scripts/expiry-test.ts` with 30s polling intervals until expiry.
-  Reproduced on 2026-10-12 in task-113.
-- **Severity:** minor / architectural note
+  In Phase 0, a 1-block asymmetry was observed when querying with `gt("ends_at", u64(nowSec))`. In Phase 2B, a 2-block gap was observed due to timestamp-to-block conversion margin.
+- **Severity:** minor / documentation note
 - **Workaround used:**  
-  Account for 1-block margin when calculating time-to-live or evaluating slot expiration on the UI.
+  Account for 4s (1–2 block) margin when calculating time-to-live or evaluating slot expiration on the UI.
 - **Suggested fix:**  
-  Document the exact query expiration boundary condition (whether `block < expiresAt` or `block <= expiresAt`).
+  Document the exact query expiration boundary condition (whether `block < expiresAt` or `block <= expiresAt`) and how timestamp predicates interact with block height.
 - **Upstream issue link:** (not filed)
 
-  > **Update 2026-10-13 IST:** FR-005 **RE-TESTED** at 1-second polling intervals using `scripts/fr005-expiry-retest.ts`. Full block-level table recorded in task-555.log. Key findings:
+  > **Update 2026-10-14 IST (Phase 9 Controlled Expiry Retest without ends_at Predicate):**
+  > Controlled retest executed on Tiramisu testnet using a query with **NO** `ends_at` predicate (filtered solely by `project="slotbazaar"` and `entity_type="slot"`), polling every block from 20 blocks before to 5 blocks after expiry alongside positional `publicClient.getEntity(entityKey)`:
+  > Target Expiry Block: #559429 (entity: `0x7f4b8f0653697a59...`)
   >
-  > | Block | query= | getEntity= | Note |
-  > |-------|--------|------------|------|
-  > | #508806 – #508824 | YES | error (Invalid key value) | Entity visible in query; getEntity errors throughout |
-  > | #508824 | NO | error | **Query went dark here** (wall 04:56:44, at exact ends_at Unix time) |
-  > | #508826 | NO | error | Entity expiresAt block per SDK |
-  > | #508831+ | NO | error | Both dark, error persists |
+  > | Block | Relative to Expiry | In Query Index (`select()`) | `getEntity(entityKey)` | Note |
+  > |---|---|:---:|:---:|---|
+  > | #559425 | -4 blocks (active) | YES | YES | Live and visible in both |
+  > | #559426 | -3 blocks (active) | YES | YES | Live and visible in both |
+  > | #559427 | -2 blocks (active) | YES | YES | Live and visible in both |
+  > | #559428 | -1 block (active)  | YES | YES | Live and visible in both |
+  > | #559429 | Expiry block       | NO  | NO  | Dropped from both simultaneously |
+  > | #559430 | +1 block (expired) | NO  | NO (`NoEntityFoundError`) | Pruned from chain state |
+  > | #559431 | +2 blocks (expired)| NO  | NO (`NoEntityFoundError`) | Pruned from chain state |
   >
-  > **Revised conclusion:**
-  > - Query index drops the entity **at block #508824**, which is **2 blocks before** the SDK-reported `expiresAt` block (#508826).
-  > - `getEntity` errored with `Invalid key value` on **every single poll** — both before AND after expiry. This means the original claim of "getEntity returned entity at block 484781" was from a different run (Phase 0 script). This run produced a NEW discovery: `getEntity` rejects the 64-hex entity key with `Invalid key value` error from the outset.
-  > - **Original "1-block gap" claim partially confirmed but with a 2-block gap observed this run.** The gap exists; the exact count may vary per run.
-  > - **New finding logged as FR-011**: `getEntity` throws `Invalid key value` for entity keys returned by `createEntity`. The original Phase 0 `getEntity` success may have used a different key format.
+  > **Definitive Finding:** When the query does **NOT** include an application-level `ends_at` range predicate, the Arkiv query index and `getEntity` drop the entity at the exact same consensus expiry block (#559429; **0 blocks early**). The previous 1–2 block early-drop observation occurred exclusively because `gt("ends_at", u64(nowSec))` evaluated client wall-clock Unix seconds against consensus block timestamps.
 
 ---
 
@@ -294,8 +289,8 @@ Every entry in this register was reproduced empirically at least twice on Arkiv 
 |------|------------------|-----------------------------|
 | **Ordering** | "Sort results by nearest end time" | Arkiv query engine does **not** support server-side `orderBy`. All sorting (by `ends_at`, distance, or rating) must happen client-side in TypeScript after `fetch()`. |
 | **Creation Block / Tie-Break** | "Earliest creation block wins; check if creation block is exposed" | `FullEntity` and `Entity` expose `createdAt?: bigint` (and `updatedAt?: bigint`). For bookings within the same block, no transaction index or timestamp is exposed, so deterministic tie-breaker must use lexicographical ordering of `entityKey`. |
-| **Query Expiration Timing** | "Entity expires at ends_at, so the chain removes it" | Query index drops the entity 1 block before `expiresAt` (`block < expiresAt` predicate on index), while `getEntity` drops it once `block >= expiresAt`. |
-| **Attribute Validation** | "Invalid attributes fail client-side" | Uppercase attribute names are **not** rejected by client-side SDK validation in `createEntity()`. They are submitted on-chain and rejected as `EntityMutationError`, burning gas. |
+| **Query Expiration Timing** | "Entity expires at ends_at, so the chain removes it" | When querying without an `ends_at` range predicate, the query index drops the entity at the exact same consensus `expiresAt` block (0 blocks early; verified in Phase 9 retest). When an application query includes `gt("ends_at", u64(nowSec))`, a 1–2 block gap can occur due to client clock vs block timestamp differences. |
+| **Attribute Validation** | "Invalid attributes fail client-side" | Uppercase attribute names are rejected client-side before broadcast with `EntityMutationError` (`0` gas spent, never reached the chain; verified in Phase 9 controlled balance measurement). |
 | **Type Coercion in Queries** | "Query with wrong type throws an error" | Range query with mismatched numeric types (e.g., `i32` against stored `u64`) succeeds with HTTP 200 and silently returns 0 entities without error. |
 
 ---
@@ -419,32 +414,38 @@ Every entry in this register was reproduced empirically at least twice on Arkiv 
 
 ---
 
-### FR-011 · `getEntity({ key })` throws `Invalid key value` for entity keys from `createEntity`
+### FR-011 · `getEntity({ key })` throws `Invalid key value` (withdrawn: positional call `getEntity(key)` succeeds)
 
 - **Date/time (IST):** 2026-10-13, ~10:26 IST
 - **Phase:** 2B (FR-005 retest)
 - **SDK + network versions:** `@arkiv-network/sdk@0.8.1`, viem `2.57.4`, Tiramisu testnet, chain ID `7738577`
 - **What I expected:**
-  `getEntity({ key: entityKey })` where `entityKey` is the value returned by `createEntity()` (a 66-char `0x`-prefixed 64-hex string) to return the entity or throw `NoEntityFoundError` after expiry.
+  `getEntity({ key: entityKey })` to accept an options object containing the entity key.
 - **What actually happened (exact error text):**
   ```
   Invalid key value {"key":"0x82302c963377fec72f163883119f404c36e2fd27a4956b7852be3e39d723c5c0"}
   ```
-  This error was thrown on **every single poll** — both while the entity was live in the query index (query=YES rows) AND after it expired (query=NO rows). `getEntity` never succeeded for this entity key at any point in its lifetime.
+  This error was thrown because the SDK expects a positional string argument `getEntity(entityKey)`, not an options object `{ key }`.
 - **Steps to reproduce:**
   ```ts
   const created = await wallet.createEntity({ ... });
   const key = created.entityKey; // 0x82302c963377...
   await pub.getEntity({ key });   // throws Invalid key value
   ```
-  Observed in `scripts/fr005-expiry-retest.ts` run (task-555.log), 2026-10-13 ~04:56–04:58 UTC.
-  Note: Phase 0 `getEntity` succeeded with a key from a different entity (`0xae9bcc84c5...`). The failing key here is 64 hex chars (32 bytes) after `0x`. Both appear to be the same format.
-- **Severity:** high — `getEntity` is broken for at least some entity keys, making it impossible to use `getEntity` to verify a specific entity's live status or attributes.
+- **Severity:** withdrawn (our own call-shape error, not an Arkiv SDK bug)
 - **Workaround used:**
-  Use `select().where(eq(...))` to find the entity by attribute instead of by key. This is what `fetchLiveSlots` already does.
+  Use positional call `getEntity(entityKey)` as specified in Arkiv documentation.
 - **Suggested fix:**
-  Investigate whether `getEntity` expects a different key format (e.g. without `0x` prefix, or a shorter hash), and document the expected key format clearly in the SDK.
-- **Upstream issue link:** (not filed — needs further investigation to isolate whether this is a key format issue or a server-side bug)
+  None required on SDK side; our client call was corrected.
+- **Upstream issue link:** (none — withdrawn)
+
+  > **Update 2026-10-14 IST (Phase 9 Positional Call Verification):**
+  > Retested `publicClient.getEntity(entityKey)` using the positional call signature documented in Arkiv's SDK guides on 3 fresh entities created on Tiramisu testnet:
+  > - **Entity 1 (`0x7f4b8f0653697a59...`):** Positional call `getEntity(key)` returned full entity (`payload`, `creator: 0x5349...a6e9`, `expiresAt: 559429n`). Calling `getEntity({ key })` threw `Invalid key value {"key":"0x7f4b..."}`.
+  > - **Entity 2 (`0x0405bc5e59273c68...`):** Positional call `getEntity(key)` succeeded cleanly, returning valid payload and metadata.
+  > - **Entity 3 (`0x5cb524efbda7a726...`):** Positional call `getEntity(key)` succeeded cleanly, returning valid payload and metadata.
+  > - **Post-Expiry Retest:** After block expiry, positional call `getEntity(key)` threw: `NoEntityFoundError: No live entity with key 0x7f4b8f06... It was never created, or it has been deleted or has expired.`
+  > - **Resolution:** FR-011 was entirely our own call-shape error: passing an object `{ key }` to a function expecting a positional string parameter `key: Hex`. **FR-011 is formally WITHDRAWN.** Removed from Arkiv/SDK friction table; SDK blame removed from `schema.md` L-005 and `submission-answers.md`.
 
 ---
 
@@ -459,7 +460,7 @@ Every entry in this register was reproduced empirically at least twice on Arkiv 
 
 ---
 
-### FR-012 · Tiramisu RPC intermittently stalls on consecutive queries (no response, no error)
+### FR-012 · Tiramisu RPC intermittently stalls on consecutive queries (reproduced once)
 
 - **Date/time (IST):** 2026-10-13, ~10:59 IST
 - **Phase:** 2B (test-report.ts run 1)
@@ -474,10 +475,10 @@ Every entry in this register was reproduced empirically at least twice on Arkiv 
   await pub.select().where(and(eq("project", str("slotbazaar")), ...)).fetch(); // succeeds
   await pub.select().where(and(eq("project", str("slotbazaar")), ...)).fetch(); // may hang indefinitely
   ```
-  Reproduced once (first run); resolved on second attempt.
-- **Severity:** medium — intermittent hang with no error or timeout surfaced to the caller. The SDK does not set a default HTTP request timeout, so a stalled connection silently blocks the process.
+  Reproduced once (first run); resolved on second attempt. Did not reproduce on subsequent runs.
+- **Severity:** low (reproduced once; downgraded to note)
 - **Workaround used:**
-  Wrap every RPC call with an application-level `Promise.race` timeout (10s used in `test-report.ts`). In the UI, the 8s poll interval partially mitigates this by creating a new fetch cycle.
+  Wrap every RPC call with an application-level `Promise.race` timeout (8s used in app). In the UI, the 12s poll interval mitigates this by creating a fresh fetch cycle.
 - **Suggested fix:**
   Add a configurable `timeout` option (default: 8000ms) to `PublicArkivClient` transport or query builder, consistent with how viem exposes transport timeouts.
 - **Upstream issue link:** (not filed — intermittent, needs more data to reproduce reliably)
@@ -574,6 +575,19 @@ Every entry in this register was reproduced empirically at least twice on Arkiv 
 - **Fix Applied:**  
   Added shared helpers `getEntityExplorerUrl(key)` and `getTxExplorerUrl(txHash)` in `src/lib/arkiv.ts` pointing to `https://data.arkiv.network/?q=${key}&chain=tiramisu`, and updated all drawers, modals, toasts, and documentation across the codebase.
 
+  > **Update 2026-10-14 IST (Phase 9 DNS & Explorer Verification):**
+  > Controlled DNS diagnostic executed from this local machine and network:
+  > ```
+  > > nslookup explorer.tiramisu.arkiv.network
+  > *** No internal type for both IPv4 and IPv6 Addresses (A+AAAA) records available for explorer.tiramisu.arkiv.network (NXDOMAIN)
+  >
+  > > nslookup tiramisu.explorer.arkiv.network
+  > Non-authoritative answer:
+  > Addresses: 104.26.14.219, 104.26.15.219, 172.67.69.21 (Cloudflare CDN)
+  > ```
+  > Note: Tested from a single machine and network environment.
+  > Verified via HTTP GET that both `https://data.arkiv.network/?q=<txHash>&chain=tiramisu` and `https://data.arkiv.network/?q=<entityKey>&chain=tiramisu` return HTTP `200` and display on-chain transaction/entity details properly.
+
 ---
 
 ### FR-017 · `watchEntityEvents` silently falls back to HTTP polling if fromBlock is supplied; passive expiration emits no log events
@@ -645,6 +659,7 @@ Every entry in this register was reproduced empirically at least twice on Arkiv 
      - Fully paused all network queries when `document.visibilityState === 'hidden'`.
   
   **Re-Measurement Results (2026-10-14, Headless Chrome with CDP Session):**
+  *(Verified in a real headed browser: not run)*
   - **Foreground Idle (WebSocket Healthy, 2-Minute Sample):**
     - Chain Head (`eth_blockNumber`): 11 requests (~5.5/min)
     - Slots Queries: 3 requests (~1.5/min)
@@ -652,7 +667,7 @@ Every entry in this register was reproduced empirically at least twice on Arkiv 
     - Completions Queries: 3 requests (~1.5/min)
     - Other HTTP RPC: 4 requests (~2.0/min)
     - **Total Foreground Rate: 24 requests in 2 min = 12.0 req/min** (an 87.6% reduction from baseline).
-  - **Tab Hidden (Backgrounded, Verified via CDP `document.visibilityState === 'hidden'`, 1-Minute Sample):**
+  - **Tab Hidden (simulated visibilitychange event, Verified via CDP `document.visibilityState === 'hidden'`, 1-Minute Sample):**
     - Chain Head: 1 request (in-flight before visibility event lock)
     - Slots, Bookings, Completions: **0 requests**
     - **Total Hidden Rate: 1.0 req/min** (background queries completely paused).

@@ -13,7 +13,7 @@ Across India's manufacturing and logistics corridors, small industrial enterpris
 When a 5-axis CNC machine in Surat finishes a textile die-cutting job at 11:00 AM, the factory owner has no frictionless, low-cost way to broadcast that 3 hours of machine availability exist before the afternoon shift. By 2:00 PM, that operational capacity has vanished with zero revenue captured.
 
 ### Why Today's Solutions Fail Indian MSMEs:
-1. **Aggregator Commission Trap:** Web2 B2B portals charge substantial annual subscription fees or take an illustrative 15–25% cut per transaction, pricing out micro-fabricators and small job-shops.
+1. **Aggregator Commission Trap:** Traditional Web2 B2B portals charge substantial annual subscription fees or extract high commission fees per transaction, pricing out micro-fabricators and small job-shops.
 2. **WhatsApp Group Chaos:** Today, informal capacity sharing happens in noisy regional WhatsApp and Telegram groups. Messages are quickly buried, unstructured, impossible to filter by corridor proximity, and rife with spam.
 3. **No Portable Reputation:** When an SME completes a job on time, the trust record stays trapped in private chats. If they move to a new client or platform, their credibility resets to zero.
 
@@ -60,7 +60,7 @@ SlotBazaar focuses on high-density industrial hubs where spatial proximity enabl
 * **Average daily idle machine hours per unit:** `[SURVEY_PLACEHOLDER: e.g. 2.4 hours / day]`
 * **Estimated unrecovered revenue per machine per month:** `[SURVEY_PLACEHOLDER: ₹XX,XXX / month]`
 * **Percentage of interviewed SMEs relying on informal WhatsApp groups:** `[SURVEY_PLACEHOLDER: e.g. XX%]`
-* **Average broker fee paid to middle-agents:** `[SURVEY_PLACEHOLDER: e.g. 15% - 25%]`
+* **Average broker fee paid to middle-agents:** `[SURVEY_PLACEHOLDER: e.g. Middle-agent broker fee]`
 * **Field interview validation count:** `[SURVEY_PLACEHOLDER: Number of shop floor owners interviewed]`
 
 ---
@@ -69,4 +69,4 @@ SlotBazaar focuses on high-density industrial hubs where spatial proximity enabl
 
 1. **Zero Intermediate Rent:** Slots cost less than `0.0002 GLM` (fractions of a cent) on Arkiv Tiramisu.
 2. **Autonomous Expiration:** Unbooked slots quietly drop off the map when the time window passes, keeping the cluster map clean and actionable.
-3. **Symmetric Cryptographic Reputation:** Completing jobs increments a permanent, portable on-chain verified job count that neither party can manipulate.
+3. **Symmetric Cryptographic Reputation:** Completing jobs increments a permanent, portable on-chain verified job count: SlotBazaar's front end cannot forge another wallet's signed entity; Tiramisu currently has a single sequencer, so Arkiv node operators remain a trust assumption.

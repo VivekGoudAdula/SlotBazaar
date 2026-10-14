@@ -13,7 +13,7 @@
 
 ## 1. One-Paragraph Pitch
 
-**SlotBazaar** is a decentralized, real-time discovery and reservation bazaar for perishable industrial capacity (machine tooling hours, intra-city freight trips, and freelance engineering sprints) across India’s manufacturing corridors. Powered entirely by **Arkiv Tiramisu**, SlotBazaar eliminates the illustrative 20–30% commission trap of centralized Web2 platforms. Time slots expire autonomously on-chain without background cron jobs, booking races are decided transparently by the earliest confirmed block, and two-sided cryptographic signatures generate verifiable, portable MSME reputation that cannot be unilaterally altered after consensus.
+**SlotBazaar** is a decentralized, real-time discovery and reservation bazaar for perishable industrial capacity (machine tooling hours, intra-city freight trips, and freelance engineering sprints) across India’s manufacturing corridors. Powered entirely by **Arkiv Tiramisu**, SlotBazaar eliminates the commission trap of centralized Web2 platforms. Time slots expire autonomously on-chain without background cron jobs, booking races are decided transparently by the earliest confirmed block, and two-sided cryptographic signatures generate verifiable, portable MSME reputation. SlotBazaar's front end cannot forge another wallet's signed entity; Tiramisu currently has a single sequencer, so Arkiv node operators remain a trust assumption.
 
 ---
 
@@ -21,7 +21,7 @@
 
 In the industrial corridors of **Jeedimetla (Hyderabad)**, **Ravi** operates a precision job-shop with two 4-axis CNC milling machines. Between major automotive part batches, his machines frequently sit idle for 2- to 4-hour gaps. Machinery depreciation and high fixed electrical tariff charges continue regardless of whether a spindle is turning.
 
-Three kilometers away in Balanagar, **Meena** runs an assembly unit producing specialized water filtration systems. At 11:30 AM, her workshop’s primary die-cutting machine breaks down right before an urgent delivery deadline. Calling brokers means paying steep broker markups (illustratively ~20%) and waiting hours for responses.
+Three kilometers away in Balanagar, **Meena** runs an assembly unit producing specialized water filtration systems. At 11:30 AM, her workshop’s primary die-cutting machine breaks down right before an urgent delivery deadline. Calling brokers means paying steep broker markups and waiting hours for responses.
 
 With **SlotBazaar**:
 1. Ravi opens SlotBazaar on his phone. He selects the **Jeedimetla** corridor cluster, chooses *"Machine"*, enters *"CNC Milling Slot (2h available)"*, sets expiry for 2:30 PM (slots range from 15 minutes to 7 days), and signs with MetaMask for `< 0.0002 GLM`.
@@ -157,15 +157,17 @@ In adherence to Arkiv friction logging rules, we transparently disclose existing
 2. **Testnet Sequencer Centralization:** Tiramisu testnet currently operates on a single sequencer node. Mainnet production will require decentralized validator sets to ensure resilience against localized outages.
 3. **Public Unencrypted Data:** All entity payloads on Tiramisu are publicly readable. While appropriate for open B2B machinery and logistics discovery, confidential commercial terms require client-side zero-knowledge proofs or asymmetric encryption.
 4. **Free Sybil Addresses on Testnet:** Creating new testnet wallets is virtually free. Two-sided reputation proves mutual agreement between two distinct cryptographic accounts; enterprise mainnet deployment would integrate economic staking or proof-of-humanity credentials.
+5. **No In-App Contact Channel:** SlotBazaar does not provide an in-app messaging or contact channel. Buyers and sellers coordinate job details and physical handover out of band. No personal data (phone numbers, emails, addresses, GSTIN, Aadhaar) is permitted or stored on Arkiv.
 
 ### 8.1 Measured Browser RPC Network Load
-*Measured on 2026-10-14 in Chrome with CDP instrumentation (N=2 minute observation window per state)*
+*Measured on 2026-10-14 in headless Chrome with CDP instrumentation (foreground sample: 2 minutes; hidden-tab sample: 1 minute via simulated visibilitychange event).*  
+*Verified in a real headed browser: not run.*
 
-| State | Minute 1 | Minute 2 | Average Req/Min | Technical Note |
+| State | Sample Window | Total Requests | Average Req/Min | Technical Note |
 | :--- | :---: | :---: | :---: | :--- |
-| **Foreground Idle (WebSocket Healthy)** | 12 | 12 | **12.0** | WS active; debounced queries throttled to >=12s; chainhead polled at 12s |
-| **Foreground Idle (WebSocket Blocked)** | 15 | 15 | **15.0** | Fallback to HTTP polling with 12s query throttle and shared fetch lock |
-| **Tab Hidden (Backgrounded)** | 1 | 0 | **0.5–1.0** | All queries paused via `document.hidden` check and `visibilitychange` listener |
+| **Foreground Idle (WebSocket Healthy)** | 2 minutes | 24 | **12.0** | WS active; debounced queries throttled to >=12s; chainhead polled at 12s |
+| **Foreground Idle (WebSocket Blocked)** | 2 minutes | 30 | **15.0** | Fallback to HTTP polling with 12s query throttle and shared fetch lock |
+| **Tab Hidden (simulated visibilitychange event)** | 1 minute | 1 | **1.0** | All queries paused via `document.hidden` check and `visibilitychange` listener |
 
 **RPC Breakdown by Source (Foreground Idle, 2-Minute Window):**
 - **Chain Head (`eth_blockNumber`):** 11 requests (~5.5/min)

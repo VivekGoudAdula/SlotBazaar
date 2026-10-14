@@ -122,7 +122,7 @@ export function WhyArkivModal({ isOpen, onClose }: WhyArkivModalProps): React.Re
         </h3>
         <ul style={{ paddingLeft: "1.25rem", margin: "0 0 1rem 0" }}>
           <li>
-            <strong>PostgreSQL / Centralized DB:</strong> The database operator controls the feed. They can silently delete bookings, front-run slot reservations, fabricate fake seller reviews, or charge steep platform commissions (illustratively 15–30% on traditional aggregators).
+            <strong>PostgreSQL / Centralized DB:</strong> The database operator controls the feed. They can silently delete bookings, front-run slot reservations, fabricate fake seller reviews, or charge steep platform subscriptions and broker commissions.
           </li>
           <li>
             <strong>IPFS / Arweave:</strong> IPFS stores static immutable blobs by CID. You cannot query <em>"find slots where cluster = 'surat' AND ends_at &gt; now"</em> without maintaining a centralized off-chain indexer. Crucially, IPFS has zero native entity expiration — expired time slots pollute storage forever.
@@ -163,6 +163,7 @@ export function WhyArkivModal({ isOpen, onClose }: WhyArkivModalProps): React.Re
         </p>
         <ul style={{ paddingLeft: "1.25rem", margin: "0 0 1.25rem 0" }}>
           <li><strong>No Personal Identifiable Information (PII):</strong> No phone numbers, email addresses, GSTINs, or Aadhaar numbers.</li>
+          <li><strong>No In-App Contact Channel:</strong> Buyers and sellers coordinate out of band; no personal contact data is permitted or stored on Arkiv.</li>
           <li><strong>No Map Tiles:</strong> OpenStreetMap raster tiles are cached via CDN.</li>
           <li><strong>No Transient UI State:</strong> Map zoom levels, filter dropdown selections, and UI tabs live strictly in React state.</li>
         </ul>

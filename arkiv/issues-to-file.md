@@ -5,9 +5,9 @@
 
 ---
 
-## Issue 1: Uppercase attribute name silently burns gas before on-chain rejection (FR-003)
+## Issue 1: Uppercase attribute name throws generic EntityMutationError instead of InvalidAttributeNameError (FR-003)
 
-**Title**: `createEntity` should validate attribute name charset client-side before broadcasting transaction
+**Title**: `createEntity` throws generic `EntityMutationError` instead of exported `InvalidAttributeNameError` on invalid attribute names
 
 **SDK version**: `@arkiv-network/sdk@0.8.1`  
 **viem version**: `2.57.4`  
@@ -39,22 +39,22 @@ Run: `npx tsx scripts/edge-probes.ts`
 
 ### Expected behaviour
 
-`createEntity` should call `validateAttributeName(name)` before signing and submitting the transaction. An `InvalidAttributeNameError` should be thrown **client-side** with 0 gas consumed.
+`createEntity` should call `validateAttributeName(name)` before transaction submission. When an attribute name violates the grammar, `InvalidAttributeNameError` (which is exported from `@arkiv-network/sdk`) should be thrown client-side.
 
 ### Actual behaviour
 
-The transaction is broadcast, included in a block, and **fails at the execution layer** with:
+The SDK catches the error client-side before transaction submission (0 gas burned, never broadcast to the network), but throws a generic `EntityMutationError`:
 
 ```
 EntityMutationError: Transaction failed: an attribute name holds "P" (0x50) at byte 0,
 which is outside the name charset ("A"–"Z", "a"–"z", "0"–"9", ".", "-" and "_", with a letter first)
 ```
 
-A full transaction fee is charged for a statically invalid operation that can be caught without any network call.
+Developers catching `InvalidAttributeNameError` will not catch this error.
 
 ### Severity
 
-**High** — On a fee-bearing network this wastes real user funds. Client-side validation already exists (`validateAttributeName` is exported from the SDK) but is not applied inside `createEntity`.
+**Minor (DX / Error Typing)** — While no gas is consumed on-chain (it is rejected client-side before broadcast), throwing `EntityMutationError` breaks expected error discrimination since `InvalidAttributeNameError` is documented and exported.
 
 ### Suggested fix
 
