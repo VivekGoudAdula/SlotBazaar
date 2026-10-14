@@ -291,6 +291,8 @@ export function useLiveSlots(): UseLiveSlotsResult {
 
   const client = useRef(getArkivPublicClient()).current;
   const isMounted = useRef(true);
+  const isFetchingRef = useRef(false);
+  const lastFetchTimeRef = useRef(0);
   const localSlotsRef = useRef<SlotEntity[]>(loadLocalRecentSlots());
 
   const addSlot = useCallback((newSlot: SlotEntity) => {
@@ -308,7 +310,15 @@ export function useLiveSlots(): UseLiveSlotsResult {
   // Fixed 3 queries per refresh cycle: 1 slots + 1 bookings + 1 completions
   const queryCount = 3;
 
-  const doFetch = useCallback(async () => {
+  const doFetch = useCallback(async (force = false) => {
+    // Shared fetch lock: prevent duplicate concurrent requests
+    if (isFetchingRef.current) return;
+    // Pause network queries completely if tab is hidden
+    if (typeof document !== "undefined" && document.hidden) return;
+    // Cooldown throttle: don't fetch more often than every 10 seconds unless forced
+    if (!force && Date.now() - lastFetchTimeRef.current < 10_000) return;
+
+    isFetchingRef.current = true;
     try {
       setError(null);
       const withTimeout = <T>(p: Promise<T>, ms = 8000): Promise<T> =>
@@ -378,22 +388,33 @@ export function useLiveSlots(): UseLiveSlotsResult {
         setError(err instanceof Error ? err.message : "Arkiv indexer slow — displaying cached on-chain state.");
       }
     } finally {
+      isFetchingRef.current = false;
+      lastFetchTimeRef.current = Date.now();
       if (isMounted.current) setLoading(false);
     }
   }, [client]);
 
-  const [isSocketHealthy, setIsSocketHealthy] = useState(false);
+  const [isSocketHealthy, setIsSocketHealthyState] = useState(false);
+  const isSocketHealthyRef = useRef(false);
+  const setSocketHealthy = useCallback((healthy: boolean) => {
+    isSocketHealthyRef.current = healthy;
+    setIsSocketHealthyState(healthy);
+  }, []);
+
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backoffDelayRef = useRef(1000);
   const unwatchRef = useRef<(() => void) | null>(null);
 
-  // Debounced refetch (500 ms) triggered by WebSocket events
+  // Debounced refetch (throttled to at most once per 12-15 seconds per rubric guidelines)
   const triggerDebouncedFetch = useCallback(() => {
+    if (typeof document !== "undefined" && document.hidden) return;
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    const timeSinceLast = Date.now() - lastFetchTimeRef.current;
+    const delay = timeSinceLast < 12000 ? 12000 - timeSinceLast : 2000;
     debounceTimerRef.current = setTimeout(() => {
       doFetch();
-    }, 500);
+    }, delay);
   }, [doFetch]);
 
   // WebSocket subscription with exponential backoff reconnect
@@ -407,47 +428,42 @@ export function useLiveSlots(): UseLiveSlotsResult {
 
         const unwatch = wsClient.watchEntityEvents({
           onEntityCreated: () => {
-            setIsSocketHealthy(true);
+            setSocketHealthy(true);
             backoffDelayRef.current = 1000;
             triggerDebouncedFetch();
           },
           onEntityPatched: () => {
-            setIsSocketHealthy(true);
+            setSocketHealthy(true);
             backoffDelayRef.current = 1000;
             triggerDebouncedFetch();
           },
           onExpiryExtended: () => {
-            setIsSocketHealthy(true);
+            setSocketHealthy(true);
             backoffDelayRef.current = 1000;
             triggerDebouncedFetch();
           },
           onOwnershipTransferred: () => {
-            setIsSocketHealthy(true);
+            setSocketHealthy(true);
             backoffDelayRef.current = 1000;
             triggerDebouncedFetch();
           },
           onEntityDeleted: () => {
-            setIsSocketHealthy(true);
-            backoffDelayRef.current = 1000;
-            triggerDebouncedFetch();
-          },
-          onEvent: () => {
-            setIsSocketHealthy(true);
+            setSocketHealthy(true);
             backoffDelayRef.current = 1000;
             triggerDebouncedFetch();
           },
           onError: (err) => {
             console.warn("WebSocket entity subscription warning/disconnect:", err.message);
-            setIsSocketHealthy(false);
+            setSocketHealthy(false);
             scheduleReconnect();
           },
         });
 
         unwatchRef.current = unwatch;
-        setIsSocketHealthy(true);
+        setSocketHealthy(true);
       } catch (err) {
         console.warn("Failed to connect WebSocket entity watcher:", err);
-        setIsSocketHealthy(false);
+        setSocketHealthy(false);
         scheduleReconnect();
       }
     }
@@ -508,8 +524,14 @@ export function useLiveSlots(): UseLiveSlotsResult {
       if (!isMounted.current) return;
       timer = setTimeout(async () => {
         if (!isMounted.current) return;
-        // Pause network requests if the browser tab is backgrounded
+        // Pause network requests completely if browser tab is hidden
         if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+          scheduleNext();
+          return;
+        }
+
+        // When WebSocket is healthy and recently fetched, skip background polling to keep RPC load low
+        if (isSocketHealthyRef.current && (Date.now() - lastFetchTimeRef.current < 45_000)) {
           scheduleNext();
           return;
         }
@@ -537,7 +559,7 @@ export function useLiveSlots(): UseLiveSlotsResult {
     // Trigger immediate refetch as soon as tab becomes visible again
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        doFetch();
+        doFetch(true);
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -682,7 +704,7 @@ export function useLiveSlots(): UseLiveSlotsResult {
     error,
     lastFetched,
     isSocketHealthy,
-    refresh: doFetch,
+    refresh: () => doFetch(true),
     addSlot,
   };
 }

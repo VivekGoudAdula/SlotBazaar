@@ -119,14 +119,14 @@ This file tracks every wallet address used in SlotBazaar development.
 
 ## Phase 5 & Phase 6 Batch Execution & Empirical Probes
 
-All entities created with `project="slotbazaar"` on **Arkiv Tiramisu** (`chainId: 60138`).
+All entities created with `project="slotbazaar"` on **Arkiv Tiramisu** (`chainId: 7738577`, hex: `0x7614d1`).
 
 ### Wallets
 
 | Address | Role | Purpose |
 |---------|------|---------|
 | `0x53491aA366E086C19da948669b340317eE6eA6e9` | Primary Developer / Seller Wallet | Single-signature batch creation, probe generation, test seeding |
-| `0x2fEA91303BB18B3Cb91742b834bd6672e22bD19b` | Ephemeral Buyer / Tester | Booking and EIP-712 job confirmation testing |
+| `0x2fEA91303BB18B3Cb91742b834bd6672e22bD19b` | Ephemeral Buyer / Tester | Booking and mutual on-chain job completion testing |
 
 ### Batch Transactions (1-Signature Bulk Creates via `executeBatch`)
 

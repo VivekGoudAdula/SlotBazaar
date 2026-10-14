@@ -8,12 +8,12 @@
  * 3. Connect MetaMask (Arkiv Tiramisu Testnet)
  * 4. Post an immutable slot & watch it appear live via WebSocket
  * 5. Book from a second account
- * 6. Confirm completion both sides (seller & buyer EIP-712 signatures)
+ * 6. Confirm completion both sides (seller & buyer completion entities on Arkiv)
  * 7. Inspect the two-sided on-chain verified reputation badge
  */
 
 import React, { useRef, useEffect } from "react";
-import { TIRAMISU_CHAIN_ID_DEC } from "../lib/wallet.js";
+import { TIRAMISU_CHAIN_ID_DEC, TIRAMISU_CHAIN_ID_HEX } from "../lib/wallet.js";
 
 const FAUCET_URL = "https://hub.arkiv.network/faucet";
 const EXPLORER_URL = "https://data.arkiv.network/?chain=tiramisu";
@@ -176,10 +176,10 @@ export function JudgePopover({
             <strong>Book from a second account:</strong> Switch MetaMask to Account 2. Click <strong>Book Slot</strong> to create an on-chain reservation entity tied to that slot.
           </li>
           <li>
-            <strong>Two-sided completion confirmation:</strong> Both seller and buyer click <strong>Confirm Job Completion</strong>. Each signs an EIP-712 job completion statement.
+            <strong>Two-sided completion confirmation:</strong> Both seller and buyer click <strong>Confirm Job Completion</strong>. Each submits an on-chain completion entity signed by their wallet transaction.
           </li>
           <li>
-            <strong>Instant on-chain reputation:</strong> The verified job proof links both signatures symmetrically. The <strong>🏆 1 Verified Job</strong> reputation badge renders dynamically on the seller's drawer and wallet!
+            <strong>Instant on-chain reputation:</strong> The verified job proof links both on-chain receipts symmetrically. The <strong>🏆 1 Verified Job</strong> reputation badge renders dynamically on the seller's drawer and wallet!
           </li>
         </ol>
 
@@ -199,7 +199,7 @@ export function JudgePopover({
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.25rem 0.75rem", fontFamily: "var(--font-mono, monospace)" }}>
             <div><span style={{ color: "#64748b" }}>Network:</span> Arkiv Tiramisu</div>
-            <div><span style={{ color: "#64748b" }}>Chain ID:</span> {TIRAMISU_CHAIN_ID_DEC} (0x761591)</div>
+            <div><span style={{ color: "#64748b" }}>Chain ID:</span> {TIRAMISU_CHAIN_ID_DEC} ({TIRAMISU_CHAIN_ID_HEX})</div>
             <div><span style={{ color: "#64748b" }}>Currency:</span> GLM</div>
             <div>
               <span style={{ color: "#64748b" }}>Faucet: </span>

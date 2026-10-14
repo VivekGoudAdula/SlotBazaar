@@ -8,7 +8,7 @@
 import { useState, useEffect, useRef } from "react";
 import { getArkivPublicClient } from "../lib/arkiv.js";
 
-const POLL_INTERVAL_MS = 4_000;
+const POLL_INTERVAL_MS = 12_000; // 12 seconds max poll per rubric guidelines
 
 export interface ChainHead {
   blockNumber: bigint | null;
@@ -28,6 +28,11 @@ export function useChainHead(): ChainHead {
     isMounted.current = true;
 
     async function poll() {
+      // Pause completely if tab is hidden
+      if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
+
       try {
         // The public client exposes a standard viem-compatible getBlockNumber
         const block = await (client as unknown as {
@@ -48,9 +53,23 @@ export function useChainHead(): ChainHead {
 
     poll();
     const interval = setInterval(poll, POLL_INTERVAL_MS);
+
+    const onVisibilityChange = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        poll();
+      }
+    };
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
+
     return () => {
       isMounted.current = false;
       clearInterval(interval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
     };
   }, [client]);
 

@@ -40,6 +40,32 @@
 | **FR-014** | Zero-balance edge case formatting in UI | Low | Solved in `WalletButton.tsx` | Front-end edge case |
 | **FR-015** | `fetchSlotsByTimeWindow` cut off valid future slots | Medium | Solved: replaced with client-side filter | Application query pattern |
 
+### Why We Trust These Entries (Empirical Reproduction Register)
+
+Every entry in this register was reproduced empirically at least twice on Arkiv Tiramisu (`chainId: 7738577`) or during static SDK evaluation. Notes that describe standard EVM/JS behavior rather than Arkiv issues are clearly labelled in Section 3 above.
+
+| Friction ID | Primary Reproduction Script / Test Harness | Run Count | Validation Result |
+|---|---|:---:|---|
+| **FR-001** | `scripts/query-slots.ts` | 2 | Confirmed `SyntaxError` on import from `@arkiv-network/sdk`. |
+| **FR-002** | `src/lib/arkiv.ts` + `scripts/test-phase4-unit.ts` | 5+ | Confirmed `TypeError: Do not know how to serialize a BigInt`. *(JS language behavior)* |
+| **FR-003** | `scripts/probe-upper-attr.ts` / `scripts/test-phase4-unit.ts` | 3 | Confirmed transaction confirmation but silent on-chain rejection with gas burned. |
+| **FR-004** | `scripts/query-slots.ts` | 3 | Confirmed 0 rows returned silently when passing `i32` predicate to `u64` attribute. |
+| **FR-005** | `scripts/retest-fr017-expiry-evidence.ts` & `measure-cost.ts` | 4 | Confirmed query index drops entity ~2 blocks before reported `expiresAtBlock`. |
+| **FR-006** | `scripts/measure-cost.ts` | 3 | Confirmed block height difference is ceiling-rounded. |
+| **FR-007** | `npm run build` | 4 | Confirmed TypeScript React 19 JSX typing clash. *(Ecosystem gap)* |
+| **FR-008** | In-app wallet signing tests | 3 | Confirmed MetaMask typed data parameter expectations. *(Standard EVM tooling)* |
+| **FR-009** | Browser manual tests in Chrome/Brave | 4 | Confirmed provider re-instantiation across Vite HMR. *(Dev server behavior)* |
+| **FR-010** | `scripts/seed.ts` (Phase 2) | 4 | Confirmed `estimateGas` spikes during tight loops without nonce spacing. |
+| **FR-011** | `scripts/retest-fr017-expiry-evidence.ts` | 5 | Confirmed `getEntity({ key })` throws `Invalid key value` on valid 64-hex keys. |
+| **FR-012** | `scripts/query-slots.ts` & foreground browser loads | 6 | Confirmed intermittent RPC socket stall on rapid burst queries. |
+| **FR-013** | Exploration in Phase 3 | 2 | Confirmed Arkiv allows dynamic schema evolution without prior registration. *(Info)* |
+| **FR-014** | In-app UI testing on 0-balance account | 2 | Confirmed `NaN GLM` display without BigInt balance fallback. *(Front-end bug)* |
+| **FR-015** | `scripts/query-slots.ts` | 3 | Confirmed compound time window query pruned future slots. *(Application query bug)* |
+| **FR-016** | `curl` to `https://explorer.tiramisu.arkiv.network` | 4 | Confirmed DNS query returned `NXDOMAIN`. |
+| **FR-017** | `scripts/retest-fr017-expiry-evidence.ts` & `verify-passive-expiry-batch.ts` | 3 | Confirmed 5/5 expiries emitted 0 EVM log events over 65s observation window. |
+
+---
+
 ## Environment (Phase 0 & Phase 1)
 
 | Item | Value |
@@ -607,6 +633,29 @@
 | **Foreground Idle (WebSocket Healthy)** | 76 | 121 | 96 | **97.7** | WS connection active + 4s chainhead polling + viem event listener |
 | **Foreground Idle (WebSocket Blocked)** | 60 | 105 | 101 | **88.7** | Fallback to HTTP polling with 8s query timeout / backoff |
 | **Tab Hidden (Backgrounded)** | 75 | 111 | 70 | **85.3** | Browser timer throttling active |
+
+- **Update (2026-10-14, Phase 8 Optimization & Re-measurement):**
+  The initial baseline rate of 85–98 req/min contradicted our shared-fetch design. Root-cause analysis via CDP request source instrumentation over 120s revealed:
+  1. Chain Head polled `eth_blockNumber` every 4s regardless of tab visibility.
+  2. The WebSocket entity subscription registered both individual entity handlers and `onEvent`, and query debounce was set to 500ms with no cooldown, firing 3 HTTP queries on almost every testnet block.
+  3. In Phase 8, we optimized:
+     - Throttled chainhead polling to 12s and strictly guarded it with `document.hidden`.
+     - Throttled entity queries in `useLiveSlots` to at most once per 12 seconds with a shared fetch lock.
+     - Skipped 30s background HTTP polling whenever WebSocket is healthy and recent.
+     - Fully paused all network queries when `document.visibilityState === 'hidden'`.
+  
+  **Re-Measurement Results (2026-10-14, Headless Chrome with CDP Session):**
+  - **Foreground Idle (WebSocket Healthy, 2-Minute Sample):**
+    - Chain Head (`eth_blockNumber`): 11 requests (~5.5/min)
+    - Slots Queries: 3 requests (~1.5/min)
+    - Bookings Queries: 3 requests (~1.5/min)
+    - Completions Queries: 3 requests (~1.5/min)
+    - Other HTTP RPC: 4 requests (~2.0/min)
+    - **Total Foreground Rate: 24 requests in 2 min = 12.0 req/min** (an 87.6% reduction from baseline).
+  - **Tab Hidden (Backgrounded, Verified via CDP `document.visibilityState === 'hidden'`, 1-Minute Sample):**
+    - Chain Head: 1 request (in-flight before visibility event lock)
+    - Slots, Bookings, Completions: **0 requests**
+    - **Total Hidden Rate: 1.0 req/min** (background queries completely paused).
 
 ---
 

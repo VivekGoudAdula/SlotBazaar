@@ -12,7 +12,7 @@
 Before hitting record, ensure the following setup is configured:
 
 - [ ] **Tab 1 (Browser Profile A - Seller):**
-  - MetaMask connected to `Account 1 (Seller)` (`0x5349…a6e9`) on Arkiv Tiramisu (`chainId: 60138`).
+  - MetaMask connected to `Account 1 (Seller)` (`0x5349…a6e9`) on Arkiv Tiramisu (`chainId: 7738577`).
   - Balance has at least `0.05 GLM` for transaction broadcast.
   - SlotBazaar deployed web app loaded at full screen.
 - [ ] **Tab 2 / Window 2 (Browser Profile B - Buyer):**
@@ -33,7 +33,7 @@ Before hitting record, ensure the following setup is configured:
 * **Visual:**
   * Quick title screen / problem slide, transitioning to the live SlotBazaar full-width map showing cluster markers across India (Jeedimetla, Surat, Tiruppur, Morbi, Ludhiana).
 * **Narration:**
-  * *"Across India’s industrial clusters, MSMEs operate high-value capital machinery with 2- to 4-hour idle gaps between batch orders. `[INSERT_SURVEY_FIGURE: e.g. Over XX% of machine shops]` lose thousands of rupees daily because there is no low-cost, decentralized coordination layer. Traditional aggregators demand 20% commissions, while WhatsApp chats are chaotic and unsearchable.*
+  * *"Across India’s industrial clusters, MSMEs operate high-value capital machinery with 2- to 4-hour idle gaps between batch orders. `[INSERT_SURVEY_FIGURE: e.g. Over XX% of machine shops]` lose thousands of rupees daily because there is no low-cost, decentralized coordination layer. Traditional aggregators demand an illustrative 20% commission, while WhatsApp chats are chaotic and unsearchable.*
   * *Welcome to **SlotBazaar** — a decentralized, real-time bazaar for expiring industrial capacity and verifiable MSME reputation, powered entirely by Arkiv Tiramisu."*
 
 ---
@@ -41,12 +41,12 @@ Before hitting record, ensure the following setup is configured:
 ### [0:35 – 1:10] Live Post with MetaMask & Instant WebSocket Push
 * **Visual:**
   * Click **+ Post a slot**.
-  * The modal auto-detects GPS (e.g., Jeedimetla, Hyderabad).
+  * Select the Jeedimetla corridor cluster.
   * Select "Machine", title: "CNC Milling Slot (2h)", set expiry to 2 hours from now.
   * Click "Broadcast to Arkiv". MetaMask pops up. Confirm transaction.
   * Switch to Tab 2 (Buyer window side-by-side). Within ~2.5 seconds, the new slot pops up live on Tab 2 via native Arkiv WebSocket without any manual page refresh!
 * **Narration:**
-  * *"Let's post a slot as Ravi, a workshop owner in Jeedimetla. GPS verifies his cluster. He enters his available 2-hour window and signs with MetaMask. The transaction confirms in one block, costing less than 0.0002 GLM.*
+  * *"Let's post a slot as Ravi, a workshop owner in Jeedimetla. He selects his cluster, enters his available 2-hour window and signs with MetaMask. The transaction confirms in one block, costing less than 0.0002 GLM.*
   * *On the right, a buyer's browser receives the event immediately via native Arkiv WebSocket push in under 3 seconds. No polling lag, no middleman."*
 
 ---
@@ -66,13 +66,13 @@ Before hitting record, ensure the following setup is configured:
 ### [1:45 – 2:20] Two-Sided Completion & Instant Verified Reputation
 * **Visual:**
   * Open the slot drawer / **My Jobs** panel on both Seller and Buyer tabs.
-  * Seller clicks **Confirm Job Completion** and signs the EIP-712 statement.
-  * Buyer clicks **Confirm Job Completion** and signs the symmetric buyer statement.
+  * Seller clicks **Confirm Job Completion** to submit an on-chain seller completion entity.
+  * Buyer clicks **Confirm Job Completion** to submit the symmetric buyer completion entity.
   * The receipt updates instantly, unlocking the **🏆 1 Verified Job** reputation badge on the seller's card and wallet profile.
-  * Click **Hide Proofs ▲** to reveal the linked cryptographic signatures.
+  * Click **Hide Proofs ▲** to reveal the linked cryptographic transactions.
 * **Narration:**
-  * *"Once the physical work is finished, both parties sign an EIP-712 job completion statement. Arkiv records both cryptographic receipts.*
-  * *Because both signatures match the on-chain slot creator and winning buyer, SlotBazaar's pure reputation engine instantly increments Ravi’s verified jobs score. It's tamper-evident, creator-signed portable reputation owned by the SME, not locked inside a proprietary database."*
+  * *"Once the physical work is finished, both parties submit wallet-signed completion entities to Arkiv Tiramisu. Arkiv records both cryptographic receipts.*
+  * *Because both transactions match the on-chain slot creator and winning buyer, SlotBazaar's pure reputation engine instantly increments Ravi’s verified jobs score. It's tamper-evident, creator-signed portable reputation owned by the SME, not locked inside a proprietary database."*
 
 ---
 

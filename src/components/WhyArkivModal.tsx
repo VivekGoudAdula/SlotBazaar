@@ -122,7 +122,7 @@ export function WhyArkivModal({ isOpen, onClose }: WhyArkivModalProps): React.Re
         </h3>
         <ul style={{ paddingLeft: "1.25rem", margin: "0 0 1rem 0" }}>
           <li>
-            <strong>PostgreSQL / Centralized DB:</strong> The database operator controls the feed. They can silently delete bookings, front-run slot reservations, fabricate fake seller reviews, or charge exorbitant 20–30% platform commissions.
+            <strong>PostgreSQL / Centralized DB:</strong> The database operator controls the feed. They can silently delete bookings, front-run slot reservations, fabricate fake seller reviews, or charge steep platform commissions (illustratively 15–30% on traditional aggregators).
           </li>
           <li>
             <strong>IPFS / Arweave:</strong> IPFS stores static immutable blobs by CID. You cannot query <em>"find slots where cluster = 'surat' AND ends_at &gt; now"</em> without maintaining a centralized off-chain indexer. Crucially, IPFS has zero native entity expiration — expired time slots pollute storage forever.

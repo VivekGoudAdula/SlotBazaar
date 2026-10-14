@@ -35,6 +35,8 @@ import {
   type BookingEntity,
   type CompletionEntity,
 } from "../src/lib/arkiv.js";
+import { tiramisu } from "@arkiv-network/sdk/chains";
+import { TIRAMISU_CHAIN_ID_DEC, TIRAMISU_CHAIN_ID_HEX } from "../src/lib/wallet.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TEST HARNESS
@@ -398,6 +400,24 @@ assertTest(
   repBuyer.verifiedJobsCount === 1 && repBuyer.proofs.length === 1 && repBuyer.proofs[0].bookingKey === validWinner.key,
   "1 verified job with proof",
   `${repBuyer.verifiedJobsCount} verified jobs`
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. CHAIN ID SPECIFICATION & HEX FORMAT TESTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+assertTest(
+  "Chain ID: Tiramisu decimal chain ID equals 7738577",
+  TIRAMISU_CHAIN_ID_DEC === 7738577 && tiramisu.id === 7738577,
+  "7738577",
+  `${TIRAMISU_CHAIN_ID_DEC}`
+);
+
+assertTest(
+  "Chain ID: Tiramisu hex string format equals 0x7614d1",
+  TIRAMISU_CHAIN_ID_HEX.toLowerCase() === "0x7614d1",
+  "0x7614d1",
+  `${TIRAMISU_CHAIN_ID_HEX}`
 );
 
 // ─────────────────────────────────────────────────────────────────────────────

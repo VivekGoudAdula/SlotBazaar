@@ -83,12 +83,12 @@ A claim placed on an available slot by a buyer. Created as an autonomous entity 
 ```
 
 #### Expiration Rule & Reasoning
-- **Expiry**: `ExpirationTime.atDate(new Date((slot_ends_at + 86400) * 1000))` (Slot end time + 24 hours).
-- **Reasoning**: Bookings must survive throughout the active slot window and slightly beyond so both parties can reference booking terms during fulfillment. Once the 24-hour settlement window closes, uncompleted bookings safely expire.
+- **Expiry**: `ExpirationTime.atDate(new Date(Date.now() + 30 * 86400 * 1000))` (30-day lifecycle).
+- **Reasoning**: Bookings must survive throughout the active slot window and beyond so both parties can complete physical fulfillment and verify on-chain reputation after slot expiry.
 
 #### Winner & Tie-Break Logic
 - A slot may receive multiple concurrent booking transactions.
-- **Rule**: Earliest creation block wins (`createdAt` ascending).
+- **Rule**: Earliest creation block wins (`createdAtBlock` ascending).
 - **Tie-Break within same block**: Lexicographical order of `entityKey` ascending (`a.key.toLowerCase() < b.key.toLowerCase()`).
 
 ---
@@ -101,7 +101,7 @@ Proof of job completion submitted by either the seller or buyer.
 |-----------|------|----------------|---------------------|
 | `project` | `str` | Query namespace | Must be `"slotbazaar"` |
 | `entity_type` | `str` | Filter entity kind | Must be `"completion"` |
-| `slot_key` | `key` | Foreign key to slot | Entity key of booked slot (`0x...`) |
+| `booking_key` | `key` | Foreign key to booking | Entity key of winning booking (`0x...`) |
 | `role` | `str` | Role of submitter | `"seller"` or `"buyer"` |
 | `completed_at` | `u64` | Fulfillment timestamp | Unix seconds |
 | `synthetic` | `bool` | Filter test data | `true` for synthetic records |
@@ -110,13 +110,13 @@ Proof of job completion submitted by either the seller or buyer.
 ```json
 {
   "note": "string (optional review/feedback note, max 500 chars)",
-  "schema_version": 1
+  "schema_version": 2
 }
 ```
 
 #### Expiration Rule & Reasoning
-- **Expiry**: `ExpirationTime.fromDays(365)` (1 year).
-- **Reasoning**: Completion records are persistent proof of performance powering on-chain reputation. They outlive the slot and booking so that historical reputation scores remain verifiable over long time horizons.
+- **Expiry**: `ExpirationTime.atDate(new Date(Date.now() + 30 * 86400 * 1000))` (30-day lifecycle matching booking).
+- **Reasoning**: Completion records are persistent proof of performance powering on-chain reputation. They outlive the slot (15 min to 7 days) and match the booking lifetime so that historical reputation scores remain verifiable even after the slot itself has expired.
 
 #### Dual-Sided Reputation Verification (Three-Part Rule — Phase 1 Lock)
 
@@ -324,5 +324,20 @@ A job qualifies as a verified reputation point if and only if **ALL** of the fol
 
 ---
 
-*Last updated: 2026-10-14 IST (Phase 6 Final Specification)*
+## 9. Ground Truth Code Constants
+
+| Constant | Value | Source of Truth |
+|---|---|---|
+| **Min Slot Duration** | 15 minutes (`15 * 60 = 900s`) | `src/lib/slotValidation.ts:39` |
+| **Max Slot Duration** | 7 days (`7 * 86400 = 604800s`) | `src/lib/slotValidation.ts:40` |
+| **Slot Expiry** | Set to `ends_at` timestamp | `src/lib/arkiv.ts:1099` |
+| **Booking Expiry** | 30 days (`30 * 86400 * 1000ms`) | `src/lib/arkiv.ts:1157` |
+| **Completion Expiry** | 30 days (`30 * 86400 * 1000ms`) | `src/lib/arkiv.ts:1222` |
+| **Real Batch Limit** | 20 slots per tx (`REAL_BATCH_LIMIT = 20`) | `src/components/SeedModal.tsx:38` |
+| **Max Live Synthetic Cap** | 40 slots (`MAX_LIVE_SYNTHETIC_CAP = 40`) | `src/components/SeedModal.tsx:37` |
+| **Pure Unit Test Count** | 44 tests (21 Phase 4 + 23 Phase 5) | `npm run test:unit` |
+
+---
+
+*Last updated: 2026-10-14 IST (Phase 8 Specification Harmonization)*
 

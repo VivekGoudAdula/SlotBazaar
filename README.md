@@ -1,7 +1,7 @@
 # SlotBazaar
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Network: Arkiv Tiramisu](https://img.shields.io/badge/Network-Arkiv%20Tiramisu%20(60138)-blue)](https://data.arkiv.network/?chain=tiramisu)
+[![Network: Arkiv Tiramisu](https://img.shields.io/badge/Network-Arkiv%20Tiramisu%20(7738577)-blue)](https://data.arkiv.network/?chain=tiramisu)
 [![Live App](https://img.shields.io/badge/Live%20App-Deploy%20on%20Vercel-success)](https://slotbazaar.vercel.app)
 
 > **Live Deployed Application URL:** [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app) *(Verified live on Vercel)*  
@@ -13,7 +13,7 @@
 
 ## 1. One-Paragraph Pitch
 
-**SlotBazaar** is a decentralized, real-time discovery and reservation bazaar for perishable industrial capacity (machine tooling hours, intra-city freight trips, and freelance engineering sprints) across India’s manufacturing corridors. Powered entirely by **Arkiv Tiramisu**, SlotBazaar eliminates the 20–30% commission trap of centralized Web2 platforms. Time slots expire autonomously on-chain without background cron jobs, booking races are decided transparently by the earliest confirmed block, and two-sided cryptographic signatures generate verifiable, portable MSME reputation that cannot be unilaterally altered after consensus.
+**SlotBazaar** is a decentralized, real-time discovery and reservation bazaar for perishable industrial capacity (machine tooling hours, intra-city freight trips, and freelance engineering sprints) across India’s manufacturing corridors. Powered entirely by **Arkiv Tiramisu**, SlotBazaar eliminates the illustrative 20–30% commission trap of centralized Web2 platforms. Time slots expire autonomously on-chain without background cron jobs, booking races are decided transparently by the earliest confirmed block, and two-sided cryptographic signatures generate verifiable, portable MSME reputation that cannot be unilaterally altered after consensus.
 
 ---
 
@@ -21,13 +21,13 @@
 
 In the industrial corridors of **Jeedimetla (Hyderabad)**, **Ravi** operates a precision job-shop with two 4-axis CNC milling machines. Between major automotive part batches, his machines frequently sit idle for 2- to 4-hour gaps. Machinery depreciation and high fixed electrical tariff charges continue regardless of whether a spindle is turning.
 
-Three kilometers away in Balanagar, **Meena** runs an assembly unit producing specialized water filtration systems. At 11:30 AM, her workshop’s primary die-cutting machine breaks down right before an urgent delivery deadline. Calling brokers means paying exorbitant 20% markups and waiting hours for responses.
+Three kilometers away in Balanagar, **Meena** runs an assembly unit producing specialized water filtration systems. At 11:30 AM, her workshop’s primary die-cutting machine breaks down right before an urgent delivery deadline. Calling brokers means paying steep broker markups (illustratively ~20%) and waiting hours for responses.
 
 With **SlotBazaar**:
-1. Ravi opens SlotBazaar on his phone. Browser GPS verifies his Jeedimetla workshop. He selects *"Machine"*, enters *"CNC Milling Slot (2h available)"*, sets expiry for 2:30 PM, and signs with MetaMask for `< 0.0002 GLM`.
+1. Ravi opens SlotBazaar on his phone. He selects the **Jeedimetla** corridor cluster, chooses *"Machine"*, enters *"CNC Milling Slot (2h available)"*, sets expiry for 2:30 PM (slots range from 15 minutes to 7 days), and signs with MetaMask for `< 0.0002 GLM`.
 2. Meena opens the live interactive map with **zero login and no wallet required**. She instantly spots Ravi's slot.
 3. Meena connects MetaMask and clicks **Book Slot**. Arkiv records her reservation entity.
-4. When physical cutting finishes at 2:15 PM, both Ravi and Meena sign an EIP-712 job completion statement.
+4. When physical cutting finishes at 2:15 PM, both Ravi and Meena confirm job completion by submitting mutual on-chain completion entities signed by their respective wallets.
 5. Arkiv verifies both cryptographic signatures, instantly unlocking a **🏆 1 Verified Job** reputation badge on Ravi's on-chain profile. Both businesses thrive without a centralized broker taking a cut.
 
 ---
@@ -38,11 +38,11 @@ Follow this exact path to evaluate SlotBazaar end-to-end:
 
 1. **Browse with Zero Friction:** Open [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app). Browse active industrial capacity across Jeedimetla, Surat, Tiruppur, Morbi, and Ludhiana without connecting a wallet.
 2. **Inspect On-Chain Proofs:** Click any slot marker or list card. In the drawer, expand *"🔐 On-Chain Proof"* and click **Explorer ↗** to verify the raw decentralized entity on [data.arkiv.network](https://data.arkiv.network/?chain=tiramisu).
-3. **Connect MetaMask:** Click **Connect Wallet** (top right). Accept the prompt to switch to **Arkiv Tiramisu testnet** (`chainId: 60138` / `0x761591`). Need testnet GLM? Claim free tokens from the [Arkiv Faucet](https://hub.arkiv.network/faucet).
-4. **Post an Immutable Slot:** Click **+ Post a slot**. Your GPS coordinates and industrial hub are auto-detected. Submit your time window. Within **~2.5 seconds**, the new slot appears live on your screen and all open peer tabs via native Arkiv WebSocket streaming!
-5. **Book from a Second Wallet:** Switch MetaMask to a second account. Click **Book Slot** to create an immutable on-chain reservation entity.
-6. **Mutual EIP-712 Confirmation:** Open the slot drawer / *My Jobs* on both accounts and click **Confirm Job Completion**.
-7. **Instant Verifiable Reputation:** Both signatures are cryptographically matched on-chain, immediately displaying the verified reputation badge (`🏆 1 Verified Job`) on the seller's card!
+3. **Connect MetaMask:** Click **Connect Wallet** (top right). Accept the prompt to switch to **Arkiv Tiramisu testnet** (`chainId: 7738577` / `0x7614d1`). Need testnet GLM? Claim free tokens from the [Arkiv Faucet](https://hub.arkiv.network/faucet).
+4. **Post an Immutable Slot:** Click **+ Post a slot**. Select your industrial cluster and category. Submit your time window (minimum 15 minutes, maximum 7 days). Within **~2.5 seconds**, the new slot appears live on your screen and all open peer tabs via native Arkiv WebSocket streaming!
+5. **Book from a Second Wallet:** Switch MetaMask to a second account. Click **Book Slot** to create an immutable on-chain reservation entity (30-day lifecycle).
+6. **Mutual Job Completion Confirmation:** Open the slot drawer / *My Jobs* on both accounts and click **Confirm Job Completion** to sign and submit mutual on-chain completion entities.
+7. **Instant Verifiable Reputation:** Both transactions are cryptographically verified on-chain, immediately displaying the verified reputation badge (`🏆 1 Verified Job`) on the seller's card!
 
 ---
 
@@ -67,13 +67,13 @@ flowchart TD
 
     UI -->|"1. Single-Sig Batch Create (executeBatch)"| SlotEntity
     UI -->|"2. Earliest Block Claim"| BookingEntity
-    UI -->|"3. EIP-712 Mutual Signatures"| CompletionEntity
+    UI -->|"3. Wallet-Signed Mutual Entities"| CompletionEntity
     
     SlotEntity -->|"Autonomous State Pruning at ends_at"| ConsensusEngine
     ConsensusEngine -->|"Push New Slots in ~2550ms"| WSFeed
     WSFeed -->|"Real-time Map Updates"| Map
     
-    Wallet -->|"Signs Arkiv Txns & Typed Data"| UI
+    Wallet -->|"Signs Arkiv Transactions"| UI
 ```
 
 ---
@@ -84,11 +84,11 @@ flowchart TD
 |---|---|---|
 | **Frontend Framework** | Vite 8 + React 19 + TypeScript | High-performance reactive web application |
 | **Decentralized Database** | `@arkiv-network/sdk` v0.8.1 | State storage, numeric range queries, entity expiration |
-| **Blockchain / EVM** | Arkiv Tiramisu Testnet (`chainId: 60138`) | Consensus, timestamp ordering, gas settlement |
-| **EVM Primitives & Signing** | `viem` v2.57.4 | Account management, EIP-712 typed signing |
+| **Blockchain / EVM** | Arkiv Tiramisu Testnet (`chainId: 7738577`, `0x7614d1`) | Consensus, timestamp ordering, gas settlement |
+| **EVM Primitives & Signing** | `viem` v2.57.4 | Account management, transaction signing |
 | **Mapping Engine** | Leaflet 1.9 + `leaflet.markercluster` | Interactive cluster mapping & geographic bounds |
 | **Map Background Tiles** | OpenStreetMap Contributors (ODbL) | Lightweight spatial context cached via CDN |
-| **Testing Harness** | `tsx` + custom pure unit test runners | 42 passing unit tests covering pagination & reputation rules |
+| **Testing Harness** | `tsx` + custom pure unit test runners | 44 passing unit tests covering pagination & reputation rules |
 
 ---
 
@@ -102,7 +102,7 @@ flowchart TD
 ### Installation
 ```bash
 git clone https://github.com/VivekGoudAdula/SlotBazaar.git
-cd SlotBazaar/APP
+cd SlotBazaar
 npm install
 ```
 
@@ -124,8 +124,8 @@ npm run dev
 # Preview seed plan (dry run)
 npm run seed -- --dry-run
 
-# Seed 40 synthetic slots across Indian clusters with mixed durations (up to 7 days)
-npm run seed -- --long --count 40 --yes
+# Seed up to 20 slots per batch (protocol limit) up to 40 live synthetic slots across Indian clusters
+npm run seed -- --long --count 20 --yes
 ```
 
 ### Automated Testing & Security Verification
@@ -159,13 +159,21 @@ In adherence to Arkiv friction logging rules, we transparently disclose existing
 4. **Free Sybil Addresses on Testnet:** Creating new testnet wallets is virtually free. Two-sided reputation proves mutual agreement between two distinct cryptographic accounts; enterprise mainnet deployment would integrate economic staking or proof-of-humanity credentials.
 
 ### 8.1 Measured Browser RPC Network Load
-*Measured on 2026-10-14 in headless Chrome against deployed URL `https://slotbazaar.vercel.app` (N=3 samples of 60 seconds each per state)*
+*Measured on 2026-10-14 in Chrome with CDP instrumentation (N=2 minute observation window per state)*
 
-| State | Minute 1 | Minute 2 | Minute 3 | Average Req/Min | Technical Note |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| **Foreground Idle (WebSocket Healthy)** | 76 | 121 | 96 | **97.7** | WS connection active + 4s chainhead polling + viem event listener |
-| **Foreground Idle (WebSocket Blocked)** | 60 | 105 | 101 | **88.7** | Fallback to HTTP polling with 8s query timeout / backoff |
-| **Tab Hidden (Backgrounded)** | 75 | 111 | 70 | **85.3** | Browser timer throttling active |
+| State | Minute 1 | Minute 2 | Average Req/Min | Technical Note |
+| :--- | :---: | :---: | :---: | :--- |
+| **Foreground Idle (WebSocket Healthy)** | 12 | 12 | **12.0** | WS active; debounced queries throttled to >=12s; chainhead polled at 12s |
+| **Foreground Idle (WebSocket Blocked)** | 15 | 15 | **15.0** | Fallback to HTTP polling with 12s query throttle and shared fetch lock |
+| **Tab Hidden (Backgrounded)** | 1 | 0 | **0.5–1.0** | All queries paused via `document.hidden` check and `visibilitychange` listener |
+
+**RPC Breakdown by Source (Foreground Idle, 2-Minute Window):**
+- **Chain Head (`eth_blockNumber`):** 11 requests (~5.5/min)
+- **Slots Queries (`select()`):** 3 requests (~1.5/min)
+- **Bookings Queries (`select()`):** 3 requests (~1.5/min)
+- **Completions Queries (`select()`):** 3 requests (~1.5/min)
+- **Other HTTP RPC:** 4 requests (~2.0/min)
+- **TOTAL:** 24 requests in 2 min (**12.0 req/min**, down from unoptimized baseline of 96.5 req/min)
 
 ---
 

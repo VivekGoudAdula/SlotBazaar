@@ -21,8 +21,8 @@ import { tiramisu } from "@arkiv-network/sdk/chains";
 import { createWalletClient, type WalletArkivClient } from "@arkiv-network/sdk";
 import { parseArkivError, type ArkivError } from "./arkiv.js";
 
-export const TIRAMISU_CHAIN_ID_DEC = 7738577;
-export const TIRAMISU_CHAIN_ID_HEX = `0x${TIRAMISU_CHAIN_ID_DEC.toString(16)}`;
+export const TIRAMISU_CHAIN_ID_DEC = tiramisu.id;
+export const TIRAMISU_CHAIN_ID_HEX = `0x${tiramisu.id.toString(16)}`;
 
 export interface EIP1193Provider {
   request: (args: { method: string; params?: unknown[] | Record<string, unknown> }) => Promise<unknown>;
