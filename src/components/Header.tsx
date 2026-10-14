@@ -91,9 +91,6 @@ export function Header({
           />
           <span>Slot<span>Bazaar</span></span>
         </a>
-        <span className="header__tagline">
-          Live India map for expiring time slots
-        </span>
       </div>
 
       {/* Right: Controls */}

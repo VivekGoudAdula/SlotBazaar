@@ -128,7 +128,7 @@ body {
 
 .header__brand {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--sp-3);
   min-width: 0;
 }
@@ -205,20 +205,20 @@ body {
     gap: 8px;
     overflow: hidden;
   }
-  .header__tagline {
-    display: none;
-  }
   .header__chain-badge,
   .header__judges-btn,
   .header__seed-btn {
     display: none !important;
   }
-  .header__logo > span {
-    display: none;
-  }
   .header__post-btn {
     padding: 0 8px;
     font-size: 0.72rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .header__logo > span {
+    display: none;
   }
 }
 

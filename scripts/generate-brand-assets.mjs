@@ -42,21 +42,53 @@ async function main() {
 
   const page = await browser.newPage();
 
-  // 1. Generate optimized logo.png (800x533 transparent)
-  console.log("Generating public/logo.png...");
-  await page.setViewport({ width: 800, height: 533, deviceScaleFactor: 1 });
+  // Crop location icon from source image (removes bottom "SlotBazaar" name)
+  console.log("Cropping location icon from source logo (removing bottom name)...");
+  await page.setContent(`
+    <!DOCTYPE html>
+    <html>
+      <body style="margin:0; background:transparent;">
+        <canvas id="c"></canvas>
+      </body>
+    </html>
+  `);
+  const iconDataUri = await page.evaluate((b64) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        // Icon bounding box: minX: 511, maxX: 1158, minY: 35, maxY: 819
+        // Add slight margin around icon: sx=490, sy=25, sw=685, sh=795
+        const sx = 490;
+        const sy = 25;
+        const sw = 1175 - 490; // 685
+        const sh = 820 - 25;   // 795
+        const canvas = document.getElementById("c");
+        canvas.width = sw;
+        canvas.height = sh;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, sw, sh);
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.src = "data:image/png;base64," + b64;
+    });
+  }, logoBase64);
+
+  // 1. Generate optimized logo.png (clean icon only, transparent, under 200 KB)
+  console.log("Generating public/logo.png (icon only)...");
+  await page.setViewport({ width: 400, height: 464, deviceScaleFactor: 1 });
   await page.setContent(`
     <!DOCTYPE html>
     <html>
       <head>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { background: transparent; display: flex; align-items: center; justify-content: center; width: 800px; height: 533px; overflow: hidden; }
+          body { background: transparent; display: flex; align-items: center; justify-content: center; width: 400px; height: 464px; overflow: hidden; }
           img { max-width: 100%; max-height: 100%; object-fit: contain; }
         </style>
       </head>
       <body>
-        <img src="${logoDataUri}" alt="SlotBazaar Logo" />
+        <img src="${iconDataUri}" alt="SlotBazaar Logo" />
       </body>
     </html>
   `);
@@ -64,7 +96,7 @@ async function main() {
   const logoBuf = await page.screenshot({ omitBackground: true, type: "png" });
   fs.writeFileSync(path.join(PUBLIC_DIR, "logo.png"), logoBuf);
 
-  // 2. Generate 192x192 favicon
+  // 2. Generate 192x192 favicon (icon only)
   console.log("Generating public/favicon-192x192.png...");
   await page.setViewport({ width: 192, height: 192, deviceScaleFactor: 1 });
   await page.setContent(`
@@ -74,18 +106,18 @@ async function main() {
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { background: transparent; display: flex; align-items: center; justify-content: center; width: 192px; height: 192px; }
-          img { width: 180px; height: 180px; object-fit: contain; }
+          img { width: 172px; height: 172px; object-fit: contain; }
         </style>
       </head>
       <body>
-        <img src="${logoDataUri}" />
+        <img src="${iconDataUri}" />
       </body>
     </html>
   `);
   const fav192 = await page.screenshot({ omitBackground: true, type: "png" });
   fs.writeFileSync(path.join(PUBLIC_DIR, "favicon-192x192.png"), fav192);
 
-  // 3. Generate 32x32 favicon
+  // 3. Generate 32x32 favicon (icon only)
   console.log("Generating public/favicon-32x32.png...");
   await page.setViewport({ width: 32, height: 32, deviceScaleFactor: 1 });
   await page.setContent(`
@@ -95,11 +127,11 @@ async function main() {
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { background: transparent; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; }
-          img { width: 32px; height: 32px; object-fit: contain; }
+          img { width: 30px; height: 30px; object-fit: contain; }
         </style>
       </head>
       <body>
-        <img src="${logoDataUri}" />
+        <img src="${iconDataUri}" />
       </body>
     </html>
   `);
@@ -107,7 +139,7 @@ async function main() {
   fs.writeFileSync(path.join(PUBLIC_DIR, "favicon-32x32.png"), fav32);
   fs.writeFileSync(path.join(PUBLIC_DIR, "favicon.ico"), fav32);
 
-  // 4. Generate 180x180 apple-touch-icon
+  // 4. Generate 180x180 apple-touch-icon (icon only on #FBF7F0)
   console.log("Generating public/apple-touch-icon.png...");
   await page.setViewport({ width: 180, height: 180, deviceScaleFactor: 1 });
   await page.setContent(`
@@ -117,11 +149,11 @@ async function main() {
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { background: #FBF7F0; display: flex; align-items: center; justify-content: center; width: 180px; height: 180px; border-radius: 36px; overflow: hidden; }
-          img { width: 150px; height: 150px; object-fit: contain; }
+          img { width: 144px; height: 144px; object-fit: contain; }
         </style>
       </head>
       <body>
-        <img src="${logoDataUri}" />
+        <img src="${iconDataUri}" />
       </body>
     </html>
   `);
@@ -250,7 +282,7 @@ async function main() {
             <p class="tagline">Real-Time Expiring Industrial Capacity & Portable MSME Reputation on Arkiv</p>
           </div>
           <div class="logo-col">
-            <img src="${logoDataUri}" alt="SlotBazaar Logo" />
+            <img src="${iconDataUri}" alt="SlotBazaar Logo" />
           </div>
         </div>
         <div class="footer-bar">
