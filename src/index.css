@@ -1229,7 +1229,17 @@ body {
 .slot-marker--critical  { background: var(--c-vermilion); }
 .slot-marker--urgent    { background: var(--c-marigold);  }
 
-/* Leaflet popup override */
+/* Leaflet popup override — prevent blinking/fading transitions on re-renders */
+.leaflet-popup {
+  transition: none !important;
+  animation: none !important;
+}
+
+.leaflet-fade-anim .leaflet-popup {
+  transition: none !important;
+  opacity: 1 !important;
+}
+
 .leaflet-popup-content-wrapper {
   border: var(--border-3) !important;
   border-radius: 0 !important;

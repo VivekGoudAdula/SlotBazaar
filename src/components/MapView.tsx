@@ -18,7 +18,6 @@ import { MarkerClusterGroup } from "./MarkerClusterGroup.js";
 
 import type { SlotEntity, BookingEntity, ReputationResult } from "../lib/arkiv.js";
 import { SlotCard } from "./SlotCard.js";
-import { useNow } from "../hooks/useNow.js";
 import { findNearestCluster } from "../lib/clusters.js";
 
 // ─── Fix Leaflet icon paths (broken under Vite) ───────────────────────────────
@@ -46,14 +45,15 @@ const CATEGORY_ICONS: Record<string, string> = {
 /** 15-minute threshold for vermilion pulse ring */
 const CRITICAL_SEC = 15 * 60;
 
+const slotIconCache = new Map<string, L.DivIcon>();
+
 /**
- * Creates a DivIcon teardrop marker with category colour.
- * Adds vermilion pulse ring when < 15 min remain.
- * Adds hatched/dimmed style with "BOOKED" stamp for booked slots.
+ * Returns a cached DivIcon teardrop marker with category colour.
+ * Cached by slot state so it is never recreated unnecessarily,
+ * completely eliminating Leaflet popup flicker/blinking.
  */
-function createSlotIcon(
+function getSlotIcon(
   slot: SlotEntity,
-  now: number,
   winningBooking?: BookingEntity,
   userAddress?: string | null
 ): L.DivIcon {
@@ -67,70 +67,82 @@ function createSlotIcon(
     winningBooking && normUser && winningBooking.creator.toLowerCase() === normUser
   );
 
-  const remaining  = slot.endsAt - now;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const remaining  = slot.endsAt - nowSec;
   const isCritical = remaining > 0 && remaining <= CRITICAL_SEC;
   const isExpired  = remaining <= 0;
 
-  const baseColor  = isExpired
-    ? "#9E9E9E"
-    : CATEGORY_COLORS[slot.category] ?? "#1B1A17";
+  const cacheKey = `${slot.key}:${slot.category}:${isCritical}:${isExpired}:${isBooked}:${isBookedByYou}:${isMine}:${slot.title}`;
+  let cached = slotIconCache.get(cacheKey);
+  if (!cached) {
+    const baseColor  = isExpired
+      ? "#9E9E9E"
+      : CATEGORY_COLORS[slot.category] ?? "#1B1A17";
 
-  const markerColor = isCritical ? "#E8452C" : baseColor;
+    const markerColor = isCritical ? "#E8452C" : baseColor;
 
-  let extraClasses = "";
-  if (isCritical) extraClasses += " slot-marker--pulse";
-  if (isBooked) extraClasses += " slot-marker--booked";
-  if (isBookedByYou) extraClasses += " slot-marker--booked-by-you";
-  if (isMine) extraClasses += " slot-marker--mine";
+    let extraClasses = "";
+    if (isCritical) extraClasses += " slot-marker--pulse";
+    if (isBooked) extraClasses += " slot-marker--booked";
+    if (isBookedByYou) extraClasses += " slot-marker--booked-by-you";
+    if (isMine) extraClasses += " slot-marker--mine";
 
-  let stampHtml = "";
-  if (isBookedByYou) {
-    stampHtml = `<div class="slot-marker__stamp slot-marker__stamp--yours">YOU</div>`;
-  } else if (isBooked) {
-    stampHtml = `<div class="slot-marker__stamp">BOOKED</div>`;
-  } else if (isMine) {
-    stampHtml = `<div class="slot-marker__stamp" style="background:var(--c-marigold);color:var(--c-ink)">MINE</div>`;
+    let stampHtml = "";
+    if (isBookedByYou) {
+      stampHtml = `<div class="slot-marker__stamp slot-marker__stamp--yours">YOU</div>`;
+    } else if (isBooked) {
+      stampHtml = `<div class="slot-marker__stamp">BOOKED</div>`;
+    } else if (isMine) {
+      stampHtml = `<div class="slot-marker__stamp" style="background:var(--c-marigold);color:var(--c-ink)">MINE</div>`;
+    }
+
+    const html = `
+      <div
+        class="slot-marker${extraClasses}"
+        style="background:${markerColor};"
+        title="${slot.title.replace(/"/g, "&quot;")}"
+      >
+        <div class="slot-marker__inner">${CATEGORY_ICONS[slot.category] ?? "📦"}</div>
+        ${stampHtml}
+      </div>
+    `;
+
+    cached = L.divIcon({
+      html,
+      className:   "",
+      iconSize:    [36, 36],
+      iconAnchor:  [18, 36],
+      popupAnchor: [0, -40],
+    });
+    slotIconCache.set(cacheKey, cached);
   }
-
-  const html = `
-    <div
-      class="slot-marker${extraClasses}"
-      style="background:${markerColor};"
-      title="${slot.title.replace(/"/g, "&quot;")}"
-    >
-      <div class="slot-marker__inner">${CATEGORY_ICONS[slot.category] ?? "📦"}</div>
-      ${stampHtml}
-    </div>
-  `;
-
-  return L.divIcon({
-    html,
-    className:   "",
-    iconSize:    [36, 36],
-    iconAnchor:  [18, 36],
-    popupAnchor: [0, -40],
-  });
+  return cached;
 }
 
-/**
- * Creates custom "You Are Here" user location radar beacon icon.
- */
-function createUserLocationIcon(): L.DivIcon {
-  const html = `
-    <div class="user-location-marker" title="You Are Here">
-      <div class="user-location-radar"></div>
-      <div class="user-location-dot"></div>
-      <div class="user-location-tag">YOU ARE HERE</div>
-    </div>
-  `;
+let cachedUserIcon: L.DivIcon | null = null;
 
-  return L.divIcon({
-    html,
-    className: "user-location-div-icon",
-    iconSize: [110, 42],
-    iconAnchor: [55, 14],
-    popupAnchor: [0, -20],
-  });
+/**
+ * Creates custom "You Are Here" user location radar beacon icon (cached singleton).
+ */
+function getUserLocationIcon(): L.DivIcon {
+  if (!cachedUserIcon) {
+    const html = `
+      <div class="user-location-marker" title="You Are Here">
+        <div class="user-location-radar"></div>
+        <div class="user-location-dot"></div>
+        <div class="user-location-tag">YOU ARE HERE</div>
+      </div>
+    `;
+
+    cachedUserIcon = L.divIcon({
+      html,
+      className: "user-location-div-icon",
+      iconSize: [110, 42],
+      iconAnchor: [55, 14],
+      popupAnchor: [0, -20],
+    });
+  }
+  return cachedUserIcon;
 }
 
 // ─── India bounds ─────────────────────────────────────────────────────────────
@@ -225,8 +237,6 @@ export function MapView({
   userLocation = null,
   onRecenterUser,
 }: MapViewProps): React.ReactElement {
-  const now = useNow();
-
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       {/* Recenter to My Location Button (shown once location is active) */}
@@ -294,10 +304,10 @@ export function MapView({
 
             <Marker
               position={[userLocation.lat, userLocation.lon]}
-              icon={createUserLocationIcon()}
+              icon={getUserLocationIcon()}
               zIndexOffset={1000}
             >
-              <Popup className="slot-popup">
+              <Popup className="slot-popup" autoPan={false}>
                 <div style={{ padding: "12px 14px", minWidth: 200 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
                     <span style={{ fontSize: "1.1rem" }}>📍</span>
@@ -345,7 +355,7 @@ export function MapView({
             const sKeyNorm = slot.key.toLowerCase();
             const winningBooking = winningBookingsBySlot?.get(sKeyNorm);
             const sellerRep = reputationByAddress?.get(slot.creator.toLowerCase());
-            const icon = createSlotIcon(slot, now, winningBooking, userAddress);
+            const icon = getSlotIcon(slot, winningBooking, userAddress);
 
             return (
               <Marker
@@ -353,8 +363,9 @@ export function MapView({
                 position={[slot.lat, slot.lon]}
                 icon={icon}
                 title={slot.title}
+                riseOnHover={true}
               >
-                <Popup closeButton={false} className="slot-popup">
+                <Popup closeButton={false} className="slot-popup" autoPan={false}>
                   <SlotCard
                     slot={slot}
                     winningBooking={winningBooking}
