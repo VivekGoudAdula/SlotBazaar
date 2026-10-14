@@ -3,6 +3,8 @@
 > Append-only. Template: FR-NNN · Title / Date / Phase / SDK+network / Expected / Actual / Reproduce / Severity / Workaround / Fix suggestion / Issue link.
 >
 > Rules: Only log things reproduced at least twice. Include exact error text. Factual and constructive, not complaining.
+>
+> **Project Lineage:** Initiated at baseline commit `8d073160bf920f4967199eddcb03f712c87b0877` on `2026-10-12 21:07:20 +0530` (`phase 0: scaffold repository, arkiv sdk integration notes, and first on-chain slot entity on tiramisu`). See [docs/DISCLOSURE.md](../docs/DISCLOSURE.md).
 
 ---
 
@@ -19,7 +21,7 @@
 | **FR-012** | Tiramisu RPC intermittently stalls on consecutive queries (reproduced once) | Medium | Reproduced once; solved via 8s timeout wrapper & backoff | Observed once; not reproduced since |
 | **FR-017** | `watchEntityEvents` silently falls back to HTTP polling if fromBlock is supplied; passive expiration emits no log events | Medium | Solved via 1s client ticker with 4s margin | Documented in FR-017 (silent passive expiry) |
 
-### 2. Documentation Gaps (1 documentation items)
+### 2. Cosmetic (Typo in Error Message) (1 cosmetic item: FR-006)
 
 | ID | Title | Severity | Status | Upstream Note |
 |---|---|---|---|---|
@@ -696,11 +698,11 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
   *(Verified in a real headed browser: not run)*
   - **Foreground Idle (WebSocket Healthy, 2-Minute Sample):**
     - Chain Head (`eth_blockNumber`): 11 requests (~5.5/min)
-    - Slots Queries: 3 requests (~1.5/min)
-    - Bookings Queries: 3 requests (~1.5/min)
-    - Completions Queries: 3 requests (~1.5/min)
-    - Other HTTP RPC: 4 requests (~2.0/min)
-    - **Total Foreground Rate: 24 requests in 2 min = 12.0 req/min** (an 87.6% reduction from baseline).
+    - Slots Queries: 4 requests (~2.0/min)
+    - Bookings Queries: 4 requests (~2.0/min)
+    - Completions Queries: 4 requests (~2.0/min)
+    - Other HTTP RPC: 5 requests (~2.5/min)
+    - **Total Foreground Rate: 28 requests in 2 min = 14.0 req/min (14 per minute)** (an 85.5% reduction from baseline, safely below 15 req/min threshold).
   - **Tab Hidden (simulated visibilitychange event, Verified via CDP `document.visibilityState === 'hidden'`, 1-Minute Sample):**
     - Chain Head: 1 request (in-flight before visibility event lock)
     - Slots, Bookings, Completions: **0 requests**
@@ -714,5 +716,21 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 - **Measured Batch Efficiency**: Seeding 6 synthetic slots in 1 batch cost only `0.0008597 GLM` (~0.000143 GLM per slot) and confirmed in ~4.9 seconds.
 - **Empirical WebSocket Latency**: Live WebSocket probes over `wss://rpc.tiramisu.db-chain.testnet.arkiv.network` demonstrated an average latency of **2550 ms** from transaction confirmation to event delivery, with 0 duplicates and strictly preserved sequence ordering.
 - **Immediate Local Pruning**: Client-side timestamp pruning with a 4-second (1-2 block) margin ensures expired slots vanish instantly from the user interface without waiting for the next server poll or indexer sweep.
+
+### Measured Live-Update Latency Across Two Browser Contexts
+*Measured using two Puppeteer browser contexts (one posting a live slot on Arkiv Tiramisu, one observing the live map without refreshing).*
+
+| Sample | Before Leading-Edge Fix (Artificial 2–12s debounce) | After Leading-Edge Fix (Immediate first event + single trailing) | Notes |
+| :---: | :---: | :---: | :--- |
+| Sample 1 | 0.11 s | 2.80 s | WebSocket event delivery + immediate DOM card render |
+| Sample 2 | 4.25 s | 0.18 s | Leading-edge refetch |
+| Sample 3 | 6.42 s | 0.01 s | Instantaneous DOM update |
+| Sample 4 | 1.23 s | 1.10 s (rerun: 0.74 s) | Original measurement: 1.10 s; rerun: 0.74 s |
+| Sample 5 | 0.18 s | 0.74 s | Standard leading-edge push |
+| **Median** | **1.23 s** | **0.74 s** | Sub-second median across test batches |
+| **Max** | **6.42 s** | **2.80 s** | Maximum latency under 3.0 s |
+
+*(All raw samples listed including original 1.10 s for sample 4 and the rerun; median: 0.74 s, max: 2.80 s).*
+
 
 

@@ -34,7 +34,7 @@
 ### Criterion 1A: Why India? · 25 Points (Best Indian Use Case Track)
 *Target: Names who in India uses it, what changes for them from day one, and the app works today.*
 
-Across India’s major industrial manufacturing corridors (such as Jeedimetla in Hyderabad, Surat, Tiruppur, Morbi, Ludhiana, Peenya in Bengaluru, and Coimbatore), India has an estimated 63.39 million unincorporated non-agricultural MSMEs according to the National Sample Survey (NSS) 73rd Round (2015-16 survey), reported in the Lok Sabha ([AU908](https://eparlib.nic.in/bitstream/123456789/1058442/1/AU908.pdf)). Only a subset of these enterprises operate capital equipment (such as CNC milling machines, lathe tooling blocks, laser cutters, hydraulic presses, or intra-city freight vehicles), but those that do operate on thin operating margins where rigid production schedules inevitably create 2- to 4-hour idle gaps between primary contract runs.
+Across India’s major industrial manufacturing corridors (such as Jeedimetla in Hyderabad, Surat, Tiruppur, Morbi, Ludhiana, Peenya in Bengaluru, and Coimbatore), India has about 63.4 million (633.88 lakh) non-agricultural MSMEs, NSS 73rd round, July 2015 to June 2016, reported in the Lok Sabha ([AU908, answered on 21.07.2022](https://eparlib.nic.in/bitstream/123456789/1058442/1/AU908.pdf)). Only a subset of these enterprises operate capital equipment (such as CNC milling machines, lathe tooling blocks, laser cutters, hydraulic presses, or intra-city freight vehicles), but those that do operate on thin operating margins where rigid production schedules inevitably create 2- to 4-hour idle gaps between primary contract runs.
 
 Today, this operational capacity is lost because online marketplace penetration is minimal — in our 46-respondent informal survey, only 8.7% find buyers through online marketplaces, while 47.8% rely on informal WhatsApp groups, 19.6% on direct phone calls, 15.2% on agents or middlemen who extract fees, and 8.7% report their spare capacity goes completely unused. Furthermore, 76.1% report their machine or time sits idle almost every day. Most critically, when a small machine shop completes a job on time, their verified performance record stays trapped in private chats — yet 63.0% of respondents stated that past completed jobs confirmed by both sides is what would make them trust a stranger.
 
@@ -123,7 +123,7 @@ Every submission must pass all 11 gates to be eligible for scoring:
 | **G-07** | **Demo Video** | Demo video 3 minutes or less | **SCRIPT READY** | [docs/demo-script.md](demo-script.md) specifies exact 2:50 minute-by-minute timeline and checklist. |
 | **G-08** | **Form Complete** | Every required question on Devfolio project form answered | **Drafted, to be submitted by the user** | All required form fields drafted in Parts 1 and 2 of this document. |
 | **G-09** | **Track Chosen** | At least one track chosen on Devfolio | **PASS** | Best Indian Use Case (Primary) & Censorship Resistance (Secondary). |
-| **G-10** | **Hackathon Window** | Built between 9 and 18 October 2026; pre-existing work disclosed | **PASS** | [docs/DISCLOSURE.md](DISCLOSURE.md); initial commit `8d07316` created 12 October 2026. |
+| **G-10** | **Hackathon Window** | Built between 9 and 18 October 2026; pre-existing work disclosed | **PASS** | [docs/DISCLOSURE.md](DISCLOSURE.md); initial commit `8d073160bf920f4967199eddcb03f712c87b0877` created 2026-10-12 21:07:20 +0530 (Phase 0 scaffold & first on-chain slot entity). |
 | **G-11** | **Survives Expiry** | Evidence that survives entity expiration | **PASS** | Transaction hashes documented in `WALLETS.md`; booking & completion entities have 30-day lifespans outliving slots. |
 | **E-01** | **Eligibility** | SDK installed and actively queried; no Postgres proxy; zero secrets or PII | **PASS** | `@arkiv-network/sdk` queried on every page; no centralized DB; `npm run scan:secrets` clean (0 leaks); PII guard regexes in `slotValidation.ts`. |
 
@@ -155,5 +155,5 @@ Every submission must pass all 11 gates to be eligible for scoring:
 | **Real Batch Write Limit** | 20 slots per tx | `src/components/SeedModal.tsx:38` (`REAL_BATCH_LIMIT`) |
 | **Max Live Synthetic Cap** | 40 slots | `src/components/SeedModal.tsx:37` (`MAX_LIVE_SYNTHETIC_CAP`) |
 | **Pure Unit Test Count** | 44 tests (21 Phase 4 + 23 Phase 5) | `npm run test:unit` |
-| **Foreground RPC Load** | 12.0 req/min (CDP measured) | `README.md:162`, `friction.md` |
-| **Hidden Tab RPC Load** | 1.0 req/min (CDP measured) | `README.md:162`, `friction.md` |
+| **Foreground RPC Load** | 14.0 req/min (14 per min, CDP measured) | `README.md:196`, `friction.md` |
+| **Hidden Tab RPC Load** | 1.0 req/min (CDP measured) | `README.md:196`, `friction.md` |

@@ -1,16 +1,16 @@
 /**
  * arkiv/repro/fr003-uppercase-attribute.ts
  *
- * Minimal, clean reproduction for FR-003:
- * Demonstrates that passing an uppercase attribute name (e.g. "ProjectName")
- * fails during node-side gas estimation simulation with `Ident32InvalidByte(0, 0x50)`.
- * It never reaches `eth_sendRawTransaction`. Zero gas/GLM is spent.
+ * Controlled empirical test for FR-003:
+ * Passes an uppercase attribute name ("ProjectName") to createEntity and
+ * programmatically measures on-chain gas expenditure, caught error type,
+ * and whether the transaction reached the chain.
  *
  * Requirements:
  * - PRIVATE_KEY in .env (with testnet GLM on Arkiv Tiramisu)
  *
  * Usage:
- * - node ./node_modules/tsx/dist/cli.mjs arkiv/repro/fr003-uppercase-attribute.ts
+ * - npx tsx arkiv/repro/fr003-uppercase-attribute.ts
  */
 
 import "dotenv/config";
@@ -42,35 +42,59 @@ async function main() {
     transport: http(),
   });
 
-  console.log("=== FR-003 REPRO: Uppercase Attribute Simulation Revert ===");
+  console.log("=== FR-003: Uppercase Attribute Name Validation Test ===");
   const balBefore = await pub.getBalance({ address: account.address });
-  console.log(`Account: ${account.address}`);
-  console.log(`Balance before: ${formatEther(balBefore)} GLM`);
+  console.log(`Account        : ${account.address}`);
+  console.log(`Balance before : ${formatEther(balBefore)} GLM (${balBefore.toString()} wei)`);
+
+  let caughtError: any = null;
+  let txHash: string | null = null;
 
   try {
-    await wallet.createEntity({
+    const res = await wallet.createEntity({
       payload: jsonToPayload({ test: "fr003" }),
       contentType: "application/json",
       attributes: {
-        ProjectName: str("invalid-uppercase"), // uppercase attribute name
-        project: str("slotbazaar"),
+        ProjectName: str("invalid-uppercase"), // Uppercase attribute name
+        project: str("slotbazaar-repro"),
       },
       expires: ExpirationTime.fromMinutes(10),
     });
-    console.log("UNEXPECTED: Tx succeeded");
+    txHash = typeof res === "string" ? res : (res as any)?.txHash ?? "success";
   } catch (err: any) {
-    const balAfter = await pub.getBalance({ address: account.address });
-    const gasSpent = balBefore - balAfter;
-    const msg = String(err?.message || err);
+    caughtError = err;
+  }
 
-    console.log("\n[CONFIRMED ERROR TRACE]");
-    console.log("- Error Name:", err?.name);
-    console.log("- Origin: Node simulation in eth_estimateGas (ContractFunctionRevertedError)");
-    console.log("- Detail:", msg.includes("Ident32InvalidByte") ? "Ident32InvalidByte(0, 0x50) detected" : msg.slice(0, 150));
-    console.log("- Gas Spent:", `${gasSpent.toString()} wei (${formatEther(gasSpent)} GLM)`);
-    console.log("\n[VERDICT]");
-    console.log("- Zero gas was spent on-chain.");
-    console.log("- Node simulation rejects uppercase characters; SDK lacks client pre-validation.");
+  const balAfter = await pub.getBalance({ address: account.address });
+  const gasSpentWei = balBefore - balAfter;
+
+  console.log(`Balance after  : ${formatEther(balAfter)} GLM (${balAfter.toString()} wei)`);
+  console.log(`Gas spent      : ${gasSpentWei.toString()} wei (${formatEther(gasSpentWei)} GLM)`);
+
+  if (caughtError) {
+    const errorName = caughtError?.name ?? "UnknownError";
+    const errorMessage = String(caughtError?.message ?? caughtError);
+    const hasIdent32Revert = errorMessage.includes("Ident32InvalidByte");
+
+    console.log("\n--- Observed Error Trace ---");
+    console.log(`Error Name     : ${errorName}`);
+    console.log(`Error Snippet  : ${errorMessage.slice(0, 200)}...`);
+    console.log(`Ident32 Revert : ${hasIdent32Revert}`);
+
+    // Programmatically compute evaluation
+    const isGasFree = gasSpentWei === 0n;
+    const isRejectedBeforeBroadcast = isGasFree && !txHash;
+
+    console.log("\n--- Programmatic Evaluation ---");
+    console.log("Observed Results:", {
+      rejectedLocally: isRejectedBeforeBroadcast,
+      gasSpentWei: gasSpentWei.toString(),
+      errorName,
+      ident32InvalidByteDetected: hasIdent32Revert,
+    });
+  } else {
+    console.log("\n--- Programmatic Evaluation ---");
+    console.log("Tx Succeeded unexpectedly with hash:", txHash);
   }
 }
 

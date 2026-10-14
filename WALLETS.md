@@ -6,6 +6,8 @@ This file tracks every wallet address used in SlotBazaar development.
 | Address | Role | Purpose | Notable Tx Hash |
 |---------|------|---------|-----------------|
 | `0x53491aA366E086C19da948669b340317eE6eA6e9` | seed-wallet / phase-0 | Creates synthetic slot entities for Phase 0 testing | `0xe8bca88098bb0525dd4c865f28d757e383f04a44b2ff01fbbb2a1025cd069ed2` |
+| `0x55513e667106CD4b259A6BE332FeE1D65E253fc8` | Ravi (Seller Demo) | Demo seller persona (posts CNC / transport slots in Jeedimetla) | Two-wallet simulation |
+| `0xD87a9d5962430F06437EE8C126DbF42d11178c5D` | Meena (Buyer Demo) | Demo buyer persona (books slots, signs mutual completion) | Two-wallet simulation |
 
 ---
 
@@ -145,4 +147,14 @@ All entities created with `project="slotbazaar"` on **Arkiv Tiramisu** (`chainId
 | Probe 3 | `0x6b8bc827d06ee29f453a992bb5be7bc155bb3dd9b17865c36511a43a65261ee9` | 216 ms |
 | Probe 4 | `0xf876801c4ce5449fb66c48c5a452fc38fe6767520e54d650117a02298e82ef42` | 3,695 ms |
 | Probe 5 | `0x24a4d6f83bca9aa6a3baee8fa1948842617a942ca9a05dfa04f21db593e87851` | 3,059 ms |
+
+---
+
+## Phase 4 Demo Accounts (Two-Wallet Simulation)
+
+| Persona | Address | Role | Purpose |
+|---------|---------|------|---------|
+| **Ravi (Seller)** | `0x55513e667106CD4b259A6BE332FeE1D65E253fc8` | Demo Seller | Posts 2-hour CNC / transport slots in Jeedimetla; signs mutual seller completion |
+| **Meena (Buyer)** | `0xD87a9d5962430F06437EE8C126DbF42d11178c5D` | Demo Buyer | Books winning slots on Arkiv; signs mutual buyer completion to unlock reputation |
+
 

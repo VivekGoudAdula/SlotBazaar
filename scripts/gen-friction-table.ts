@@ -174,7 +174,7 @@ export function generateMarkdownTables(entries: FrictionEntry[]): string {
     out += `| **${e.id}** | ${e.title} | ${e.severity} | ${e.status} | ${e.linkOrNote} |\n`;
   }
 
-  out += `\n### 2. Documentation Gaps (${docsEntries.length} documentation items)\n\n`;
+  out += `\n### 2. Cosmetic (Typo in Error Message) (${docsEntries.length} cosmetic item: FR-006)\n\n`;
   out += `| ID | Title | Severity | Status | Upstream Note |\n`;
   out += `|---|---|---|---|---|\n`;
   for (const e of docsEntries) {

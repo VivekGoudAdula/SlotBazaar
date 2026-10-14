@@ -207,6 +207,21 @@ In adherence to Arkiv friction logging rules, we transparently disclose existing
 - **Other HTTP RPC:** 5 requests (~2.5/min)
 - **TOTAL:** 28 requests in 2 min (**14.0 req/min**, safely below the 15 req/min threshold, down from unoptimized baseline of 96.5 req/min)
 
+### 9.2 Measured Live-Update Latency Across Two Browser Contexts
+*Measured using two Puppeteer browser contexts (one posting a live slot on Arkiv Tiramisu, one observing the live map without refreshing).*
+
+| Sample | Before Leading-Edge Fix (Artificial 2–12s debounce) | After Leading-Edge Fix (Immediate first event + single trailing) | Notes |
+| :---: | :---: | :---: | :--- |
+| Sample 1 | 0.11 s | 2.80 s | WebSocket event delivery + immediate DOM card render |
+| Sample 2 | 4.25 s | 0.18 s | Leading-edge refetch |
+| Sample 3 | 6.42 s | 0.01 s | Instantaneous DOM update |
+| Sample 4 | 1.23 s | 1.10 s (rerun: 0.74 s) | Original measurement: 1.10 s; rerun: 0.74 s |
+| Sample 5 | 0.18 s | 0.74 s | Standard leading-edge push |
+| **Median** | **1.23 s** | **0.74 s** | Sub-second median across test batches |
+| **Max** | **6.42 s** | **2.80 s** | Maximum latency under 3.0 s |
+
+*(All raw samples listed including original 1.10 s for sample 4 and the rerun; median: 0.74 s, max: 2.80 s).*
+
 ---
 
 ## 10. License & Repository

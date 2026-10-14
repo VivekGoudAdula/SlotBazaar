@@ -1,16 +1,16 @@
 /**
  * arkiv/repro/fr011-getentity-call-shape.ts
  *
- * Minimal, clean reproduction for FR-011:
- * Demonstrates the call-shape difference in PublicArkivClient.getEntity:
- * - Calling `getEntity({ key: "0x..." })` fails with `TypeError: Invalid key value`
- * - Calling positional `getEntity("0x...")` succeeds reliably both live and post-expiry.
- *
- * Requirements:
- * - PRIVATE_KEY in .env (with testnet GLM on Arkiv Tiramisu)
+ * Empirical verification of getEntity parameter shapes and Entity fields:
+ * 1. Inspects SDK Entity field names and types.
+ * 2. Creates a live entity on Arkiv Tiramisu.
+ * 3. Tests canonical positional call: pub.getEntity(entityKey).
+ *    Prints real fields including expiresAt block number.
+ * 4. Tests object-wrapped call: pub.getEntity({ key: entityKey }).
+ * 5. Programmatically computes and displays observed results without hardcoded verdict.
  *
  * Usage:
- * - node ./node_modules/tsx/dist/cli.mjs arkiv/repro/fr011-getentity-call-shape.ts
+ * - npx tsx arkiv/repro/fr011-getentity-call-shape.ts
  */
 
 import "dotenv/config";
@@ -20,9 +20,10 @@ import {
   createWalletClient,
   ExpirationTime,
   jsonToPayload,
+  Entity,
 } from "@arkiv-network/sdk";
 import { tiramisu } from "@arkiv-network/sdk/chains";
-import { str, u64 } from "@arkiv-network/sdk/attr";
+import { str } from "@arkiv-network/sdk/attr";
 import { http, type Hex } from "viem";
 
 async function main() {
@@ -42,40 +43,87 @@ async function main() {
     transport: http(),
   });
 
-  console.log("=== FR-011 REPRO: getEntity Parameter Shape & Resolution ===");
-  console.log("1. Creating fresh test entity...");
+  console.log("=== FR-011: getEntity Parameter Shape & Entity Inspection ===");
+
+  // 1. Inspect SDK Entity fields
+  console.log("\n1. Inspecting SDK Entity prototype & field definitions:");
+  const dummyEntity = new Entity({
+    key: "0x1234" as Hex,
+    creator: account.address,
+    createdAt: 100n,
+    expiresAt: 200n,
+  });
+  console.log("SDK Entity instance keys:", Object.keys(dummyEntity));
+
+  // 2. Create a fresh test entity
+  console.log("\n2. Creating live test entity on Tiramisu...");
   const createRes = await wallet.createEntity({
-    payload: jsonToPayload({ title: "FR-011 Shape Probe" }),
+    payload: jsonToPayload({ probe: "fr011-shape-test", timestamp: Date.now() }),
     contentType: "application/json",
     attributes: {
-      test_probe: str("fr011"),
       project: str("slotbazaar-repro"),
+      test_probe: str("fr011"),
     },
-    expires: ExpirationTime.fromMinutes(1),
+    expires: ExpirationTime.fromMinutes(2),
   });
 
-  const entityKey = (typeof createRes === "string" ? createRes : (createRes as any).entityKey) as `0x${string}`;
+  const entityKey = (typeof createRes === "string" ? createRes : (createRes as any).entityKey) as Hex;
   console.log(`Created entity key: ${entityKey}`);
 
-  console.log("\n2. Testing incorrect object shape: getEntity({ key: entityKey })...");
+  // 3. Test positional shape
+  console.log("\n3. Testing positional call: pub.getEntity(entityKey)...");
+  let positionalResult: any = null;
+  let positionalError: any = null;
   try {
-    await (pub as any).getEntity({ key: entityKey });
-    console.log("UNEXPECTED: Object call succeeded");
+    positionalResult = await pub.getEntity(entityKey);
   } catch (err: any) {
-    console.log(`[EXPECTED ERROR]: ${err?.message || err}`);
+    positionalError = err;
   }
 
-  console.log("\n3. Testing canonical positional shape: getEntity(entityKey)...");
+  // 4. Test object shape
+  console.log("\n4. Testing object shape: pub.getEntity({ key: entityKey })...");
+  let objectResult: any = null;
+  let objectError: any = null;
   try {
-    const entity = await pub.getEntity(entityKey);
-    console.log(`[SUCCESS] Retrieved live entity: key=${entity.key}, expires=${entity.expires}`);
+    objectResult = await (pub as any).getEntity({ key: entityKey });
   } catch (err: any) {
-    console.error("Failed positional getEntity:", err);
+    objectError = err;
   }
 
-  console.log("\n[VERDICT]");
-  console.log("- FR-011 was withdrawn as an SDK bug: the SDK strictly expects positional `getEntity(key)`.");
-  console.log("- Positional call succeeds directly without issue.");
+  // 5. Print observed field values from live entity
+  console.log("\n--- Observed Live Entity Fields ---");
+  if (positionalResult) {
+    console.log("key        :", positionalResult.key);
+    console.log("creator    :", positionalResult.creator);
+    console.log("owner      :", positionalResult.owner);
+    console.log("createdAt  :", positionalResult.createdAt?.toString(), "(block number)");
+    console.log("updatedAt  :", positionalResult.updatedAt?.toString(), "(block number)");
+    console.log("expiresAt  :", positionalResult.expiresAt?.toString(), "(block number)");
+    console.log("contentType:", positionalResult.contentType);
+  } else {
+    console.log("Positional fetch failed:", positionalError?.message);
+  }
+
+  if (objectError) {
+    console.log("\n--- Observed Object Shape Error ---");
+    console.log("Error Name   :", objectError?.name);
+    console.log("Error Message:", objectError?.message);
+  }
+
+  // 6. Programmatic computation
+  const positionalSucceeded = Boolean(positionalResult && positionalResult.key === entityKey);
+  const objectFailed = Boolean(objectError);
+  const expiresAtIsBlock = typeof positionalResult?.expiresAt === "bigint";
+
+  console.log("\n--- Programmatic Evaluation ---");
+  console.log("Observed Results:", {
+    positionalCallSuccess: positionalSucceeded,
+    objectCallFailed: objectFailed,
+    objectErrorMessage: objectError?.message,
+    expiresAtType: typeof positionalResult?.expiresAt,
+    expiresAtBlockNumber: positionalResult?.expiresAt?.toString(),
+    expiresAtIsBlockNumber: expiresAtIsBlock,
+  });
 }
 
 main().catch(console.error);

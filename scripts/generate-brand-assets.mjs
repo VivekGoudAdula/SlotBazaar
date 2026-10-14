@@ -23,7 +23,8 @@ const CHROME_PATH = fs.existsSync("C:\\Program Files\\Google\\Chrome\\Applicatio
   ? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
   : "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
 
-const SOURCE_LOGO = path.resolve(REPO_ROOT, "src/assets/SlotBazaar Gradient Logo.png");
+const ORIGINAL_LOGO = path.resolve(REPO_ROOT, "src/assets/SlotBazaar Gradient Logo.png");
+const SOURCE_LOGO = fs.existsSync(ORIGINAL_LOGO) ? ORIGINAL_LOGO : path.resolve(REPO_ROOT, "public/logo.png");
 const PUBLIC_DIR = path.resolve(REPO_ROOT, "public");
 
 async function main() {
