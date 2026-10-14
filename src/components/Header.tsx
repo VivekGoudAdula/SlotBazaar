@@ -10,6 +10,7 @@
  */
 
 import React from "react";
+import logoIcon from "../assets/logo.png";
 import { useChainHead } from "../hooks/useChainHead.js";
 import { useWallet } from "../lib/wallet.js";
 import { WalletButton } from "./WalletButton.js";
@@ -83,7 +84,7 @@ export function Header({
       <div className="header__brand">
         <a className="header__logo" href="/" aria-label="SlotBazaar home" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
           <img
-            src="/logo.png"
+            src={logoIcon}
             alt="SlotBazaar Logo"
             width={32}
             height={32}
