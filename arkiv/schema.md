@@ -324,5 +324,5 @@ A job qualifies as a verified reputation point if and only if **ALL** of the fol
 
 ---
 
-*Last updated: 2026-10-13 IST (Phase 4 Schema v2)*
+*Last updated: 2026-10-14 IST (Phase 6 Final Specification)*
 

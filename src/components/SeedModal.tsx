@@ -34,8 +34,9 @@ import { generateSeedSlots, type GeneratedSlot } from "../lib/seedGenerator.js";
 
 const COOLDOWN_KEY = "slotbazaar_last_seed_time";
 const FAUCET_URL = "https://hub.arkiv.network/faucet";
-const BATCH_SIZE = 6;
-const ESTIMATED_BATCH_COST_GLM = "0.00086";
+const MAX_LIVE_SYNTHETIC_CAP = 40;
+const REAL_BATCH_LIMIT = 20; // Empirically verified on Arkiv Tiramisu (size 20 & 30 confirmed in 1 single tx)
+const COST_PER_SLOT_GLM = 0.00014328;
 const MIN_REQUIRED_BALANCE_WEI = 1000000000000000n; // 0.001 GLM
 
 export interface SeedModalProps {
@@ -68,13 +69,30 @@ export function SeedModal({
   const [createdKeys, setCreatedKeys] = useState<Hex[]>([]);
   const [elapsedTimeMs, setElapsedTimeMs] = useState<number | null>(null);
 
+  // Count currently active synthetic slots on-chain
+  const liveSyntheticCount = useMemo(() => {
+    return liveSlots.filter((s) => s.synthetic).length;
+  }, [liveSlots]);
+
+  const isLimitReached = liveSyntheticCount >= MAX_LIVE_SYNTHETIC_CAP;
+
+  // Real batch size: up to 20 per transaction, capped at remaining space under 40
+  const plannedBatchCount = useMemo(() => {
+    const remaining = Math.max(0, MAX_LIVE_SYNTHETIC_CAP - liveSyntheticCount);
+    return Math.min(REAL_BATCH_LIMIT, remaining > 0 ? remaining : REAL_BATCH_LIMIT);
+  }, [liveSyntheticCount]);
+
+  const estimatedBatchCostGLM = useMemo(() => {
+    return (plannedBatchCount * COST_PER_SLOT_GLM).toFixed(5);
+  }, [plannedBatchCount]);
+
   // Preview generated slots for this modal session
   const [previewSlots, setPreviewSlots] = useState<GeneratedSlot[]>([]);
 
-  // Regenerate preview slots whenever modal opens
+  // Regenerate preview slots whenever modal opens or count adjusts
   useEffect(() => {
     if (isOpen) {
-      setPreviewSlots(generateSeedSlots({ count: BATCH_SIZE, includeLong: true }));
+      setPreviewSlots(generateSeedSlots({ count: plannedBatchCount, includeLong: true }));
       setErrorCode(null);
       setErrorMessage(null);
       setErrorTxHash(null);
@@ -82,14 +100,7 @@ export function SeedModal({
       setCreatedKeys([]);
       setElapsedTimeMs(null);
     }
-  }, [isOpen]);
-
-  // Count currently active synthetic slots on-chain
-  const liveSyntheticCount = useMemo(() => {
-    return liveSlots.filter((s) => s.synthetic).length;
-  }, [liveSlots]);
-
-  const isLimitReached = liveSyntheticCount >= 40;
+  }, [isOpen, plannedBatchCount]);
 
   // ─── Balance Fetcher ────────────────────────────────────────────────────────
   const fetchBalance = useCallback(async () => {
@@ -367,7 +378,7 @@ export function SeedModal({
                 </div>
                 <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
                   <li>
-                    Creates <strong>{BATCH_SIZE} synthetic slots</strong> across Indian industrial hubs,
+                    Creates <strong>{plannedBatchCount} synthetic slots</strong> across Indian industrial hubs,
                     signed by <strong>YOUR connected wallet</strong> in a single MetaMask batch transaction.
                   </li>
                   <li>
@@ -378,7 +389,7 @@ export function SeedModal({
                     autonomously on Arkiv by design).
                   </li>
                   <li>
-                    Estimated transaction fee: <strong>~{ESTIMATED_BATCH_COST_GLM} GLM</strong> (~0.000143
+                    Estimated transaction fee: <strong>~{estimatedBatchCostGLM} GLM</strong> (~0.000143
                     GLM per entity).
                   </li>
                 </ul>
@@ -615,7 +626,9 @@ export function SeedModal({
                         : "pointer",
                   }}
                 >
-                  {isSubmitting ? "Broadcasting Batch…" : "Broadcast 6 Demo Slots (1 Signature)"}
+                  {isSubmitting
+                    ? "Broadcasting Batch…"
+                    : `Broadcast ${plannedBatchCount} Demo Slots (1 Signature)`}
                 </button>
               </div>
             </div>

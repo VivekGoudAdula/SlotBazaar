@@ -67,9 +67,9 @@ for (const [name] of Object.entries(attributes)) {
 
 ---
 
-## Issue 2: `select().where()` with type-mismatched predicate silently returns 0 results (FR-004)
+## Issue 2: Feature Request: Developer warning or type inference when query predicate type differs from stored attribute (FR-004)
 
-**Title**: Range query with wrong numeric type (e.g. `i32` against `u64` field) succeeds with HTTP 200 and returns 0 rows — no error, no warning
+**Title**: Feature Request: Diagnostic warning / strict mode when predicate type differs from stored attribute (e.g. `i32` against `u64` field)
 
 **SDK version**: `@arkiv-network/sdk@0.8.1`  
 **viem version**: `2.57.4`  
@@ -92,32 +92,32 @@ const page = await client
   .select()
   .where(and(
     eq("project", str("myapp")),
-    gt("ends_at", i32(Number(nowSec)))   // ← wrong type: i32 vs u64
+    gt("ends_at", i32(Number(nowSec)))   // ← predicate type i32 vs stored u64
   ))
   .fetch();
 
-console.log(page.entities.length); // 0 — should return many entities
+console.log(page.entities.length); // 0 — returns 0 rows without diagnostic feedback
 ```
 
-Reproduced twice on 2026-10-12. All entities remain in the index when queried with the correct `u64` type.
+Reproduced twice on 2026-10-12. All entities are returned when queried with the matching `u64` type.
 
-### Expected behaviour
+### Expected behaviour (Feature Suggestion)
 
-Either:
-- (A) A client-side or server-side error indicating the type mismatch, OR
-- (B) A diagnostic warning in dev mode that the predicate type does not match the indexed field type.
+In dynamic schema environments, type-strict matching is valid backend behavior, but developer experience is significantly improved if the SDK or indexer provides an optional dev-mode diagnostic warning:
+- (A) An optional `strictTypes: true` flag that emits a console warning when comparing different numeric types (e.g. comparing `i32` with `u64`), OR
+- (B) Clear documentation in the query guide emphasizing that predicate types must exactly mirror the stored attribute type.
 
 ### Actual behaviour
 
-HTTP 200, empty `entities` array, `hasNextPage: false`. The caller receives zero results with no indication that the query parameters are wrong. Silent data loss.
+HTTP 200, empty `entities` array (`hasNextPage: false`). Because the index matches byte representations by type tag, queries return 0 rows silently without an error or warning.
 
 ### Severity
 
-**High** — Developers who accidentally use `i32` for a timestamp field get 0 results with no feedback. This is an invisible data correctness bug.
+**Minor (DX Feature Request)** — The indexer is behaving according to strict typing rules; however, adding developer tooling warnings prevents silent user query mistakes during prototyping.
 
 ### Suggested fix
 
-If attribute schemas are indexed, validate predicate types at query construction time and emit a dev-mode warning (or throw) when types don't match.
+Add a query builder diagnostic check or add a prominent note in `@arkiv-network/sdk` documentation highlighting that numeric query predicates are strictly type-bound to stored attribute types.
 
 ---
 

@@ -114,3 +114,35 @@ This file tracks every wallet address used in SlotBazaar development.
 | 28 | jaipur | transport | 3h | `0xea0855f022200684a9698b6f0235e0f55a088d56bfe703e9aa15a62cc3eb6917` | `0x2290d3cb87420101eaf129b61ee130a17ef3c21f6a60ee514af8ce2f00370990` |
 | 29 | surat | freelance | 7h | `0x336ba685d712cedea4cb501dda7fa4711be42c572b944776aa82391a16edcda2` | `0x5fee15a9fa4a811b617058fbbaa01350a0b2e454e9132d0d3b4543ea4497d217` |
 | 30 | lucknow | machine | 4h | `0x33360ec932d999c460db688111d0c36e3e65e7c12a7153c1d17a18d1164adbf7` | `0x1973651004052409eb88e19989cc4293361c7b7681e3072cb7e8e4d6e9096f6c` |
+
+---
+
+## Phase 5 & Phase 6 Batch Execution & Empirical Probes
+
+All entities created with `project="slotbazaar"` on **Arkiv Tiramisu** (`chainId: 60138`).
+
+### Wallets
+
+| Address | Role | Purpose |
+|---------|------|---------|
+| `0x53491aA366E086C19da948669b340317eE6eA6e9` | Primary Developer / Seller Wallet | Single-signature batch creation, probe generation, test seeding |
+| `0x2fEA91303BB18B3Cb91742b834bd6672e22bD19b` | Ephemeral Buyer / Tester | Booking and EIP-712 job confirmation testing |
+
+### Batch Transactions (1-Signature Bulk Creates via `executeBatch`)
+
+| Batch Size | Tx Hash | Created Entities Count | GLM Cost | Notes |
+|------------|---------|------------------------|----------|-------|
+| 6 slots | `0x6365d75b6bfcff715091e6ff6ec61d016214afbfafc491c4f0748b3ada0295eb` | 6 | 0.0008597 GLM | Phase 5 baseline batch test |
+| 20 slots | `0x27b44da30f87a8a0aee16321d2dce1ba5b31661afcfc57b45ff0b699ff1c05d0` | 20 | 0.0028655 GLM | Phase 6 batch ceiling test |
+| 30 slots | `0x23facb9b870b5c7bc0bf0dffc8fa257c838f22e1aa129ff8671e87df80ebb27e` | 30 | 0.0042984 GLM | Phase 6 batch ceiling test |
+
+### WebSocket Latency Probes (Phase 5)
+
+| Probe # | Tx Hash | Latency to WS Push |
+|---------|---------|---------------------|
+| Probe 1 | `0x64b85590c885aa16dfb776263fc04169623e1cae93fb275dbe126622ec9e0ea8` | 3,435 ms |
+| Probe 2 | `0xa71b306a461d3dc5d88691659714856f7ef07ce71bb7ff6d1490919b48b5ae59` | 2,343 ms |
+| Probe 3 | `0x6b8bc827d06ee29f453a992bb5be7bc155bb3dd9b17865c36511a43a65261ee9` | 216 ms |
+| Probe 4 | `0xf876801c4ce5449fb66c48c5a452fc38fe6767520e54d650117a02298e82ef42` | 3,695 ms |
+| Probe 5 | `0x24a4d6f83bca9aa6a3baee8fa1948842617a942ca9a05dfa04f21db593e87851` | 3,059 ms |
+

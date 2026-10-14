@@ -496,14 +496,56 @@ export function useLiveSlots(): UseLiveSlotsResult {
     return () => clearInterval(interval);
   }, []);
 
-  // Polling safety net (30 seconds)
+  // Polling backoff tracking for 429/5xx responses
+  const pollingDelayRef = useRef(POLL_INTERVAL_MS);
+
+  // Self-scheduling polling loop (pauses when tab is hidden, jittered backoff on 429/5xx)
   useEffect(() => {
     isMounted.current = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = () => {
+      if (!isMounted.current) return;
+      timer = setTimeout(async () => {
+        if (!isMounted.current) return;
+        // Pause network requests if the browser tab is backgrounded
+        if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+          scheduleNext();
+          return;
+        }
+
+        try {
+          await doFetch();
+          // Reset backoff delay on successful fetch
+          pollingDelayRef.current = POLL_INTERVAL_MS;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          // Check for rate limit or server errors
+          if (/429|500|502|503|504|rate limit|too many/i.test(msg)) {
+            const jitter = Math.floor(Math.random() * 3000);
+            pollingDelayRef.current = Math.min(pollingDelayRef.current * 1.5 + jitter, 120_000);
+            console.warn(`RPC rate-limited (429/5xx). Backing off polling to ${Math.round(pollingDelayRef.current / 1000)}s.`);
+          }
+        }
+        scheduleNext();
+      }, pollingDelayRef.current);
+    };
+
     doFetch();
-    const interval = setInterval(doFetch, POLL_INTERVAL_MS);
+    scheduleNext();
+
+    // Trigger immediate refetch as soon as tab becomes visible again
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        doFetch();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       isMounted.current = false;
-      clearInterval(interval);
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [doFetch]);
 

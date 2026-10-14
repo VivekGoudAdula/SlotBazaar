@@ -6,6 +6,40 @@
 
 ---
 
+## Friction Summary Table (Judges Quick Reference)
+
+### 1. Arkiv & SDK Friction
+
+| ID | Title | Severity | Status | Upstream Issue Link |
+|---|---|---|---|---|
+| **FR-001** | `InvalidPredicateError` not exported from root `@arkiv-network/sdk` | Minor | Workaround applied (import from `/query`) | [Issue #3 in issues-to-file.md](file:///c:/HACKATHONS/70.%20GLOBAL%20TOUR%20DEVCON%20-%20ARKIV/APP/arkiv/issues-to-file.md#issue-3-invalidpredicateerror-is-not-exported-from-the-main-arkiv-networksdk-entry-point-fr-001) |
+| **FR-003** | Uppercase attribute name burns gas before on-chain rejection | High | Fixed in app via client-side regex check | [Issue #1 in issues-to-file.md](file:///c:/HACKATHONS/70.%20GLOBAL%20TOUR%20DEVCON%20-%20ARKIV/APP/arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-silently-burns-gas-before-on-chain-rejection-fr-003) |
+| **FR-004** | Range query with mismatched numeric type returns 0 rows silently | Minor | Fixed via strict typed attributes | [Issue #2 in issues-to-file.md (Feature Request)](file:///c:/HACKATHONS/70.%20GLOBAL%20TOUR%20DEVCON%20-%20ARKIV/APP/arkiv/issues-to-file.md#issue-2-feature-request-developer-warning-or-type-inference-when-query-predicate-type-differs-from-stored-attribute-fr-004) |
+| **FR-010** | Gas estimation spikes during rapid sequential entity broadcasts | Medium | Solved via client-side retry & nonce sequence | Solved in client layer |
+| **FR-011** | `getEntity({ key })` throws `Invalid key value` for 64-hex entity keys | High | Workaround applied (`select().where()`) | Documented in FR-011 |
+| **FR-012** | Tiramisu RPC intermittently hangs on rapid consecutive queries | Medium | Solved via 8s timeout wrapper & backoff | Solved in client layer |
+| **FR-017** | Passive entity expiration emits no on-chain event logs | Medium | Solved via 1s client ticker with 4s margin | Documented in FR-017 |
+
+### 2. Documentation Gaps
+
+| ID | Title | Severity | Status | Upstream Note |
+|---|---|---|---|---|
+| **FR-005** | Query index drops entity 2 blocks before SDK `expiresAt` block | Medium | Solved with 4s proactive pruning | Documented in FR-005 |
+| **FR-006** | `fromMinutes(10)` rounds up to next whole block boundary | Low | Solved; documented in schema | Documented in FR-006 |
+| **FR-016** | `explorer.tiramisu.arkiv.network` returns NXDOMAIN | Medium | Solved: migrated to `data.arkiv.network` | Documented in FR-016 |
+
+### 3. Notes, Ecosystem & Not-Friction Items
+
+| ID | Title | Severity | Status | Upstream Note |
+|---|---|---|---|---|
+| **FR-002** | `BigInt` attribute values (`u64`) throw in standard `JSON.stringify` | Minor | Solved via custom BigInt replacer | Standard JavaScript BigInt behavior |
+| **FR-007** | `@types/leaflet.markercluster` type incompatibility with React 19 | Medium | Solved via custom component wrapper | React 19 ecosystem gap |
+| **FR-008** | MetaMask EIP-712 typed signature format on Tiramisu | Medium | Solved via viem `signTypedData` | Standard EVM tooling |
+| **FR-009** | Injected provider reload handling in Vite dev server | Low | Solved in `wallet.ts` | Front-end dev server behavior |
+| **FR-013** | Dynamic schema attributes allowed on-chain | Info | Not friction (valid Arkiv flexibility) | Documented update in FR-013 |
+| **FR-014** | Zero-balance edge case formatting in UI | Low | Solved in `WalletButton.tsx` | Front-end edge case |
+| **FR-015** | `fetchSlotsByTimeWindow` cut off valid future slots | Medium | Solved: replaced with client-side filter | Application query pattern |
+
 ## Environment (Phase 0 & Phase 1)
 
 | Item | Value |
@@ -543,6 +577,9 @@
   3. Keep a 30-second background HTTP poll as a safety net.
 - **Suggested fix:**  
   Explicitly document in SDK docs that `watchEntityEvents` requires `webSocket()` without `fromBlock` for native WebSocket subscriptions, and clarify that entity expiration is a passive protocol pruning mechanism rather than an emitted contract event.
+- **Update (2026-10-14, Phase 6):**
+  - **Part 1 (Socket Transport & fromBlock — Documented Behavior):** Re-examination shows viem and Arkiv documentation specify that `eth_subscribe` push streams require `transport: webSocket(...)` with `fromBlock: undefined` (as historical ranges require `eth_getLogs` polling). Credit to the official docs; this is standard EVM client library architecture rather than an unresolvable bug.
+  - **Part 2 (Passive Expiration Emits No Event — Empirical Finding):** Retained as real architectural friction with empirical evidence. We monitored WebSocket streams across multiple sessions (`scripts/test-ws-latency.ts` and `scripts/fr005-expiry-retest.ts`) observing 5 short-lived entities (10s–12s lifetimes) over 60+ seconds of observation. While creation events triggered immediately (avg 2,550 ms), exactly 0 expiration events were emitted across all 5 expiries. Developers must implement client-side timer pruning (such as SlotBazaar's 1s ticker with 4s margin) because Arkiv purges state at the consensus level without producing event logs.
 
 ---
 

@@ -35,6 +35,9 @@ import { ConfirmJobModal }               from "./components/ConfirmJobModal.js";
 import { MyJobsModal }                   from "./components/MyJobsModal.js";
 import { DemoGuideModal }                from "./components/DemoGuideModal.js";
 import { SeedModal }                     from "./components/SeedModal.js";
+import { OfflineBanner }                 from "./components/OfflineBanner.js";
+import { JudgePopover }                  from "./components/JudgePopover.js";
+import { WhyArkivModal }                 from "./components/WhyArkivModal.js";
 import { useNow }                        from "./hooks/useNow.js";
 import { formatTimeLeft }                from "./lib/time.js";
 
@@ -336,8 +339,8 @@ function AppInner(): React.ReactElement {
     reputationByAddress,
     loading,
     error,
-    lastFetched,
     isSocketHealthy,
+    lastFetched,
     refresh,
     addSlot,
   } = useLiveSlots();
@@ -356,6 +359,8 @@ function AppInner(): React.ReactElement {
   const [isListOpen, setIsListOpen]         = useState(false);
   const [isPostOpen, setIsPostOpen]         = useState(false);
   const [isSeedOpen, setIsSeedOpen]         = useState(false);
+  const [isJudgeGuideOpen, setIsJudgeGuideOpen] = useState(false);
+  const [isWhyArkivOpen, setIsWhyArkivOpen] = useState(false);
   const [isBookOpen, setIsBookOpen]         = useState(false);
   const [slotToBook, setSlotToBook]     = useState<SlotEntity | null>(null);
 
@@ -558,15 +563,78 @@ function AppInner(): React.ReactElement {
 
   return (
     <div className="app-viewport">
+      {/* Offline banner (triggers on navigator.onLine changes) */}
+      <OfflineBanner />
+
       {/* 1. NAVBAR */}
       <Header
         onPostSlot={() => setIsPostOpen(true)}
         onSeedDemo={() => setIsSeedOpen(true)}
+        onOpenJudgesGuide={() => setIsJudgeGuideOpen(true)}
         verifiedJobsCount={userReputation?.verifiedJobsCount ?? 0}
         onOpenMyJobs={() => setIsMyJobsOpen(true)}
         onOpenDemoGuide={() => setIsDemoGuideOpen(true)}
         isSocketHealthy={isSocketHealthy}
+        lastFetched={lastFetched}
       />
+
+      {/* First Paint Useful with No Wallet: Low-slots banner explaining autonomous entity expiration */}
+      {slots.length < 5 && (
+        <div
+          className="low-slots-global-banner"
+          id="low-slots-banner"
+          style={{
+            background: "#f0fdf4",
+            borderBottom: "1px solid #86efac",
+            padding: "6px 16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "12px",
+            fontSize: "0.82rem",
+            color: "#166534",
+            zIndex: 1000,
+          }}
+        >
+          <span>
+            ⏰ <strong>Perishable Time Slots:</strong> Slots on Arkiv expire autonomously by design ({slots.length} currently active on-chain).
+          </span>
+          <button
+            type="button"
+            id="banner-seed-demo-btn"
+            onClick={() => setIsSeedOpen(true)}
+            style={{
+              background: "#10b981",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: "4px",
+              padding: "3px 10px",
+              fontWeight: 600,
+              cursor: "pointer",
+              fontSize: "0.78rem",
+            }}
+          >
+            🌱 Seed Demo Slots
+          </button>
+          <button
+            type="button"
+            id="banner-demo-guide-btn"
+            onClick={() => setIsDemoGuideOpen(true)}
+            style={{
+              background: "none",
+              border: "1px solid #86efac",
+              color: "#166534",
+              borderRadius: "4px",
+              padding: "2px 8px",
+              fontWeight: 600,
+              cursor: "pointer",
+              fontSize: "0.78rem",
+            }}
+          >
+            💡 Demo Guide
+          </button>
+        </div>
+      )}
 
       {/* Optional non-blocking error banner */}
       {error && <ErrorBanner message={error} onRetry={refresh} />}
@@ -616,7 +684,26 @@ function AppInner(): React.ReactElement {
             rel="noopener noreferrer"
           >
             Arkiv Tiramisu
-          </a>
+          </a>{" "}
+          ·{" "}
+          <button
+            type="button"
+            className="why-arkiv-btn"
+            id="footer-why-arkiv-btn"
+            onClick={() => setIsWhyArkivOpen(true)}
+            style={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              font: "inherit",
+              color: "#2563eb",
+              textDecoration: "underline",
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            Why Arkiv?
+          </button>
         </div>
 
         {/* Slide-over slot list panel (desktop slide-over & mobile bottom sheet) */}
@@ -727,6 +814,19 @@ function AppInner(): React.ReactElement {
           });
         }}
         onRefresh={refresh}
+      />
+
+      {/* Judges: 60-Second Walkthrough Popover */}
+      <JudgePopover
+        isOpen={isJudgeGuideOpen}
+        onClose={() => setIsJudgeGuideOpen(false)}
+        onOpenSeedDemo={() => setIsSeedOpen(true)}
+      />
+
+      {/* Why Arkiv Architecture Rationale Modal */}
+      <WhyArkivModal
+        isOpen={isWhyArkivOpen}
+        onClose={() => setIsWhyArkivOpen(false)}
       />
 
       {/* Toast Notification Container */}

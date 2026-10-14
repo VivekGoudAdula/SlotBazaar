@@ -1,8 +1,9 @@
 /**
  * scripts/test-batch.ts
  *
- * Tests executeBatch capability of @arkiv-network/sdk on Arkiv Tiramisu.
- * Measures single-tx batch creation of 6 slots and records exact GLM cost.
+ * Tests batch ceiling: executes real batch sizes of 10, 20, and 30 on Arkiv Tiramisu.
+ * All slots marked with seed_batch="dev-probe" so they are filtered out from UI.
+ * Records gas, GLM cost, elapsed time, and any error message.
  */
 
 import "dotenv/config";
@@ -18,38 +19,29 @@ import { str, u64, i32, bool } from "@arkiv-network/sdk/attr";
 import { http, formatEther, type Hex, type Address } from "viem";
 import { generateSeedSlots } from "../src/lib/seedGenerator.js";
 
-async function main() {
-  const rawKey = process.env.PRIVATE_KEY;
-  if (!rawKey) {
-    console.log("No PRIVATE_KEY configured in environment. Skipping live batch test.");
-    return;
-  }
+async function testBatchSize(
+  size: number,
+  wallet: any,
+  publicClient: any,
+  walletAddr: Address
+): Promise<{
+  size: number;
+  success: boolean;
+  txHash?: string;
+  count?: number;
+  spentGLM?: string;
+  costPerEntity?: string;
+  elapsedMs?: number;
+  error?: string;
+}> {
+  console.log(`\n========================================================`);
+  console.log(`  TESTING BATCH SIZE: ${size} ENTITIES`);
+  console.log(`========================================================`);
 
-  const privateKey = (rawKey.startsWith("0x") ? rawKey : `0x${rawKey}`) as Hex;
-  const account = privateKeyToAccount(privateKey);
-  const walletAddr: Address = account.address;
+  const balBefore = await publicClient.getBalance({ address: walletAddr });
+  const slots = generateSeedSlots({ count: size, includeLong: true });
 
-  console.log(`Connecting to Arkiv Tiramisu with wallet: ${walletAddr}`);
-
-  const publicClient = createPublicClient({
-    chain: tiramisu,
-    transport: http(),
-  });
-
-  const wallet = createWalletClient({
-    chain: tiramisu,
-    transport: http(),
-    account,
-  });
-
-  const balBefore = await (publicClient as any).getBalance({ address: walletAddr });
-  console.log(`Initial Balance: ${formatEther(balBefore)} GLM`);
-
-  // Generate 6 synthetic slots
-  const slots = generateSeedSlots({ count: 6, includeLong: true });
-  console.log(`Generated ${slots.length} synthetic slots for executeBatch test.`);
-
-  const batchCreates = slots.map((s, idx) => ({
+  const batchCreates = slots.map((s) => ({
     payload: jsonToPayload({
       title: s.title,
       description: s.description,
@@ -69,32 +61,95 @@ async function main() {
       lat_e4: i32(Math.round(s.lat * 10000)),
       lon_e4: i32(Math.round(s.lon * 10000)),
       synthetic: bool(true),
-      seed_batch: str("dev-probe"), // excluded from production view
+      seed_batch: str("dev-probe"), // Excluded from production UI
     },
     expires: ExpirationTime.atDate(new Date(s.endsAt * 1000)),
   }));
 
-  console.log("Sending wallet.executeBatch({ creates: 6 entities }) in 1 transaction...");
   const startTime = Date.now();
-  const res = await wallet.executeBatch({ creates: batchCreates });
-  const elapsed = Date.now() - startTime;
+  try {
+    const res = await wallet.executeBatch({ creates: batchCreates });
+    const elapsedMs = Date.now() - startTime;
+    const balAfter = await publicClient.getBalance({ address: walletAddr });
+    const spent = balBefore - balAfter;
 
-  console.log(`\nBatch Transaction Confirmed!`);
-  console.log(`  Tx Hash: ${res.txHash}`);
-  console.log(`  Created Entities Count: ${res.createdEntities.length}`);
-  console.log(`  Elapsed Time: ${elapsed} ms`);
+    console.log(`  ✅ Batch Size ${size} SUCCEEDED!`);
+    console.log(`  Tx Hash: ${res.txHash}`);
+    console.log(`  Created Entities: ${res.createdEntities.length}`);
+    console.log(`  Elapsed: ${elapsedMs} ms`);
+    console.log(`  GLM Spent: ${formatEther(spent)} GLM`);
+    console.log(`  Cost / Entity: ${formatEther(spent / BigInt(size))} GLM`);
 
-  const balAfter = await (publicClient as any).getBalance({ address: walletAddr });
-  const spent = balBefore - balAfter;
-  console.log(`  GLM Spent: ${formatEther(spent)} GLM (for 6 entities)`);
-  console.log(`  Cost Per Entity: ${formatEther(spent / 6n)} GLM\n`);
+    return {
+      size,
+      success: true,
+      txHash: res.txHash,
+      count: res.createdEntities.length,
+      spentGLM: formatEther(spent),
+      costPerEntity: formatEther(spent / BigInt(size)),
+      elapsedMs,
+    };
+  } catch (err: any) {
+    const elapsedMs = Date.now() - startTime;
+    const msg = err?.message || String(err);
+    console.error(`  ❌ Batch Size ${size} FAILED after ${elapsedMs} ms:`, msg);
+    return {
+      size,
+      success: false,
+      elapsedMs,
+      error: msg,
+    };
+  }
+}
 
-  for (let i = 0; i < res.createdEntities.length; i++) {
-    console.log(`  Entity #${i + 1}: ${res.createdEntities[i]}`);
+async function main() {
+  const rawKey = process.env.PRIVATE_KEY;
+  if (!rawKey) {
+    console.log("No PRIVATE_KEY configured in environment. Skipping batch ceiling test.");
+    return;
+  }
+
+  const privateKey = (rawKey.startsWith("0x") ? rawKey : `0x${rawKey}`) as Hex;
+  const account = privateKeyToAccount(privateKey);
+  const walletAddr: Address = account.address;
+
+  console.log(`Connecting to Arkiv Tiramisu: ${walletAddr}`);
+
+  const publicClient = createPublicClient({
+    chain: tiramisu,
+    transport: http(),
+  });
+
+  const wallet = createWalletClient({
+    chain: tiramisu,
+    transport: http(),
+    account,
+  });
+
+  const initialBal = await (publicClient as any).getBalance({ address: walletAddr });
+  console.log(`Starting Balance: ${formatEther(initialBal)} GLM`);
+
+  const results = [];
+  for (const size of [10, 20, 30]) {
+    const res = await testBatchSize(size, wallet, publicClient, walletAddr);
+    results.push(res);
+  }
+
+  console.log(`\n========================================================`);
+  console.log(`  BATCH CEILING EMPIRICAL SUMMARY TABLE`);
+  console.log(`========================================================`);
+  console.log(`| Size | Status | Tx Hash | Total GLM Spent | Cost/Entity (GLM) | Time (ms) | Notes / Error |`);
+  console.log(`|------|--------|---------|-----------------|-------------------|-----------|---------------|`);
+  for (const r of results) {
+    if (r.success) {
+      console.log(`| ${r.size} | PASS | ${r.txHash?.slice(0, 10)}… | ${r.spentGLM} | ${r.costPerEntity} | ${r.elapsedMs} | OK |`);
+    } else {
+      console.log(`| ${r.size} | FAIL | - | - | - | ${r.elapsedMs} | ${r.error?.slice(0, 40)}… |`);
+    }
   }
 }
 
 main().catch((err) => {
-  console.error("Batch test failed:", err);
+  console.error("Batch test runner failed:", err);
   process.exit(1);
 });

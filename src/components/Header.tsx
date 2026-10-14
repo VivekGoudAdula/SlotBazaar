@@ -22,19 +22,23 @@ function formatBlock(n: bigint): string {
 export interface HeaderProps {
   onPostSlot?: () => void;
   onSeedDemo?: () => void;
+  onOpenJudgesGuide?: () => void;
   verifiedJobsCount?: number;
   onOpenMyJobs?: () => void;
   onOpenDemoGuide?: () => void;
   isSocketHealthy?: boolean;
+  lastFetched?: Date | null;
 }
 
 export function Header({
   onPostSlot,
   onSeedDemo,
+  onOpenJudgesGuide,
   verifiedJobsCount,
   onOpenMyJobs,
   onOpenDemoGuide,
   isSocketHealthy = false,
+  lastFetched,
 }: HeaderProps): React.ReactElement {
   const { blockNumber, loading: chainLoading, error: chainError } = useChainHead();
   const { status, address, isWrongNetwork, hasProvider } = useWallet();
@@ -55,11 +59,15 @@ export function Header({
     ? "…"
     : formatBlock(blockNumber);
 
+  const lastUpdatedStr = lastFetched
+    ? lastFetched.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : null;
+
   const blockTitle = chainError
     ? `RPC error: ${chainError}`
     : chainLoading || blockNumber == null
     ? "Connecting to Tiramisu…"
-    : `Block ${formatBlock(blockNumber)} · ${isSocketHealthy ? "WebSocket LIVE" : "POLLING"} · Tiramisu testnet`;
+    : `Block ${formatBlock(blockNumber)} · ${isSocketHealthy ? "WebSocket LIVE" : "POLLING"} · Tiramisu testnet${lastUpdatedStr ? ` (Updated ${lastUpdatedStr})` : ""}`;
 
   const handleSeedClick = () => {
     if (!isConnectedOnTiramisu) {
@@ -87,7 +95,7 @@ export function Header({
         <div
           className="header__chain-badge"
           title={blockTitle}
-          aria-label="Chain status"
+          aria-label={`Chain status: ${blockLabel}. ${lastUpdatedStr ? `Data updated at ${lastUpdatedStr}` : ""}`}
           id="header-block-pill"
           style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}
         >
@@ -112,7 +120,47 @@ export function Header({
           >
             {isSocketHealthy ? "LIVE" : "POLLING"}
           </span>
+          {lastUpdatedStr && (
+            <span
+              style={{
+                fontSize: "0.7rem",
+                color: "#64748b",
+                marginLeft: "2px",
+                fontFamily: "var(--font-mono, monospace)",
+              }}
+              title={`Last RPC response received at ${lastUpdatedStr}`}
+            >
+              {lastUpdatedStr}
+            </span>
+          )}
         </div>
+
+        {/* Judges: 60-Second Quick Tour */}
+        {onOpenJudgesGuide && (
+          <button
+            id="header-judges-guide-btn"
+            type="button"
+            className="header__judges-btn"
+            onClick={onOpenJudgesGuide}
+            title="Judges: Try this in 60 seconds (evaluation path)"
+            aria-label="Judges 60-second walkthrough"
+            style={{
+              background: "#eff6ff",
+              border: "1px solid #bfdbfe",
+              color: "#1d4ed8",
+              fontWeight: 600,
+              fontSize: "0.8rem",
+              borderRadius: "6px",
+              padding: "5px 10px",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+          >
+            ⏱️ 60s Tour
+          </button>
+        )}
 
         {/* Secondary: Seed demo data button */}
         <button
@@ -122,7 +170,7 @@ export function Header({
           title={
             !isConnectedOnTiramisu
               ? "Connect wallet on Arkiv Tiramisu to seed demo data"
-              : "Mint 6 synthetic demo slots to test map and booking"
+              : "Mint synthetic demo slots across Indian clusters"
           }
           aria-label="Seed demo data"
         >
