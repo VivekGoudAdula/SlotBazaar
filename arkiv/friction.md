@@ -452,6 +452,8 @@
 - **Suggested fix:**  
   Document in the Arkiv pricing / storage rent guide that short-term versus medium-term storage rent is flat or negligible for small payloads, reassuring developers about dispute windows.
 
+  > **Update 2026-10-14 IST:** Observation note, not Arkiv friction. Storage rent behavior is an informational observation about gas vs rent balance. Only real Arkiv or SDK pain points count as friction going forward.
+
 ---
 
 ### FR-014 · Same-block racing entity creations lack execution index in query attributes
@@ -492,6 +494,8 @@
   3. Tested in `scripts/test-phase4.ts`: slot entity expired at Block #523380 and disappeared (`NoEntityFoundError`). Seller and buyer then created completions referencing `booking_key`. `getReputation` successfully derived `1 verified job` backed by on-chain proofs!
 - **Severity:** resolved / verified architectural pattern.
 
+  > **Update 2026-10-14 IST:** Design and architectural pattern note, not Arkiv friction. Documents application-level Schema v2 decoupling rather than an Arkiv SDK or network limitation. Only real Arkiv or SDK pain points count as friction going forward.
+
 ---
 
 ### FR-016 · explorer.tiramisu.arkiv.network returns NXDOMAIN; official explorer is data.arkiv.network/?q=${key}&chain=tiramisu
@@ -512,10 +516,41 @@
 
 ---
 
-## What worked well — Phase 4
+### FR-017 · `watchEntityEvents` silently falls back to HTTP polling if fromBlock is supplied; passive expiration emits no log events
 
-- **End-to-End Post-Expiry Verification**: Schema v2 decoupling proved 100% successful on-chain. Even after the slot entity was purged from Arkiv, two-sided completion signatures linked to the booking entity allowed `getReputation` to verify the job without error.
-- **Zero N+1 Queries**: Client-side data pipeline fixed at exactly 3 batch queries per refresh cycle (`slots`, `bookings`, `completions`), with winner selection, race resolution, and reputation derivation computed client-side in sub-millisecond memory loops.
-- **Secret Hygiene & Ephemeral Testing**: `test-phase4.ts` generated an in-memory ephemeral buyer, funded it, executed an on-chain booking, and confirmed reputations without printing or storing private keys.
-- **Robust Deterministic Race Resolution**: Earliest block winning rule + lexicographical tie-breaker guarantees identical state across all connected clients without centralized race servers.
+- **Date/time (IST):** 2026-10-14, ~10:15 IST
+- **Phase:** 5 (WebSocket Live Updates Benchmark)
+- **SDK + network versions:** `@arkiv-network/sdk@0.8.1`, viem `2.57.4`, Tiramisu testnet, chain ID `7738577`
+- **What I expected:**  
+  1. Passing `watchEntityEvents` options would maintain an active WebSocket subscription regardless of whether `fromBlock` is passed.
+  2. Protocol entity expiration when a slot reaches `ends_at` would emit an event (e.g. `onEntityDeleted` or dedicated `onEntityExpired`) over the WebSocket so clients can remove expired listings in real-time.
+- **What actually happened:**  
+  1. Inspecting `@arkiv-network/sdk@0.8.1` source in `actions/public/watchEntityEvents.ts:141-177` reveals that viem's underlying `watchEvent` uses `eth_subscribe("logs")` *only* if `transport: webSocket(...)` is used AND `fromBlock` is `undefined`. If `fromBlock` is specified or `http()` is passed, it silently degrades to repetitive HTTP polling (`eth_getFilterLogs` / `eth_getLogs`) without notifying the caller.
+  2. Running `scripts/test-ws-latency.ts` with a short-lived entity (10-second lifetime) confirmed that **passive protocol expiration does NOT emit an on-chain event**. Arkiv's indexing engine purges expired entities quietly at the timestamp boundary without generating an Ethereum log event or transaction.
+- **Steps to reproduce:**
+  ```ts
+  const wsClient = createPublicClient({ chain: tiramisu, transport: webSocket(WSS_URL) });
+  const allEvents = [];
+  wsClient.watchEntityEvents({ onEvent: (e) => allEvents.push(e) });
+  // Create entity with 10s expiry
+  await wallet.createEntity({ ..., expires: ExpirationTime.atDate(new Date(Date.now() + 10000)) });
+  // Wait 20 seconds: no event is emitted upon expiry.
+  ```
+- **Severity:** medium (architectural pitfall: developers expecting push-based expiration notifications will discover their UI slot cards never vanish unless explicit local time-based pruning is implemented).
+- **Workaround used:**  
+  1. Keep WebSocket client transport strictly on `webSocket(WSS_URL)` with no `fromBlock` to ensure true native push subscriptions.
+  2. Implement an active 1-second client-side ticker interval in `useLiveSlots.ts` that immediately removes slots whose `endsAt <= nowSec + 4s` (1-2 block safety margin), decoupling UI expiry from on-chain event notifications.
+  3. Keep a 30-second background HTTP poll as a safety net.
+- **Suggested fix:**  
+  Explicitly document in SDK docs that `watchEntityEvents` requires `webSocket()` without `fromBlock` for native WebSocket subscriptions, and clarify that entity expiration is a passive protocol pruning mechanism rather than an emitted contract event.
+
+---
+
+## What worked well — Phase 5
+
+- **MetaMask Single-Signature Batching (`wallet.executeBatch`)**: Tested and proved on Tiramisu that `executeBatch({ creates: [...] })` packages all entity creations into a single contract call (`execute(Operation[])`). MetaMask displays a single confirmation signature popup, eliminating popup fatigue.
+- **Measured Batch Efficiency**: Seeding 6 synthetic slots in 1 batch cost only `0.0008597 GLM` (~0.000143 GLM per slot) and confirmed in ~4.9 seconds.
+- **Empirical WebSocket Latency**: Live WebSocket probes over `wss://rpc.tiramisu.db-chain.testnet.arkiv.network` demonstrated an average latency of **2550 ms** from transaction confirmation to event delivery, with 0 duplicates and strictly preserved sequence ordering.
+- **Immediate Local Pruning**: Client-side timestamp pruning with a 4-second (1-2 block) margin ensures expired slots vanish instantly from the user interface without waiting for the next server poll or indexer sweep.
+
 

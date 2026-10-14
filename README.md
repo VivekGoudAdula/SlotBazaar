@@ -98,71 +98,61 @@ npm run build
 
 ## Scripts
 
+## Demo Data & In-App Seeding (Phase 5)
+
+### Why Demo Seeding Exists
+In SlotBazaar, time slots **expire by design**: when a slot's end time passes, Arkiv's decentralized protocol autonomously prunes the entity from the index. To ensure hackathon judges and evaluators always have rich, diverse industrial data to explore and book without waiting for real-world sellers, SlotBazaar provides two seamless ways to seed live demo slots:
+
+1. **In-App "Seed demo data" Button (Navbar & Empty States)**:
+   - Connect MetaMask and click **🌱 Seed demo data** in the header or in empty states.
+   - Signs and broadcasts **6 synthetic demo slots in a single MetaMask batch transaction** using `wallet.executeBatch`.
+   - Fee: ~0.00086 GLM (~0.000143 GLM per slot).
+   - Confirms in ~4.9s and automatically fits map bounds to the newly created listings.
+2. **CLI Seed Script**:
+   - Run from terminal using your private key in `.env`:
+     ```bash
+     # Preview plan (dry run)
+     npm run seed -- --dry-run
+     
+     # Seed 30 slots including long durations (up to 7 days)
+     npm run seed -- --count 30 --long --yes
+     ```
+
+### Synthetic Data Transparency
+All seeded entities are strictly labelled with `synthetic=true` and tagged with a verifiable batch identifier (`seed_batch="ui-seed-<timestamp>"` or `seed_batch="seed-YYYY-MM-DD"`). They use purely fictional SME trade names (e.g., *PrecisionWorks SME*, *FastMove Logistics*, *IndieDevIndia*) and real coordinates centered on Indian industrial manufacturing hubs.
+
+---
+
+## WebSocket Live Updates
+
+SlotBazaar connects directly to Arkiv's native WebSocket RPC (`wss://rpc.tiramisu.db-chain.testnet.arkiv.network`) using `@arkiv-network/sdk`'s `watchEntityEvents`:
+- **Push-based live streaming**: As soon as a transaction confirms on Tiramisu, the node emits an `EntityCreated` log event over the socket (~2550 ms average latency).
+- **Debounced 3-query pipeline**: The frontend debounces incoming events by 500 ms and triggers a batch refetch, preserving the immutable 3-query architecture without N+1 query storms.
+- **Pill indicator**: The header block pill displays **LIVE** (green pulse) when the WebSocket connection is healthy, and gracefully falls back to **POLLING** (30-second safety net) if disconnected.
+- **Client-Side Immediate Expiry**: Because on-chain expiration is passive, the client runs an internal 1-second ticker that removes slots whose `ends_at` has passed (with a 4-second / 1-2 block safety margin) without waiting for server sweeps.
+
+---
+
+## Scripts
+
 | Command | Description |
 |---------|-------------|
-| `npx tsx scripts/seed.ts --dry-run` | Preview a 40-slot seed plan (no transactions) |
-| `npx tsx scripts/seed.ts --count 30 --yes` | Seed 30 synthetic slots on-chain |
-| `npx tsx scripts/seed.ts --count 30 --long --yes` | Include 48h/72h/168h duration slots |
-| `npx tsx scripts/measure-cost.ts` | Measure GLM cost per createEntity (3h vs 24h) |
+| `npm run seed -- --dry-run` | Preview a 40-slot seed plan (no transactions) |
+| `npm run seed -- --count 30 --yes` | Seed 30 synthetic slots on-chain |
+| `npm run seed -- --long --yes` | Seed slots including long durations (24h, 48h, 72h, up to 7 days / 168h) |
+| `npx tsx scripts/test-batch.ts` | Test single-transaction batch creation via `wallet.executeBatch` |
+| `npx tsx scripts/test-ws-latency.ts` | Benchmark WebSocket event latency (measures 5 live probes) |
+| `npx tsx scripts/test-phase5-unit.ts` | Run Phase 5 pure unit tests (pagination mock, guards, visibility) |
+| `npx tsx scripts/measure-cost.ts` | Measure exact GLM cost per createEntity (3h vs 24h) |
 | `npx tsx scripts/test-report.ts` | Run automated T-01–T-06 test suite |
-| `npx tsx scripts/fr005-expiry-retest.ts` | 1s-poll expiry boundary retest |
 | `npm run scan:secrets` | Check for private key leakage across all files + git history |
-| `npx tsx scripts/test-reputation.ts` | Unit-test on-chain reputation logic (no gas) |
-
----
-
-## Project structure
-
-```
-/
-├── src/                   # React app (Vite + TypeScript)
-│   ├── App.tsx            # Root layout: hero, filters, map, drawer, footer
-│   ├── components/
-│   │   ├── Header.tsx     # Logo + chain block + wallet button
-│   │   ├── FilterBar.tsx  # Category / cluster / price / ending-soon chips
-│   │   ├── MapView.tsx    # Leaflet map with marker clustering + pulse animation
-│   │   ├── SlotCard.tsx   # Mini popup card (in map popups)
-│   │   └── SlotDrawer.tsx # Full detail drawer with on-chain proof panel
-│   ├── hooks/
-│   │   ├── useLiveSlots.ts  # Polls Arkiv index every 8 s
-│   │   ├── useChainHead.ts  # Polls block number every 4 s
-│   │   └── useNow.ts        # Ticks every 1 s for countdown accuracy
-│   └── lib/
-│       ├── arkiv.ts       # All Arkiv read/write + entity type definitions
-│       ├── time.ts        # Countdown / urgency / date formatting helpers
-│       └── wallet.ts      # MetaMask connection + WalletContext
-├── scripts/               # Node/tsx scripts for Arkiv entity ops
-├── arkiv/                 # SDK notes, schema v1, friction log (FR-001–FR-011)
-│   ├── notes-sdk.md
-│   ├── schema.md
-│   ├── friction.md        # Append-only friction log (11 entries)
-│   └── issues-to-file.md  # GitHub-ready issue reports for Arkiv SDK
-├── .env.example           # Copy to .env — never commit .env
-├── WALLETS.md             # All wallet addresses and tx hashes (no keys)
-└── LICENSE                # MIT 2026
-```
-
----
-
-## UI features (Phase 2)
-
-- **Live India map** with CARTO Positron tiles and marker clustering
-- **Teardrop markers** color-coded by category and urgency
-- **Vermilion pulse animation** on markers with < 15 minutes remaining
-- **FilterBar**: category chips, city dropdown, price band, "Ending soon" toggle
-- **SlotDrawer**: full proof panel with entity key (copyable), `$creator`, Entity Expiration block, explorer link
-- **Hero strip** with italic accent headline and truck-art divider
-- **Mobile bottom sheet** (swipe-up list of slots on < 768px)
-- **Non-blocking error banner** — stale data stays on map during RPC failures
-- **Footer How-to-try** box with full network details and faucet link
-- **Skeleton loading** + friendly empty state
 
 ---
 
 ## Friction log
 
 Developer experience notes are in [`/arkiv/friction.md`](./arkiv/friction.md).  
-11 friction entries (FR-001–FR-011), append-only, submitted to Arkiv as part of the hackathon.  
+17 friction entries (FR-001–FR-017), append-only, submitted to Arkiv as part of the hackathon.  
 GitHub-ready issue reports: [`/arkiv/issues-to-file.md`](./arkiv/issues-to-file.md).
 
 ---

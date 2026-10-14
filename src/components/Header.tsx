@@ -21,16 +21,20 @@ function formatBlock(n: bigint): string {
 
 export interface HeaderProps {
   onPostSlot?: () => void;
+  onSeedDemo?: () => void;
   verifiedJobsCount?: number;
   onOpenMyJobs?: () => void;
   onOpenDemoGuide?: () => void;
+  isSocketHealthy?: boolean;
 }
 
 export function Header({
   onPostSlot,
+  onSeedDemo,
   verifiedJobsCount,
   onOpenMyJobs,
   onOpenDemoGuide,
+  isSocketHealthy = false,
 }: HeaderProps): React.ReactElement {
   const { blockNumber, loading: chainLoading, error: chainError } = useChainHead();
   const { status, address, isWrongNetwork, hasProvider } = useWallet();
@@ -55,7 +59,15 @@ export function Header({
     ? `RPC error: ${chainError}`
     : chainLoading || blockNumber == null
     ? "Connecting to Tiramisu…"
-    : `Block ${formatBlock(blockNumber)} · Tiramisu testnet`;
+    : `Block ${formatBlock(blockNumber)} · ${isSocketHealthy ? "WebSocket LIVE" : "POLLING"} · Tiramisu testnet`;
+
+  const handleSeedClick = () => {
+    if (!isConnectedOnTiramisu) {
+      window.dispatchEvent(new CustomEvent("slotbazaar:open-wallet-help"));
+    } else if (onSeedDemo) {
+      onSeedDemo();
+    }
+  };
 
   return (
     <header className="header" role="banner" id="app-header">
@@ -71,19 +83,51 @@ export function Header({
 
       {/* Right: Controls */}
       <div className="header__right">
-        {/* Block head pill */}
+        {/* Block head & WebSocket status pill */}
         <div
           className="header__chain-badge"
           title={blockTitle}
           aria-label="Chain status"
           id="header-block-pill"
+          style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}
         >
           <span
             className={`chain-pulse${chainError ? " chain-pulse--error" : ""}`}
+            style={isSocketHealthy ? { backgroundColor: "#10b981", boxShadow: "0 0 6px #10b981" } : undefined}
             aria-hidden="true"
           />
-          {blockLabel}
+          <span style={{ fontWeight: 600, color: "#1e293b" }}>{blockLabel}</span>
+          <span
+            className={`socket-status-pill socket-status-pill--${isSocketHealthy ? "live" : "polling"}`}
+            style={{
+              fontSize: "0.68rem",
+              fontWeight: 700,
+              padding: "1px 5px",
+              borderRadius: "4px",
+              letterSpacing: "0.04em",
+              backgroundColor: isSocketHealthy ? "#dcfce7" : "#fef3c7",
+              color: isSocketHealthy ? "#15803d" : "#b45309",
+              border: `1px solid ${isSocketHealthy ? "#86efac" : "#fde68a"}`,
+            }}
+          >
+            {isSocketHealthy ? "LIVE" : "POLLING"}
+          </span>
         </div>
+
+        {/* Secondary: Seed demo data button */}
+        <button
+          id="header-seed-demo-btn"
+          className="header__seed-btn"
+          onClick={handleSeedClick}
+          title={
+            !isConnectedOnTiramisu
+              ? "Connect wallet on Arkiv Tiramisu to seed demo data"
+              : "Mint 6 synthetic demo slots to test map and booking"
+          }
+          aria-label="Seed demo data"
+        >
+          🌱 Seed demo data
+        </button>
 
         {/* Post a slot button */}
         <button

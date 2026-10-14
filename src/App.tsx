@@ -34,6 +34,7 @@ import { BookSlotModal }                 from "./components/BookSlotModal.js";
 import { ConfirmJobModal }               from "./components/ConfirmJobModal.js";
 import { MyJobsModal }                   from "./components/MyJobsModal.js";
 import { DemoGuideModal }                from "./components/DemoGuideModal.js";
+import { SeedModal }                     from "./components/SeedModal.js";
 import { useNow }                        from "./hooks/useNow.js";
 import { formatTimeLeft }                from "./lib/time.js";
 
@@ -50,6 +51,7 @@ interface SlideOverListProps {
   userAddress?: string | null;
   winningBookingsBySlot?: Map<string, BookingEntity>;
   onResetFilters?: () => void;
+  onOpenSeedDemo?: () => void;
 }
 
 function SlideOverList({
@@ -61,6 +63,7 @@ function SlideOverList({
   userAddress,
   winningBookingsBySlot,
   onResetFilters,
+  onOpenSeedDemo,
 }: SlideOverListProps): React.ReactElement | null {
   const now = useNow();
 
@@ -115,27 +118,50 @@ function SlideOverList({
               <span style={{ fontSize: "0.95rem", color: "var(--c-text-muted)" }}>
                 No slots match the current filters.
               </span>
-              {onResetFilters && (
-                <button
-                  type="button"
-                  onClick={onResetFilters}
-                  style={{
-                    cursor: "pointer",
-                    background: "var(--c-amber)",
-                    color: "#111",
-                    fontWeight: 700,
-                    padding: "7px 16px",
-                    borderRadius: "6px",
-                    border: "1px solid rgba(0,0,0,0.2)",
-                    fontSize: "0.85rem",
-                  }}
-                >
-                  Clear all filters
-                </button>
-              )}
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
+                {onResetFilters && (
+                  <button
+                    type="button"
+                    onClick={onResetFilters}
+                    style={{
+                      cursor: "pointer",
+                      background: "var(--c-amber)",
+                      color: "#111",
+                      fontWeight: 700,
+                      padding: "7px 16px",
+                      borderRadius: "6px",
+                      border: "1px solid rgba(0,0,0,0.2)",
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    Clear all filters
+                  </button>
+                )}
+                {onOpenSeedDemo && (
+                  <button
+                    type="button"
+                    id="empty-state-seed-btn"
+                    onClick={onOpenSeedDemo}
+                    style={{
+                      cursor: "pointer",
+                      background: "#10b981",
+                      color: "#ffffff",
+                      fontWeight: 700,
+                      padding: "7px 16px",
+                      borderRadius: "6px",
+                      border: "none",
+                      fontSize: "0.85rem",
+                      boxShadow: "0 2px 4px rgba(16,185,129,0.3)",
+                    }}
+                  >
+                    🌱 Seed demo data
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
-            sorted.map((s) => {
+            <>
+              {sorted.map((s) => {
               const remaining = s.endsAt - now;
               const isCritical = remaining > 0 && remaining <= 15 * 60;
               const normUser = userAddress?.toLowerCase() ?? "";
@@ -229,7 +255,47 @@ function SlideOverList({
                   </div>
                 </div>
               );
-            })
+            })}
+
+            {/* Empty-state / low-slots CTA: when fewer than 5 live slots exist */}
+            {slots.length > 0 && slots.length < 5 && onOpenSeedDemo && (
+              <div
+                style={{
+                  margin: "12px",
+                  padding: "12px 14px",
+                  background: "#f0fdf4",
+                  border: "1px dashed #86efac",
+                  borderRadius: "8px",
+                  textAlign: "center",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <span style={{ fontSize: "0.82rem", color: "#166534" }}>
+                  Fewer than 5 live slots remaining on the network.
+                </span>
+                <button
+                  type="button"
+                  id="low-slots-seed-btn"
+                  onClick={onOpenSeedDemo}
+                  style={{
+                    cursor: "pointer",
+                    background: "#10b981",
+                    color: "#ffffff",
+                    fontWeight: 600,
+                    padding: "6px 14px",
+                    borderRadius: "6px",
+                    border: "none",
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  🌱 Seed demo data
+                </button>
+              </div>
+            )}
+            </>
           )}
         </div>
       </aside>
@@ -271,6 +337,7 @@ function AppInner(): React.ReactElement {
     loading,
     error,
     lastFetched,
+    isSocketHealthy,
     refresh,
     addSlot,
   } = useLiveSlots();
@@ -286,9 +353,10 @@ function AppInner(): React.ReactElement {
     mySlots:    false,
   });
 
-  const [isListOpen, setIsListOpen]     = useState(false);
-  const [isPostOpen, setIsPostOpen]     = useState(false);
-  const [isBookOpen, setIsBookOpen]     = useState(false);
+  const [isListOpen, setIsListOpen]         = useState(false);
+  const [isPostOpen, setIsPostOpen]         = useState(false);
+  const [isSeedOpen, setIsSeedOpen]         = useState(false);
+  const [isBookOpen, setIsBookOpen]         = useState(false);
   const [slotToBook, setSlotToBook]     = useState<SlotEntity | null>(null);
 
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -493,9 +561,11 @@ function AppInner(): React.ReactElement {
       {/* 1. NAVBAR */}
       <Header
         onPostSlot={() => setIsPostOpen(true)}
+        onSeedDemo={() => setIsSeedOpen(true)}
         verifiedJobsCount={userReputation?.verifiedJobsCount ?? 0}
         onOpenMyJobs={() => setIsMyJobsOpen(true)}
         onOpenDemoGuide={() => setIsDemoGuideOpen(true)}
+        isSocketHealthy={isSocketHealthy}
       />
 
       {/* Optional non-blocking error banner */}
@@ -567,6 +637,7 @@ function AppInner(): React.ReactElement {
               mySlots: false,
             })
           }
+          onOpenSeedDemo={() => setIsSeedOpen(true)}
         />
       </main>
 
@@ -634,6 +705,28 @@ function AppInner(): React.ReactElement {
         open={isDemoGuideOpen}
         onClose={() => setIsDemoGuideOpen(false)}
         currentAddress={address}
+      />
+
+      {/* Seed Demo Data Modal */}
+      <SeedModal
+        isOpen={isSeedOpen}
+        onClose={() => setIsSeedOpen(false)}
+        liveSlots={slots}
+        onSeedSuccess={(createdSlots, txHash, elapsedMs) => {
+          refresh();
+          if (createdSlots.length > 0) {
+            handleFlyTo(createdSlots[0]);
+          }
+          setToast({
+            message: `Successfully seeded ${createdSlots.length} demo slots in ${(elapsedMs / 1000).toFixed(1)}s!`,
+            type: "success",
+            link: {
+              text: `View Batch on Explorer ↗`,
+              url: `https://data.arkiv.network/?q=${txHash}&chain=tiramisu`,
+            },
+          });
+        }}
+        onRefresh={refresh}
       />
 
       {/* Toast Notification Container */}

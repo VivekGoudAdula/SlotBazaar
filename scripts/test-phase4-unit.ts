@@ -354,6 +354,32 @@ assertTest(
   resPremature ? "verified" : "null"
 );
 
+// 3j. Expired slot: slot entity pruned, startsAt absent on slot, but preserved on booking
+const expiredSlotStub = {
+  key: testSlot.key,
+  creator: sellerAddr,
+  // startsAt is undefined because slot expired and was pruned
+};
+const winnerWithStartsAt: BookingEntity = {
+  ...validWinner,
+  slotStartsAt: 1000,
+};
+const resExpiredPremature = verifyJobCompletion(expiredSlotStub, winnerWithStartsAt, [prematureSellerComp, validBuyerComp]);
+assertTest(
+  "Reputation Rule: Expired slot completion before slot start rejected via booking.slotStartsAt",
+  resExpiredPremature === null,
+  "null",
+  resExpiredPremature ? "verified" : "null"
+);
+
+const resExpiredValid = verifyJobCompletion(expiredSlotStub, winnerWithStartsAt, [validSellerComp, validBuyerComp]);
+assertTest(
+  "Reputation Rule: Expired slot valid completion accepted via booking.slotStartsAt",
+  resExpiredValid !== null,
+  "verified",
+  resExpiredValid ? "verified" : "null"
+);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. GET REPUTATION AGGREGATOR TEST
 // ─────────────────────────────────────────────────────────────────────────────

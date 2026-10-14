@@ -18,7 +18,7 @@ import {
 import { tiramisu } from "@arkiv-network/sdk/chains";
 import { str, u64, i32, bool, key } from "@arkiv-network/sdk/attr";
 import { eq, gt, and } from "@arkiv-network/sdk/query";
-import { http, custom, type Address, type Hex } from "viem";
+import { http, custom, webSocket, type Address, type Hex } from "viem";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. CONSTANTS & NAMESPACES
@@ -150,6 +150,7 @@ export interface BookingEntity {
   owner: Address;
   slotKey: Hex;
   slotCreator?: Address;
+  slotStartsAt?: number;
   slotEndsAt?: number;
   bookedAt: number;
   note: string;
@@ -231,6 +232,19 @@ export function getArkivPublicClient(rpcUrl?: string): PublicArkivClient {
   return createPublicClient({
     chain: tiramisu,
     transport: http(rpcUrl),
+  });
+}
+
+export const DEFAULT_ARKIV_WS_RPC = "wss://rpc.tiramisu.db-chain.testnet.arkiv.network";
+
+/**
+ * Returns a public WebSocket client connected to Tiramisu testnet for real-time log subscriptions.
+ * Opens a real socket only with webSocket transport and no fromBlock.
+ */
+export function getArkivWebSocketClient(wsUrl: string = DEFAULT_ARKIV_WS_RPC): PublicArkivClient {
+  return createPublicClient({
+    chain: tiramisu,
+    transport: webSocket(wsUrl),
   });
 }
 
@@ -377,6 +391,8 @@ export function parseBookingEntity(entity: Entity | FullEntity): BookingEntity |
     const slotKey = getAttrValue<Hex>(attrs, "slot_key") || ("0x0" as Hex);
     const rawSlotCreator = getAttrValue<string>(attrs, "slot_creator");
     const slotCreator = rawSlotCreator ? (rawSlotCreator.toLowerCase() as Address) : undefined;
+    const rawSlotStartsAt = getAttrValue<bigint>(attrs, "slot_starts_at");
+    const slotStartsAt = rawSlotStartsAt !== undefined && rawSlotStartsAt !== null ? Number(rawSlotStartsAt) : undefined;
     const rawSlotEndsAt = getAttrValue<bigint>(attrs, "slot_ends_at");
     const slotEndsAt = rawSlotEndsAt ? Number(rawSlotEndsAt) : undefined;
     const rawBookedAt = getAttrValue<bigint>(attrs, "booked_at");
@@ -401,6 +417,7 @@ export function parseBookingEntity(entity: Entity | FullEntity): BookingEntity |
       owner: (entity.owner || "0x0") as Address,
       slotKey,
       slotCreator,
+      slotStartsAt,
       slotEndsAt,
       bookedAt,
       note: validated.note || "",
@@ -851,6 +868,9 @@ export function verifyJobCompletion(
   const winnerKey = winner.key.toLowerCase();
   const slotKey = slot.key.toLowerCase();
 
+  // (e) Effective startsAt: fallback to winner.slotStartsAt when slot has expired
+  const effectiveStartsAt = winner.slotStartsAt ?? slot.startsAt;
+
   // Find completions matching this booking or legacy slot key
   const matchingCompletions = completions.filter((c) => {
     const bKey = (c.bookingKey || "").toLowerCase();
@@ -863,7 +883,7 @@ export function verifyJobCompletion(
   const sellerCompletion = matchingCompletions.find((c) => {
     if (c.role !== "seller") return false;
     if (c.creator.toLowerCase() !== slotCreator) return false;
-    if (slot.startsAt !== undefined && c.completedAt < slot.startsAt) return false;
+    if (effectiveStartsAt !== undefined && c.completedAt < effectiveStartsAt) return false;
     return true;
   });
   if (!sellerCompletion) return null;
@@ -873,7 +893,7 @@ export function verifyJobCompletion(
   const buyerCompletion = matchingCompletions.find((c) => {
     if (c.role !== "buyer") return false;
     if (c.creator.toLowerCase() !== winnerCreator) return false;
-    if (slot.startsAt !== undefined && c.completedAt < slot.startsAt) return false;
+    if (effectiveStartsAt !== undefined && c.completedAt < effectiveStartsAt) return false;
     return true;
   });
   if (!buyerCompletion) return null;
@@ -955,7 +975,7 @@ export function getReputation(
         {
           key: winner.slotKey,
           creator: (slotMatch?.creator || winner.slotCreator || "0x0") as Address,
-          startsAt: slotMatch?.startsAt,
+          startsAt: slotMatch?.startsAt ?? winner.slotStartsAt,
         },
         winner,
         allCompletions
@@ -1080,6 +1100,7 @@ export async function createSlot(
 export interface CreateBookingInput {
   slotKey: Hex;
   slotCreator?: Address;
+  slotStartsAt?: number;
   slotEndsAt?: number;
   note?: string;
   synthetic?: boolean;
@@ -1093,7 +1114,7 @@ export interface CreateBookingOutput {
 
 /**
  * Creates a booking entity on Arkiv Tiramisu (Schema v2).
- * Uses provided slotCreator and slotEndsAt or reads the slot live on-chain.
+ * Uses provided slotCreator, slotStartsAt and slotEndsAt or reads the slot live on-chain.
  * Expiry: 30 days.
  */
 export async function createBooking(
@@ -1104,18 +1125,20 @@ export async function createBooking(
   acquireWriteLock("createBooking");
   try {
     let slotCreator = input.slotCreator;
+    let slotStartsAt = input.slotStartsAt;
     let slotEndsAt = input.slotEndsAt;
 
     // If caller didn't pass slot details, lookup slot entity
-    if (!slotCreator || !slotEndsAt) {
+    if (!slotCreator || slotStartsAt === undefined || !slotEndsAt) {
       const slot = await getSlotEntity(input.slotKey, publicClient);
       if (slot) {
         slotCreator = slot.creator;
+        slotStartsAt = slot.startsAt;
         slotEndsAt = slot.endsAt;
       }
     }
 
-    if (!slotCreator || !slotEndsAt) {
+    if (!slotCreator || !slotEndsAt || slotStartsAt === undefined) {
       throw new ArkivError(
         "INVALID_PAYLOAD",
         `Cannot book slot: target slot entity ${input.slotKey} details could not be resolved.`
@@ -1143,6 +1166,7 @@ export async function createBooking(
         schema_v: str("2"),
         slot_key: key(input.slotKey),
         slot_creator: str(slotCreator.toLowerCase()),
+        slot_starts_at: u64(BigInt(slotStartsAt)),
         slot_ends_at: u64(BigInt(slotEndsAt)),
         booked_at: u64(BigInt(bookedAt)),
         synthetic: bool(synthetic),

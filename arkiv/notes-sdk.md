@@ -277,3 +277,55 @@ const walletClient = createWalletClient({
 2. **Transaction Signing**: Calls to `walletClient.createEntity(...)` automatically trigger MetaMask's confirmation popup (`eth_sendTransaction`), correctly computing gas and prompt parameters.
 3. **Chain ID**: Must be verified as `7738577` (hex: computed in code as `"0x" + Number(7738577).toString(16)`); `wallet_switchEthereumChain` and fallback `wallet_addEthereumChain` (on error 4902) handle network alignment cleanly.
 
+---
+
+## 11. WebSocket Live Updates & Event Watching (`watchEntityEvents`) (Phase 5 Verified Pattern)
+
+```ts
+import { createPublicClient } from "@arkiv-network/sdk";
+import { tiramisu } from "@arkiv-network/sdk/chains";
+import { webSocket } from "viem";
+
+const wsClient = createPublicClient({
+  chain: tiramisu,
+  transport: webSocket("wss://rpc.tiramisu.db-chain.testnet.arkiv.network"),
+});
+
+const unwatch = wsClient.watchEntityEvents({
+  onEntityCreated: (event) => { /* handle creation */ },
+  onEntityPatched: (event) => { /* handle patch */ },
+  onExpiryExtended: (event) => { /* handle extension */ },
+  onOwnershipTransferred: (event) => { /* handle transfer */ },
+  onEntityDeleted: (event) => { /* handle deletion */ },
+  onEvent: (event) => { /* raw stream */ },
+  onError: (error) => { /* handle transport error & reconnect */ },
+});
+```
+
+### Verified WebSocket Subscriptions vs Silent HTTP Polling
+1. **Real Socket Connection**: Arkiv SDK opens a real WebSocket subscription only when instantiated with `transport: webSocket("wss://...")` and **no** `fromBlock` parameter. In this configuration, viem calls `eth_subscribe("logs", ...)` over the persistent socket.
+2. **Silent HTTP Fallback**: When instantiated with `transport: http(...)` or when `fromBlock` is specified, `watchEntityEvents` silently falls back to HTTP polling via `eth_getFilterLogs` / `eth_getLogs` using `pollingInterval`.
+3. **Passive Expiration Does NOT Emit Logs**: Entity expiration occurs passively on-chain without an explicit transaction or log event. Therefore, `watchEntityEvents` does not fire when an entity expires. Applications must prune expired slots client-side when `ends_at` passes (1-2 block margin ~4s).
+4. **Debounced Query Invalidation**: Event payloads should not be trusted as the sole source of truth for complex application state. When any relevant event arrives, the client should debounce (~500 ms) and trigger the standard 3-query batch (`fetchLiveSlots`, `fetchAllBookings`, `fetchAllCompletions`).
+5. **Measured Latency**: Across 5 empirical live test probes on Tiramisu testnet, latency from transaction confirmation to WebSocket event receipt averaged **2550 ms** (min: 216 ms, max: 3695 ms). Events arrived strictly in order with 0 duplicates.
+
+---
+
+## 12. Batch Entity Creation (`wallet.executeBatch`)
+
+Installed `@arkiv-network/sdk@0.8.1` provides first-class support for single-signature batch execution:
+
+```ts
+const res = await wallet.executeBatch({
+  creates: batchCreates, // Array of CreateEntityParameters
+});
+// Returns { txHash, createdEntities }
+```
+
+- **MetaMask Interaction**: Submits all operations in a single `execute(Operation[])` contract transaction, requiring only **1 user signature popup** in MetaMask regardless of batch size.
+- **Tested Limit & Cost**: Tested and confirmed with 6 slot entities in 1 transaction:
+  - Total GLM spent: `0.000859728001719456` GLM (~0.00086 GLM).
+  - Cost per entity: `0.000143288000286576` GLM (~0.000143 GLM).
+  - Confirmation time: ~4972 ms.
+
+

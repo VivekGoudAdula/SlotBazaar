@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   getArkivPublicClient,
+  getArkivWebSocketClient,
   fetchLiveSlots,
   fetchAllBookings,
   fetchAllCompletions,
@@ -23,7 +24,7 @@ import {
 } from "../lib/arkiv.js";
 import type { Address } from "viem";
 
-const POLL_INTERVAL_MS = 8_000;
+const POLL_INTERVAL_MS = 30_000; // 30-second polling safety net
 
 export interface UseLiveSlotsResult {
   slots: SlotEntity[];
@@ -37,6 +38,7 @@ export interface UseLiveSlotsResult {
   loading: boolean;
   error: string | null;
   lastFetched: Date | null;
+  isSocketHealthy: boolean;
   refresh: () => void;
   addSlot: (slot: SlotEntity) => void;
 }
@@ -380,6 +382,121 @@ export function useLiveSlots(): UseLiveSlotsResult {
     }
   }, [client]);
 
+  const [isSocketHealthy, setIsSocketHealthy] = useState(false);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const backoffDelayRef = useRef(1000);
+  const unwatchRef = useRef<(() => void) | null>(null);
+
+  // Debounced refetch (500 ms) triggered by WebSocket events
+  const triggerDebouncedFetch = useCallback(() => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      doFetch();
+    }, 500);
+  }, [doFetch]);
+
+  // WebSocket subscription with exponential backoff reconnect
+  useEffect(() => {
+    let active = true;
+
+    function connectWs() {
+      if (!active) return;
+      try {
+        const wsClient = getArkivWebSocketClient();
+
+        const unwatch = wsClient.watchEntityEvents({
+          onEntityCreated: () => {
+            setIsSocketHealthy(true);
+            backoffDelayRef.current = 1000;
+            triggerDebouncedFetch();
+          },
+          onEntityPatched: () => {
+            setIsSocketHealthy(true);
+            backoffDelayRef.current = 1000;
+            triggerDebouncedFetch();
+          },
+          onExpiryExtended: () => {
+            setIsSocketHealthy(true);
+            backoffDelayRef.current = 1000;
+            triggerDebouncedFetch();
+          },
+          onOwnershipTransferred: () => {
+            setIsSocketHealthy(true);
+            backoffDelayRef.current = 1000;
+            triggerDebouncedFetch();
+          },
+          onEntityDeleted: () => {
+            setIsSocketHealthy(true);
+            backoffDelayRef.current = 1000;
+            triggerDebouncedFetch();
+          },
+          onEvent: () => {
+            setIsSocketHealthy(true);
+            backoffDelayRef.current = 1000;
+            triggerDebouncedFetch();
+          },
+          onError: (err) => {
+            console.warn("WebSocket entity subscription warning/disconnect:", err.message);
+            setIsSocketHealthy(false);
+            scheduleReconnect();
+          },
+        });
+
+        unwatchRef.current = unwatch;
+        setIsSocketHealthy(true);
+      } catch (err) {
+        console.warn("Failed to connect WebSocket entity watcher:", err);
+        setIsSocketHealthy(false);
+        scheduleReconnect();
+      }
+    }
+
+    function scheduleReconnect() {
+      if (!active) return;
+      if (unwatchRef.current) {
+        try { unwatchRef.current(); } catch {}
+        unwatchRef.current = null;
+      }
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+
+      const delay = backoffDelayRef.current;
+      backoffDelayRef.current = Math.min(backoffDelayRef.current * 2, 30_000);
+      reconnectTimeoutRef.current = setTimeout(() => {
+        if (active) connectWs();
+      }, delay);
+    }
+
+    connectWs();
+
+    return () => {
+      active = false;
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (unwatchRef.current) {
+        try { unwatchRef.current(); } catch {}
+        unwatchRef.current = null;
+      }
+    };
+  }, [triggerDebouncedFetch]);
+
+  // Client-side expiry removal: when ends_at passes locally (with 1-2 block margin = 4s), remove slot immediately
+  useEffect(() => {
+    const BLOCK_MARGIN_SEC = 4;
+    const interval = setInterval(() => {
+      const nowSec = Math.floor(Date.now() / 1000);
+      setSlots((prev) => {
+        const remaining = prev.filter((s) => s.endsAt > nowSec + BLOCK_MARGIN_SEC);
+        if (remaining.length !== prev.length) {
+          return remaining;
+        }
+        return prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Polling safety net (30 seconds)
   useEffect(() => {
     isMounted.current = true;
     doFetch();
@@ -522,6 +639,7 @@ export function useLiveSlots(): UseLiveSlotsResult {
     loading,
     error,
     lastFetched,
+    isSocketHealthy,
     refresh: doFetch,
     addSlot,
   };

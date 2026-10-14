@@ -121,10 +121,11 @@ export function BookSlotModal({
       setStage("preparing");
 
       setStage("waiting_wallet");
-      // Call createBooking (passes slotCreator and slotEndsAt directly so MetaMask opens instantly without blocking network queries)
+      // Call createBooking (passes slotCreator, slotStartsAt and slotEndsAt directly so MetaMask opens instantly without blocking network queries)
       const res = await createBooking(client, {
         slotKey: slot.key,
         slotCreator: slot.creator,
+        slotStartsAt: slot.startsAt,
         slotEndsAt: slot.endsAt,
         synthetic: false,
       });
@@ -139,6 +140,7 @@ export function BookSlotModal({
         owner: address,
         slotKey: slot.key,
         slotCreator: slot.creator,
+        slotStartsAt: slot.startsAt,
         slotEndsAt: slot.endsAt,
         bookedAt: Math.floor(Date.now() / 1000),
         note: "",

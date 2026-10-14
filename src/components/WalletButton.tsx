@@ -81,6 +81,16 @@ export function WalletButton({
     }
   }, [status, address, fetchBalance]);
 
+  // ─── Listen for External Open Help Signal ──────────────────────────────────
+  useEffect(() => {
+    function handleOpenHelp() {
+      setHelpOpen(true);
+      setMenuOpen(false);
+    }
+    window.addEventListener("slotbazaar:open-wallet-help", handleOpenHelp);
+    return () => window.removeEventListener("slotbazaar:open-wallet-help", handleOpenHelp);
+  }, []);
+
   // ─── Outside Click & Escape Handlers ────────────────────────────────────────
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

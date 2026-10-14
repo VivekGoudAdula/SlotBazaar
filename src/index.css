@@ -199,6 +199,44 @@ body {
   background: #E5DFC8;
 }
 
+.header__seed-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-3);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  background: #f8fafc;
+  color: var(--c-ink);
+  border: 1.5px solid #64748b;
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 #94a3b8;
+  cursor: pointer;
+  height: 38px;
+  min-height: 38px;
+  transition: transform 80ms, box-shadow 80ms, background 120ms;
+}
+
+.header__seed-btn:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--c-ink);
+  background: #f1f5f9;
+}
+
+.header__seed-btn:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--c-ink);
+}
+
+.header__seed-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 .header__chain-badge {
   display: flex;
   align-items: center;

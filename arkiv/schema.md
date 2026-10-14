@@ -276,13 +276,14 @@ Bookings are independent immutable entities. Existing slots are **never mutated*
 | `schema_v` | `StrValue` | UTF-8 `"2"` | Schema version (`"1"` for legacy) |
 | `slot_key` | `KeyValue` | `key(slotKey)` | Foreign key referencing the slot entity |
 | `slot_creator` | `StrValue` | UTF-8 address string | Copied from live on-chain slot (lowercase) |
+| `slot_starts_at` | `U64Value` | `u64(BigInt(startsAt))` | Copied from live on-chain slot (preserves start window post slot expiry) |
 | `slot_ends_at` | `U64Value` | `u64(BigInt(endsAt))` | Copied from live on-chain slot |
 | `booked_at` | `U64Value` | `u64(BigInt(sec))` | Unix timestamp when booking was created |
 | `synthetic` | `BoolValue` | `bool(boolean)` | `false` for user bookings |
 
 - **Expiration Policy**: 30 days from creation (`ExpirationTime.atDate(new Date(Date.now() + 30 * 86400 * 1000))`).
 - **Gas Cost**: ~0.000142 GLM (consistent with Arkiv's flat entity creation fee).
-- **Integrity Invariant**: Booking creation reads the live slot from Arkiv first; `slot_creator` and `slot_ends_at` are copied directly from the on-chain slot, never accepted from untrusted client input.
+- **Integrity Invariant**: Booking creation reads the live slot from Arkiv first; `slot_creator`, `slot_starts_at` and `slot_ends_at` are copied directly from the on-chain slot, never accepted from untrusted client input. Recording `slot_starts_at` directly onto the booking ensures the reputation rule "completion before slot start is rejected" remains strictly enforceable even after the original slot entity has expired and been pruned by Arkiv.
 
 ### 7.2 Entity: `completion` (v2)
 
@@ -314,7 +315,7 @@ A job qualifies as a verified reputation point if and only if **ALL** of the fol
    - A completion with `role="seller"` exists on the `booking_key` whose creator equals `booking.slot_creator`.
    - A completion with `role="buyer"` exists on the `booking_key` whose creator equals `booking.creator`.
 3. **Temporal Validity**:
-   - Neither completion was executed before `slot.startsAt`.
+   - Neither completion was executed before `effectiveStartsAt` (`winner.slotStartsAt ?? slot.startsAt`). This prevents premature completion claims even when the original slot entity has already expired and pruned.
 4. **De-duplication**:
    - Duplicate completions submitted by the same role/wallet do not double-count.
 
