@@ -119,9 +119,21 @@ export interface SeedGeneratorOptions {
   maxHours?: number;
 }
 
-/** Random jitter ±0.015 degrees (~1.5 km) */
-function jitter(c: number): number {
-  return Number((c + (Math.random() - 0.5) * 0.03).toFixed(4));
+/**
+ * Realistic geographic dispersion across industrial corridors (~4 to 22 km).
+ * Uses polar coordinates to ensure uniform 2D distribution across regional manufacturing belts
+ * instead of stacking multiple tasks on an artificial single point.
+ */
+function disperseCoordinates(centerLat: number, centerLon: number): { lat: number; lon: number } {
+  const angle = Math.random() * 2 * Math.PI;
+  // Radius between 0.035 and 0.16 degrees (~4km to 18km spread across industrial belts)
+  const radiusDeg = 0.035 + Math.random() * 0.125;
+  const dLat = radiusDeg * Math.cos(angle);
+  const dLon = (radiusDeg * Math.sin(angle)) / Math.cos((centerLat * Math.PI) / 180);
+  return {
+    lat: Number((centerLat + dLat).toFixed(4)),
+    lon: Number((centerLon + dLon).toFixed(4)),
+  };
 }
 
 /** Format hours into readable string: 12m, 30m, 1h, 4h, 2.5d */
@@ -189,12 +201,15 @@ export function generateSeedSlots(options: SeedGeneratorOptions): GeneratedSlot[
     }
   }
 
+  // Randomize cluster order across all available Indian manufacturing hubs
+  const availableClusters = [...CLUSTERS].sort(() => Math.random() - 0.5);
+
   const results: GeneratedSlot[] = [];
 
   for (let idx = 0; idx < count; idx++) {
     const spec = tierPlan[idx % tierPlan.length];
     const template = SEED_TEMPLATES[idx % SEED_TEMPLATES.length];
-    const cluster = CLUSTERS[idx % CLUSTERS.length];
+    const cluster = availableClusters[idx % availableClusters.length];
 
     // Starts between 1 and 10 minutes in the future
     const startDelaySec = 60 + (idx * 30);
@@ -205,8 +220,7 @@ export function generateSeedSlots(options: SeedGeneratorOptions): GeneratedSlot[
     // Safety guard: refuse past expiry
     if (endsAt <= now) continue;
 
-    const lat = jitter(cluster.lat);
-    const lon = jitter(cluster.lon);
+    const { lat, lon } = disperseCoordinates(cluster.lat, cluster.lon);
     const durationLabel = formatDurationLabel(spec.durationHours);
     const title = `[${cluster.label.toUpperCase()}] ${template.titleBase} (${durationLabel})`;
 

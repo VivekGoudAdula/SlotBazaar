@@ -336,7 +336,9 @@ export function MapView({
         {/* Clustered slot markers */}
         <MarkerClusterGroup
           chunkedLoading
-          maxClusterRadius={50}
+          maxClusterRadius={35}
+          spiderfyOnMaxZoom={true}
+          spiderfyDistanceMultiplier={1.5}
           showCoverageOnHover={false}
         >
           {slots.map((slot) => {
