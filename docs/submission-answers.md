@@ -34,11 +34,11 @@
 ### Criterion 1A: Why India? · 25 Points (Best Indian Use Case Track)
 *Target: Names who in India uses it, what changes for them from day one, and the app works today.*
 
-Across India’s major industrial manufacturing corridors (such as Jeedimetla in Hyderabad, Surat, Tiruppur, Morbi, Ludhiana, Peenya in Bengaluru, and Coimbatore), India has an estimated 63.39 million MSMEs according to the Ministry of MSME Annual Report 2022-23 (https://msme.gov.in / National Sample Survey 73rd Round). While only a subset of these enterprises operate capital equipment (such as CNC milling machines, lathe tooling blocks, laser die-cutters, hydraulic presses, or intra-city freight vehicles), those that do operate on thin operating margins where rigid production schedules inevitably create 2- to 4-hour idle gaps between primary contract runs.
+Across India’s major industrial manufacturing corridors (such as Jeedimetla in Hyderabad, Surat, Tiruppur, Morbi, Ludhiana, Peenya in Bengaluru, and Coimbatore), India has an estimated 63.39 million unincorporated MSMEs according to the National Sample Survey (NSS) 73rd Round (2015-16 survey), reported in the Lok Sabha ([AU908](https://eparlib.nic.in/bitstream/123456789/1058442/1/AU908.pdf)). Only a subset of these enterprises operate capital equipment (such as CNC milling machines, lathe tooling blocks, laser cutters, hydraulic presses, or intra-city freight vehicles), but those that do operate on thin operating margins where rigid production schedules inevitably create 2- to 4-hour idle gaps between primary contract runs.
 
 Today, this operational capacity is lost because traditional Web2 B2B platforms demand steep annual subscriptions or extract significant commission fees per lead, offering zero real-time spatial discovery. Informal WhatsApp and Telegram groups are chaotic, unsearchable, and rife with spam. Most critically, when a small machine shop completes a job on time, their verified performance record stays trapped in private chats — their operational reputation cannot be proven to new enterprise clients.
 
-SlotBazaar solves this by providing a decentralized, real-time map where MSMEs broadcast perishable time slots for under `0.0002 GLM` per slot. Slots expire autonomously on-chain when the window closes (ranging from 15 minutes to 7 days), reservations race fairly on earliest confirmed block, and two-sided cryptographic signatures produce permanent, portable on-chain verified job badges without platform rent. The app is live and fully interactive today at [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app). *(Full analysis: see [docs/WHY_INDIA.md](WHY_INDIA.md))*.
+SlotBazaar solves this by providing a decentralized, real-time map where MSMEs broadcast perishable time slots for about `0.00014 testnet GLM` per slot (testnet GLM has no market value). Slots expire autonomously on-chain when the window closes (ranging from 15 minutes to 7 days), reservations race fairly on earliest confirmed block, and two-sided cryptographic signatures produce portable on-chain verified job badges that persist for as long as their entities exist (30 days today) without platform rent. The app is live and fully interactive today at [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app). *(Full analysis: see [docs/WHY_INDIA.md](WHY_INDIA.md))*.
 
 ---
 
@@ -73,38 +73,38 @@ On SlotBazaar, **censorship resistance is enforced by consensus**:
 |---|---|---|
 | **Attributes vs Payload** | `src/lib/arkiv.ts:1099`, `schema.md` | Searchable fields (`category`, `cluster`, `starts_at`, `ends_at`, `lat_e4`, `lon_e4`) are stored as typed attributes for zero-middleware querying; display text (`title`, `description`) resides in payload. |
 | **Compound Predicates & Ranges** | `src/lib/arkiv.ts:380-450` | Queries use `and()`, `eq()`, `gt("ends_at", u64(nowSec))` for live cluster and category filtering directly over RPC. |
-| **Autonomous Entity Expiration** | `src/lib/arkiv.ts:1099`, `schema.md` | Slots expire at `ends_at` (15m to 7d); bookings and completions persist for 30 days to enable post-slot completion and dispute settlement. |
+| **Autonomous Entity Expiration** | `src/lib/arkiv.ts:1099`, `schema.md` | Slots expire at `ends_at` (15m to 7d); bookings and completions persist for as long as their entities exist (30 days today) to enable post-slot completion and dispute settlement. |
 | **`$creator` Verification** | `src/lib/arkiv.ts:890`, `src/hooks/useLiveSlots.ts` | The reputation engine matches on-chain `$creator` against the slot owner and winning buyer; prevents impersonation and fake self-reviews. |
-| **WebSocket Entity Events** | `src/hooks/useLiveSlots.ts:413-480` | Subscribes via `watchEntityEvents` over `webSocket` transport (omitting `fromBlock` to avoid HTTP polling fallback). Pushes newly posted slots to all peer tabs in ~2,550 ms. |
+| **WebSocket Entity Events** | `src/hooks/useLiveSlots.ts:413-480` | Subscribes via `watchEntityEvents` over `webSocket` transport (omitting `fromBlock` to avoid HTTP polling fallback). Pushes newly posted slots to all peer tabs with sub-second median latency (measured 0.74s median, under 3s across tests) on the leading edge. |
 | **Single-Signature Batch Writes** | `src/components/SeedModal.tsx:38`, `executeBatch` | Bundles up to 20 slots per transaction (`execute(Operation[])`). Prompts MetaMask only once, saving gas and eliminating signature fatigue. |
-| **Client-Side Expiry Guard** | `src/hooks/useLiveSlots.ts:491-505` | 1-second proactive ticker with 4-second (1–2 block) margin prunes slots locally to match Arkiv consensus pruning without waiting for refresh loops. |
+| **Client-Side Expiry Guard** | `src/hooks/useLiveSlots.ts:491-505` | 1-second proactive ticker with 4-second client margin exists strictly for browser/chain clock skew, not an Arkiv asymmetry. |
 
 ---
 
 ### Criterion 4: Friction Report · 25 Points
 *Target: `/arkiv/friction.md` with expected vs actual, versions, minimal reproduction code, and upstream issue pointers.*
 
-We documented 17 total tracked entries in [arkiv/friction.md](../arkiv/friction.md) on Arkiv Tiramisu (`chainId: 7738577`), categorized transparently as 5 genuine Arkiv/SDK findings, 3 documentation gaps, and 9 notes, ecosystem, or withdrawn items. Every entry includes exact error messages, versions, reproduction code, and tested workarounds:
-1. **5 Genuine Arkiv & SDK Findings:**
+We documented 17 total tracked entries in [arkiv/friction.md](../arkiv/friction.md) on Arkiv Tiramisu (`chainId: 7738577`): 6 small SDK and DX findings (FR-001, FR-003, FR-004, FR-010, FR-012, FR-017), of which FR-012 reproduced once and FR-004 is documented behaviour; 1 documentation typo (FR-006); and 10 notes, architectural insights, and withdrawn items (FR-002, FR-005, FR-007, FR-008, FR-009, FR-011, FR-013, FR-014, FR-015, FR-016). Every entry includes exact error messages, versions, reproduction code, and tested workarounds:
+1. **6 Small Arkiv & SDK Findings:**
    - `FR-001`: `InvalidPredicateError` not exported from root `@arkiv-network/sdk` (workaround: import from `/query`; filed issue).
-   - `FR-004`: Range query with mismatched numeric type tag returns 0 rows silently without diagnostic warning.
+   - `FR-003`: Node-side simulation reverts with `Ident32InvalidByte(0, 0x50)` during `eth_estimateGas` when an attribute name holds uppercase; surfaces as generic `EntityMutationError` rather than `InvalidAttributeNameError`; SDK does not pre-validate; 0 gas spent (never reached `eth_sendRawTransaction`).
+   - `FR-004`: Range query with mismatched numeric type tag returns 0 rows silently without diagnostic warning (documented behaviour).
    - `FR-010`: `getBlockNumber()` missing on exported `PublicArkivClient` TypeScript interface (runtime works with cast).
    - `FR-012`: Tiramisu RPC intermittently stalled on consecutive queries (reproduced once; solved via 8s timeout wrapper).
    - `FR-017`: Protocol passive entity expiration emits no EVM event log (solved via 1s client ticker with 4s margin).
-2. **3 Documentation Gaps:**
-   - `FR-005`: Query index expiration boundary condition (retested on-chain: drops at exact expiry block when no `ends_at` filter is passed).
+2. **1 Documentation Item:**
    - `FR-006`: Mismatched quotes in `InvalidPredicateError` message string.
-   - `FR-016`: `explorer.tiramisu.arkiv.network` returns NXDOMAIN (migrated to canonical `https://data.arkiv.network/?chain=tiramisu`).
-3. **9 Notes, Ecosystem & Withdrawn Items:**
+3. **10 Notes, Ecosystem & Withdrawn Items:**
    - `FR-002`: `BigInt` attribute serialization in `JSON.stringify` (JavaScript language behavior; custom replacer used).
-   - `FR-003`: Uppercase attribute names rejected client-side by SDK before broadcast with `EntityMutationError` (0 gas spent, never reached chain).
+   - `FR-005`: Query index expiration boundary condition (withdrawn as friction; early drop was caused by client `ends_at > now` predicate; drops at exact expiry block with 0 block asymmetry).
    - `FR-007`: `erasableSyntaxOnly` compiler flag rejects constructor parameter properties (TS 6 / Vite template interaction).
    - `FR-008`: Native token transfers require standard viem client rather than Arkiv wallet client (standard EVM tooling).
-   - `FR-009`: `getReputation` cannot recover slot creator after slot expires in Schema v1 (permanently solved in Schema v2).
+   - `FR-009`: `getReputation` cannot recover slot creator after slot expires in Schema v1 (solved in Schema v2 by storing creator in booking).
    - `FR-011`: `getEntity({ key })` threw `Invalid key value` (withdrawn: our own call-shape error; positional call `getEntity(entityKey)` succeeds cleanly).
    - `FR-013`: Storage rent between 14-day and 30-day entity expiry has zero marginal cost impact on testnet (pricing observation).
    - `FR-014`: Same-block racing creations lack execution index (handled via deterministic lexicographical key tie-breaker).
-   - `FR-015`: Schema v1 post-expiry reputation failure permanently solved by Schema v2 decoupling (architectural design note).
+   - `FR-015`: Schema v1 post-expiry reputation failure solved by Schema v2 decoupling (architectural design note).
+   - `FR-016`: `explorer.tiramisu.arkiv.network` NXDOMAIN (withdrawn as friction: our wrong guessed hostname; `tiramisu.explorer.arkiv.network` resolves and Blockscout works).
 
 ---
 

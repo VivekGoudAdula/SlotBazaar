@@ -1,104 +1,98 @@
-# SlotBazaar — 3-Minute Video Demo Script
+# SlotBazaar — 2-Minute 40-Second Video Demo Script
 
 > **Challenge:** Global Tour Stop: Pre-Devcon Hackathon (Arkiv Network)  
-> **Target Video Duration:** 2 minutes 50 seconds (Max limit: 3 minutes 00 seconds)  
+> **Target Video Duration:** Exactly 2 minutes 40 seconds (160 seconds total, ~385 words at ~2.4 words/second)  
 > **Resolution:** 1080p (1920 × 1080) at 60 fps  
-> **Audio:** Clear voiceover with crisp background-noise suppression
+> **Audio:** Clear voiceover with crisp background-noise suppression  
 
 ---
 
-## 1. Pre-Recording Preparation Checklist
+## 1. Pre-Recording Setup & Demo Accounts
 
-Before hitting record, ensure the following setup is configured:
+| Role | Persona | Placeholder Demo Account | Initial Balance | Window Setup |
+| :--- | :--- | :--- | :--- | :--- |
+| **Seller** | Ravi (Precision CNC Workshop, Jeedimetla) | `0x71aB…4d2E` (MetaMask Profile A) | >= 0.05 testnet GLM | Left half-screen / Primary Window |
+| **Buyer** | Meena (Contract Assembler, Balanagar) | `0x89cF…3e1A` (MetaMask Profile B) | >= 0.05 testnet GLM | Right half-screen / Incognito Window |
 
-- [ ] **Tab 1 (Browser Profile A - Seller):**
-  - MetaMask connected to `Account 1 (Seller)` (`0x5349…a6e9`) on Arkiv Tiramisu (`chainId: 7738577`).
-  - Balance has at least `0.05 GLM` for transaction broadcast.
-  - SlotBazaar deployed web app loaded at full screen.
-- [ ] **Tab 2 / Window 2 (Browser Profile B - Buyer):**
-  - Separate browser window or Incognito with MetaMask connected to `Account 2 (Buyer)`.
-  - Positioned side-by-side or prepared for smooth `Alt+Tab`.
-- [ ] **Pre-Seeded Network State:**
-  - Seeded with ~10–15 active slots across Jeedimetla, Surat, Tiruppur so the map is vibrant on first frame.
-- [ ] **Audio & System Checks:**
-  - Microphone gain set, test recording verified.
-  - Windows notification banners and Slack/Telegram muted.
-  - Browser bookmarks bar hidden (`Ctrl+Shift+B`).
+> [!NOTE]
+> Demo addresses `0x71aB…4d2E` and `0x89cF…3e1A` are illustrative placeholder accounts. Real private keys are never committed or broadcast.
 
 ---
 
-## 2. Minute-by-Minute Video Timeline (0:00 – 3:00)
+## 2. UI Label & Button Verification Table
 
-### [0:00 – 0:35] Problem & The Idle Capacity Crisis (Slide & Map Intro)
-* **Visual:**
-  * Quick title screen / problem slide, transitioning to the live SlotBazaar full-width map showing cluster markers across India (Jeedimetla, Surat, Tiruppur, Morbi, Ludhiana).
+Every UI label, button text, and modal heading used in this script has been audited directly against the application source code:
+
+| Script Label / Action | Exact UI Source Label | Source Code Location | Verification Status |
+| :--- | :--- | :--- | :---: |
+| Header post button | `+ Post a slot` | [`src/components/Header.tsx`](../src/components/Header.tsx#L189) | Verified Match |
+| Post modal broadcast | `Post to Arkiv` | [`src/components/PostSlotModal.tsx`](../src/components/PostSlotModal.tsx#L1024) | Verified Match |
+| Drawer book button | `🤝 Book This Slot` | [`src/components/SlotDrawer.tsx`](../src/components/SlotDrawer.tsx#L594) | Verified Match |
+| Booking modal confirmation | `Confirm Booking` | [`src/components/BookSlotModal.tsx`](../src/components/BookSlotModal.tsx#L378) | Verified Match |
+| Seller completion button | `✅ Confirm Job Completion (Seller)` | [`src/components/SlotDrawer.tsx`](../src/components/SlotDrawer.tsx#L533) | Verified Match |
+| Buyer completion button | `✅ Confirm Job Done (Buyer)` | [`src/components/SlotDrawer.tsx`](../src/components/SlotDrawer.tsx#L568) | Verified Match |
+| Mutual sign action | `Sign as Seller` / `Sign as Buyer` | [`src/components/ConfirmJobModal.tsx`](../src/components/ConfirmJobModal.tsx#L347) | Verified Match |
+| Proofs disclosure toggle | `Hide Proofs ▲` / `View Proofs ({count}) ▼` | [`src/components/SlotDrawer.tsx`](../src/components/SlotDrawer.tsx#L342) | Verified Match |
+| On-chain explorer link | `Explorer ↗` | [`src/components/SlotDrawer.tsx`](../src/components/SlotDrawer.tsx#L459) | Verified Match |
+| Wallet dropdown menu | `💼 My Jobs & Proofs` | [`src/components/WalletButton.tsx`](../src/components/WalletButton.tsx#L291) | Verified Match |
+| Reputation badge | `🏆 1 Verified Job` | [`src/components/SlotDrawer.tsx`](../src/components/SlotDrawer.tsx#L274) | Verified Match |
+
+---
+
+## 3. Second-by-Second Video Timeline (Total: 2:40 / 160s / 385 words)
+
+### [0:00 – 0:25] Segment 1: Problem & Why India (25 seconds, 61 words)
+* **Visual:** Full-screen live SlotBazaar map centered on India, showing active industrial cluster pins in Jeedimetla, Surat, Tiruppur, Morbi, and Ludhiana.
 * **Narration:**
-  * *"Across India’s industrial clusters, MSMEs operate high-value capital machinery with 2- to 4-hour idle gaps between batch orders. `[INSERT_SURVEY_FIGURE: e.g. Over XX% of machine shops]` lose thousands of rupees daily because there is no low-cost, decentralized coordination layer. Traditional aggregators demand an illustrative 20% commission, while WhatsApp chats are chaotic and unsearchable.*
-  * *Welcome to **SlotBazaar** — a decentralized, real-time bazaar for expiring industrial capacity and verifiable MSME reputation, powered entirely by Arkiv Tiramisu."*
+  > *"Across industrial manufacturing clusters in India, machine shops face uncoordinated idle gaps between batch orders. High-end equipment like laser cutters and CNC mills sit idle, while neighboring workshops scramble for capacity. Centralized portals charge heavy platform fees and informal messaging groups lack structure and trust. SlotBazaar provides an open, real-time coordination map for expiring industrial capacity across India."*
 
 ---
 
-### [0:35 – 1:10] Live Post with MetaMask & Instant WebSocket Push
-* **Visual:**
-  * Click **+ Post a slot**.
-  * Select the Jeedimetla corridor cluster.
-  * Select "Machine", title: "CNC Milling Slot (2h)", set expiry to 2 hours from now.
-  * Click "Broadcast to Arkiv". MetaMask pops up. Confirm transaction.
-  * Switch to Tab 2 (Buyer window side-by-side). Within ~2.5 seconds, the new slot pops up live on Tab 2 via native Arkiv WebSocket without any manual page refresh!
+### [0:25 – 0:45] Segment 2: The Four Scoring Pillars (20 seconds, 51 words)
+* **Visual:** Brief overlay or popover showing the four hackathon evaluation pillars with checkmarks: 1. Why India, 2. Why Arkiv, 3. How We Use Arkiv, 4. Friction Log.
 * **Narration:**
-  * *"Let's post a slot as Ravi, a workshop owner in Jeedimetla. He selects his cluster, enters his available 2-hour window and signs with MetaMask. The transaction confirms in one block, costing less than 0.0002 GLM.*
-  * *On the right, a buyer's browser receives the event immediately via native Arkiv WebSocket push in under 3 seconds. No polling lag, no middleman."*
+  > *"Here is how SlotBazaar addresses each hackathon criterion: Why India, tackling cluster machine under-utilization; Why Arkiv, leveraging native cryptographic expiration; How we use Arkiv, storing slots, reservations, and two-sided completion proofs on Tiramisu; and Friction, documenting 6 SDK and DX findings, 1 documentation gap, and 10 detailed protocol notes."*
 
 ---
 
-### [1:10 – 1:45] Booking & Autonomous Expiration
-* **Visual:**
-  * On Buyer's tab, click the newly posted slot marker.
-  * Click **Book Slot**. MetaMask pops up. Confirm booking reservation.
-  * Show the card updating to **🔒 Booked** state across both windows.
-  * Briefly explain the countdown timer: explain that if left unbooked, the slot drops off the map automatically at consensus expiration time.
+### [0:45 – 1:15] Segment 3: Seller Posts a Slot & Instant Push (30 seconds, 69 words)
+* **Visual:** In Profile A (Ravi, `0x71aB…4d2E`), click **+ Post a slot**. Select Jeedimetla cluster, CNC category, 2-hour duration. Click **Post to Arkiv**. Confirm MetaMask. In Profile B (Meena, `0x89cF…3e1A`) side-by-side, the slot pin appears live without page refresh.
 * **Narration:**
-  * *"Meena, a nearby assembly contractor, spots the slot and clicks 'Book Slot'. This creates an on-chain booking reservation referencing the slot. If multiple buyers race, the earliest confirmed block wins.*
-  * *Notice the countdown ticker: if a slot reaches its deadline, Arkiv’s native Entity Expiration autonomously purges it at the consensus layer. No server-side garbage collection is needed."*
+  > *"Ravi, a precision workshop owner in Jeedimetla, clicks '+ Post a slot'. He selects a two-hour window for his CNC mill and clicks 'Post to Arkiv'. MetaMask confirms the transaction in one block, costing about 0.00014 testnet GLM. Instantly, Meena’s browser receives the slot via native Arkiv WebSocket streaming. Our measured latency has a 0.74-second median from block confirmation to DOM update, with no polling delay."*
 
 ---
 
-### [1:45 – 2:20] Two-Sided Completion & Instant Verified Reputation
-* **Visual:**
-  * Open the slot drawer / **My Jobs** panel on both Seller and Buyer tabs.
-  * Seller clicks **Confirm Job Completion** to submit an on-chain seller completion entity.
-  * Buyer clicks **Confirm Job Completion** to submit the symmetric buyer completion entity.
-  * The receipt updates instantly, unlocking the **🏆 1 Verified Job** reputation badge on the seller's card and wallet profile.
-  * Click **Hide Proofs ▲** to reveal the linked cryptographic transactions.
+### [1:15 – 1:40] Segment 4: Buyer Books & Autonomous Expiration (25 seconds, 55 words)
+* **Visual:** On Meena's window (`0x89cF…3e1A`), click the new slot pin. Drawer opens. Click **🤝 Book This Slot**. Modal opens, click **Confirm Booking**. MetaMask confirms. Status turns to `🔒 Booked`. Zoom in on countdown timer ticking down.
 * **Narration:**
-  * *"Once the physical work is finished, both parties submit wallet-signed completion entities to Arkiv Tiramisu. Arkiv records both cryptographic receipts.*
-  * *Because both transactions match the on-chain slot creator and winning buyer, SlotBazaar's pure reputation engine instantly increments Ravi’s verified jobs score. It's tamper-evident, creator-signed portable reputation owned by the SME, not locked inside a proprietary database."*
+  > *"Meena needs precision milling nearby. She clicks '🤝 Book This Slot' and confirms the transaction. Arkiv records her reservation entity on-chain; the earliest block wins. Look at the countdown timer: if a slot goes unbooked, Arkiv’s native expiration autonomously removes it at consensus timestamp. No server-side cleanup cron or backend database is ever required."*
 
 ---
 
-### [2:20 – 2:45] On-Chain Explorer Proof & Architecture
-* **Visual:**
-  * Click **Explorer ↗** from the proof drawer, opening `data.arkiv.network/?q=0x...&chain=tiramisu`.
-  * Highlight the raw immutable entity, attributes (`cluster`, `starts_at`, `ends_at`), and block expiration height.
-  * Quick transition to the Architecture diagram in `docs/WHY_ARKIV.md`.
+### [1:40 – 2:05] Segment 5: Two-Sided Completion & Verified Reputation (25 seconds, 60 words)
+* **Visual:** Physical work is done. On Ravi's drawer, click **✅ Confirm Job Completion (Seller)** -> **Sign as Seller**. On Meena's drawer, click **✅ Confirm Job Done (Buyer)** -> **Sign as Buyer**. Drawer updates instantly showing the `🏆 1 Verified Job` reputation badge.
 * **Narration:**
-  * *"Clicking 'Explorer' verifies the raw on-chain entity directly on Arkiv Tiramisu. The booking entity has a 30-day lifetime preserving the proof even after the temporary slot expires.*
-  * *Postgres allows platform operators to rewrite history; IPFS cannot execute attribute range queries; Subgraphs are only event indexers. Arkiv is the only data layer built for perishable, verifiable real-world capacity."*
+  > *"After the physical milling completes, both parties sign mutual completion entities on Arkiv Tiramisu. Ravi clicks 'Confirm Job Completion' as seller, and Meena signs as buyer. Arkiv verifies both wallet signatures, immediately unlocking the '🏆 1 Verified Job' badge on Ravi's card. This portable reputation is verifiable on-chain and persists for 30 days without centralized platform lock-in."*
 
 ---
 
-### [2:45 – 3:00] Friction Log & Conclusion
-* **Visual:**
-  * Open `/arkiv/friction.md` showing the summary table with 17 documented friction entries and upstream issue links.
-  * Return to map view with footer attribution and github link.
+### [2:05 – 2:25] Segment 6: On-Chain Explorer Proof & Architecture (20 seconds, 49 words)
+* **Visual:** In the drawer, expand **View Proofs (2) ▼** and click **Explorer ↗**. Opens Blockscout (`tiramisu.explorer.arkiv.network/tx/...`) and Data Explorer (`data.arkiv.network/?q=0x...&chain=tiramisu`). Highlight raw entity attributes (`starts_at`, `ends_at`, `cluster`).
 * **Narration:**
-  * *"We documented 17 detailed protocol friction points and latency benchmarks in our friction log to help Arkiv grow.*
-  * *SlotBazaar proves that decentralized, autonomous entity expiration unlocks real economic coordination for millions of Indian MSMEs. Try it live at our deployed URL. Thank you!"*
+  > *"Clicking 'Explorer' opens the decentralized entity directly on the Arkiv data explorer. Notice the raw attributes, block timestamp, and cryptographic proof. Each booking entity costs about 0.00012 testnet GLM. While Postgres can be manipulated and IPFS cannot filter queries, Arkiv provides native range indexing and verifiable decentralized expiration."*
 
 ---
 
-## 3. Post-Recording Quality Checklist
-- [ ] Video duration is under 3 minutes (e.g. 2:50).
-- [ ] Resolution is sharp 1080p without blurry text.
-- [ ] Sound volume is balanced and audible without clipping.
-- [ ] Uploaded as unlisted or public on YouTube or Loom with link added to `docs/submission-answers.md`.
+### [2:25 – 2:40] Segment 7: Friction Log Highlights & Conclusion (15 seconds, 40 words)
+* **Visual:** Open `/arkiv/friction.md`, showing the auto-generated summary table with reproducible scripts and upstream issue links. Pan back to live map with header links.
+* **Narration:**
+  > *"We documented 6 SDK and developer-experience findings, 1 documentation gap, and 10 protocol notes with reproducible scripts in our friction report. SlotBazaar demonstrates real-world decentralized coordination for Indian manufacturing. Try the live demo at slotbazaar.vercel.app. Thank you!"*
+
+---
+
+## 4. Post-Recording Quality Checklist
+
+- [ ] Video duration is exactly 2:40 (or within 2:35–2:45).
+- [ ] Crisp 1080p resolution with legible UI text.
+- [ ] No audio clipping or harsh background noise.
+- [ ] Uploaded to YouTube (Unlisted) or Loom, with link added to `docs/submission-answers.md`.

@@ -971,7 +971,7 @@ export function PostSlotModal({
                 style={{ marginTop: 3, cursor: "pointer", width: 18, height: 18 }}
               />
               <label htmlFor={piiCheckId} style={{ fontSize: "0.8rem", lineHeight: 1.4, cursor: "pointer" }}>
-                <strong>No Personal Data Confirmation:</strong> I confirm this slot contains no personal contact numbers, email addresses, Aadhaar, or GSTINs. Data is written permanently to Arkiv's decentralized state.
+                <strong>No Personal Data Confirmation:</strong> I confirm this slot contains no personal contact numbers, email addresses, Aadhaar, or GSTINs. Data is written to Arkiv's decentralized state and persists for as long as its entities exist (30 days today).
               </label>
             </div>
             {errors.confirmedNoPii && (

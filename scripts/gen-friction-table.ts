@@ -78,65 +78,81 @@ export function parseFrictionDoc(): { entries: FrictionEntry[]; content: string 
   for (const e of entries) {
     if (e.id === "FR-001") {
       e.category = "sdk";
+      e.severity = "Minor";
       e.status = "Workaround applied (import from `/query`)";
       e.linkOrNote = "[Issue #3 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-3-invalidpredicateerror-is-not-exported-from-the-main-arkiv-networksdk-entry-point-fr-001)";
+    } else if (e.id === "FR-003") {
+      e.category = "sdk";
+      e.severity = "Minor";
+      e.status = "No gas spent; node-side simulation surfaces as generic EntityMutationError; SDK does not pre-validate";
+      e.linkOrNote = "[Issue #1 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-silently-burns-gas-before-on-chain-rejection-fr-003)";
     } else if (e.id === "FR-004") {
       e.category = "sdk";
-      e.status = "Solved via strict typed attributes in src/lib/arkiv.ts";
+      e.severity = "Minor";
+      e.status = "Documented behaviour; solved via strict typed attributes in src/lib/arkiv.ts";
       e.linkOrNote = "[Issue #2 in arkiv/issues-to-file.md (Feature Request)](arkiv/issues-to-file.md#issue-2-feature-request-developer-warning-or-type-inference-when-query-predicate-type-differs-from-stored-attribute-fr-004)";
     } else if (e.id === "FR-010") {
       e.category = "sdk";
+      e.severity = "Minor";
       e.status = "Solved via type cast in useChainHead.ts";
       e.linkOrNote = "Type gap on PublicArkivClient";
     } else if (e.id === "FR-012") {
       e.category = "sdk";
-      e.status = "Solved via 8s timeout wrapper & backoff";
+      e.severity = "Medium";
+      e.status = "Reproduced once; solved via 8s timeout wrapper & backoff";
       e.linkOrNote = "Observed once; not reproduced since";
     } else if (e.id === "FR-017") {
       e.category = "sdk";
+      e.severity = "Medium";
       e.status = "Solved via 1s client ticker with 4s margin";
       e.linkOrNote = "Documented in FR-017 (silent passive expiry)";
-    } else if (e.id === "FR-005") {
-      e.category = "docs";
-      e.status = "Verified on-chain: 0-block drop without ends_at predicate";
-      e.linkOrNote = "Documented in FR-005";
     } else if (e.id === "FR-006") {
       e.category = "docs";
+      e.severity = "Cosmetic";
       e.status = "Cosmetic typo in SDK error string";
       e.linkOrNote = "Documented in FR-006";
-    } else if (e.id === "FR-016") {
-      e.category = "docs";
-      e.status = "Solved: migrated to data.arkiv.network";
-      e.linkOrNote = "Documented in FR-016";
     } else {
       e.category = "notes";
       if (e.id === "FR-002") {
+        e.severity = "Cosmetic";
         e.status = "Solved via custom BigInt replacer";
         e.linkOrNote = "Standard JavaScript BigInt behavior";
-      } else if (e.id === "FR-003") {
-        e.status = "Rejected client-side; 0 gas burned";
-        e.linkOrNote = "[Issue #1 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-silently-burns-gas-before-on-chain-rejection-fr-003)";
+      } else if (e.id === "FR-005") {
+        e.severity = "Withdrawn (Note)";
+        e.status = "Withdrawn as friction: early drop came from client ends_at > now predicate";
+        e.linkOrNote = "Clock skew / client predicate note (raw log in Notes)";
       } else if (e.id === "FR-007") {
+        e.severity = "Papercut";
         e.status = "Solved via constructor field assignment";
         e.linkOrNote = "TypeScript / Vite configuration";
       } else if (e.id === "FR-008") {
+        e.severity = "Papercut";
         e.status = "Solved via viem client for transfers";
         e.linkOrNote = "Standard EVM tooling";
       } else if (e.id === "FR-009") {
+        e.severity = "Architectural Note";
         e.status = "Solved by Schema v2 storing creator in booking";
         e.linkOrNote = "Schema v1 design limitation";
       } else if (e.id === "FR-011") {
+        e.severity = "Withdrawn (Note)";
         e.status = "Withdrawn: our own call-shape error ({ key } vs key)";
         e.linkOrNote = "Withdrawn; positional getEntity(key) succeeds";
       } else if (e.id === "FR-013") {
+        e.severity = "Economic Note";
         e.status = "30-day expiry adopted for Schema v2";
         e.linkOrNote = "Storage rent pricing observation";
       } else if (e.id === "FR-014") {
+        e.severity = "Architectural Note";
         e.status = "Solved via deterministic tie-breaker in getWinningBooking";
         e.linkOrNote = "Block execution ordering observation";
       } else if (e.id === "FR-015") {
+        e.severity = "Resolved Note";
         e.status = "Solved by Schema v2 decoupling";
         e.linkOrNote = "Architecture design note";
+      } else if (e.id === "FR-016") {
+        e.severity = "Withdrawn (Note)";
+        e.status = "Withdrawn as friction: our guessed wrong hostname (tiramisu.explorer resolves)";
+        e.linkOrNote = "Guessed wrong hostname";
       }
     }
   }
@@ -151,7 +167,7 @@ export function generateMarkdownTables(entries: FrictionEntry[]): string {
 
   let out = "";
 
-  out += `### 1. Arkiv & SDK Friction (${sdkEntries.length} genuine findings)\n\n`;
+  out += `### 1. Arkiv & SDK Friction (${sdkEntries.length} small SDK and DX findings: ${sdkEntries.map((e) => e.id).join(", ")}, of which FR-012 reproduced once and FR-004 is documented behaviour)\n\n`;
   out += `| ID | Title | Severity | Status | Upstream Issue Link / Note |\n`;
   out += `|---|---|---|---|---|\n`;
   for (const e of sdkEntries) {

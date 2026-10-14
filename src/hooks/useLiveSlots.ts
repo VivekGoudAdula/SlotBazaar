@@ -401,20 +401,38 @@ export function useLiveSlots(): UseLiveSlotsResult {
     setIsSocketHealthyState(healthy);
   }, []);
 
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trailingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trailingScheduledRef = useRef(false);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backoffDelayRef = useRef(1000);
   const unwatchRef = useRef<(() => void) | null>(null);
 
-  // Debounced refetch (throttled to at most once per 12-15 seconds per rubric guidelines)
+  // WebSocket-triggered refetches: LEADING EDGE + single trailing fetch
+  // Fires immediately if cooldown window has passed; coalesces subsequent events into at most 1 trailing fetch.
   const triggerDebouncedFetch = useCallback(() => {
     if (typeof document !== "undefined" && document.hidden) return;
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    const timeSinceLast = Date.now() - lastFetchTimeRef.current;
-    const delay = timeSinceLast < 12000 ? 12000 - timeSinceLast : 2000;
-    debounceTimerRef.current = setTimeout(() => {
+    const now = Date.now();
+    const timeSinceLast = now - lastFetchTimeRef.current;
+    const COOLDOWN_MS = 10_000;
+
+    if (timeSinceLast >= COOLDOWN_MS && !isFetchingRef.current) {
+      // Leading edge: fire immediately
+      if (trailingTimerRef.current) {
+        clearTimeout(trailingTimerRef.current);
+        trailingTimerRef.current = null;
+      }
+      trailingScheduledRef.current = false;
       doFetch();
-    }, delay);
+    } else if (!trailingScheduledRef.current) {
+      // Cooldown window: schedule exactly one trailing fetch
+      trailingScheduledRef.current = true;
+      const delay = Math.max(COOLDOWN_MS - timeSinceLast, 1000);
+      trailingTimerRef.current = setTimeout(() => {
+        trailingScheduledRef.current = false;
+        trailingTimerRef.current = null;
+        doFetch();
+      }, delay);
+    }
   }, [doFetch]);
 
   // WebSocket subscription with exponential backoff reconnect
@@ -488,7 +506,7 @@ export function useLiveSlots(): UseLiveSlotsResult {
     return () => {
       active = false;
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (trailingTimerRef.current) clearTimeout(trailingTimerRef.current);
       if (unwatchRef.current) {
         try { unwatchRef.current(); } catch {}
         unwatchRef.current = null;

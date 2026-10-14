@@ -1257,10 +1257,10 @@ export function getEntityExplorerUrl(entityKey: string): string {
 }
 
 /**
- * Canonical Arkiv Data Explorer URL for transactions.
+ * Canonical Arkiv Block Explorer URL for transactions.
  */
 export function getTxExplorerUrl(txHash: string): string {
-  return `https://data.arkiv.network/?q=${txHash}&chain=tiramisu`;
+  return `https://tiramisu.explorer.arkiv.network/tx/${txHash}`;
 }
 
 /**

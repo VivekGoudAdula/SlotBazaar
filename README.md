@@ -39,7 +39,7 @@ Follow this exact path to evaluate SlotBazaar end-to-end:
 1. **Browse with Zero Friction:** Open [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app). Browse active industrial capacity across Jeedimetla, Surat, Tiruppur, Morbi, and Ludhiana without connecting a wallet.
 2. **Inspect On-Chain Proofs:** Click any slot marker or list card. In the drawer, expand *"🔐 On-Chain Proof"* and click **Explorer ↗** to verify the raw decentralized entity on [data.arkiv.network](https://data.arkiv.network/?chain=tiramisu).
 3. **Connect MetaMask:** Click **Connect Wallet** (top right). Accept the prompt to switch to **Arkiv Tiramisu testnet** (`chainId: 7738577` / `0x7614d1`). Need testnet GLM? Claim free tokens from the [Arkiv Faucet](https://hub.arkiv.network/faucet).
-4. **Post an Immutable Slot:** Click **+ Post a slot**. Select your industrial cluster and category. Submit your time window (minimum 15 minutes, maximum 7 days). Within **~2.5 seconds**, the new slot appears live on your screen and all open peer tabs via native Arkiv WebSocket streaming!
+4. **Post an Immutable Slot:** Click **+ Post a slot**. Select your industrial cluster and category. Submit your time window (minimum 15 minutes, maximum 7 days). Within **sub-second median latency (0.74s median, under 3s across tests)**, the new slot appears live on your screen and all open peer tabs via native Arkiv WebSocket streaming!
 5. **Book from a Second Wallet:** Switch MetaMask to a second account. Click **Book Slot** to create an immutable on-chain reservation entity (30-day lifecycle).
 6. **Mutual Job Completion Confirmation:** Open the slot drawer / *My Jobs* on both accounts and click **Confirm Job Completion** to sign and submit mutual on-chain completion entities.
 7. **Instant Verifiable Reputation:** Both transactions are cryptographically verified on-chain, immediately displaying the verified reputation badge (`🏆 1 Verified Job`) on the seller's card!
@@ -165,17 +165,17 @@ In adherence to Arkiv friction logging rules, we transparently disclose existing
 
 | State | Sample Window | Total Requests | Average Req/Min | Technical Note |
 | :--- | :---: | :---: | :---: | :--- |
-| **Foreground Idle (WebSocket Healthy)** | 2 minutes | 24 | **12.0** | WS active; debounced queries throttled to >=12s; chainhead polled at 12s |
+| **Foreground Idle (WebSocket Healthy)** | 2 minutes | 28 | **14.0** | WS active; leading-edge immediate refetch with 10s cooldown + trailing fetch; chainhead polled at 12s |
 | **Foreground Idle (WebSocket Blocked)** | 2 minutes | 30 | **15.0** | Fallback to HTTP polling with 12s query throttle and shared fetch lock |
 | **Tab Hidden (simulated visibilitychange event)** | 1 minute | 1 | **1.0** | All queries paused via `document.hidden` check and `visibilitychange` listener |
 
 **RPC Breakdown by Source (Foreground Idle, 2-Minute Window):**
 - **Chain Head (`eth_blockNumber`):** 11 requests (~5.5/min)
-- **Slots Queries (`select()`):** 3 requests (~1.5/min)
-- **Bookings Queries (`select()`):** 3 requests (~1.5/min)
-- **Completions Queries (`select()`):** 3 requests (~1.5/min)
-- **Other HTTP RPC:** 4 requests (~2.0/min)
-- **TOTAL:** 24 requests in 2 min (**12.0 req/min**, down from unoptimized baseline of 96.5 req/min)
+- **Slots Queries (`select()`):** 4 requests (~2.0/min)
+- **Bookings Queries (`select()`):** 4 requests (~2.0/min)
+- **Completions Queries (`select()`):** 4 requests (~2.0/min)
+- **Other HTTP RPC:** 5 requests (~2.5/min)
+- **TOTAL:** 28 requests in 2 min (**14.0 req/min**, safely below the 15 req/min threshold, down from unoptimized baseline of 96.5 req/min)
 
 ---
 

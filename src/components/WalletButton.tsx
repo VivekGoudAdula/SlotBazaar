@@ -22,7 +22,7 @@ const NETWORK_DETAILS = {
   rpc: "https://rpc.tiramisu.db-chain.testnet.arkiv.network",
   chainId: String(TIRAMISU_CHAIN_ID_DEC),
   symbol: "GLM",
-  explorer: "https://data.arkiv.network/?chain=tiramisu",
+  explorer: "https://tiramisu.explorer.arkiv.network",
   faucet: "https://hub.arkiv.network/faucet",
 };
 

@@ -8,37 +8,37 @@
 
 ## Friction Summary Table (Judges Quick Reference)
 
-### 1. Arkiv & SDK Friction (5 genuine findings)
+### 1. Arkiv & SDK Friction (6 small SDK and DX findings: FR-001, FR-003, FR-004, FR-010, FR-012, FR-017, of which FR-012 reproduced once and FR-004 is documented behaviour)
 
 | ID | Title | Severity | Status | Upstream Issue Link / Note |
 |---|---|---|---|---|
 | **FR-001** | `InvalidPredicateError` not exported from main package | Minor | Workaround applied (import from `/query`) | [Issue #3 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-3-invalidpredicateerror-is-not-exported-from-the-main-arkiv-networksdk-entry-point-fr-001) |
-| **FR-004** | Wrong number type in range query silently returns 0 results | Minor | Solved via strict typed attributes in src/lib/arkiv.ts | [Issue #2 in arkiv/issues-to-file.md (Feature Request)](arkiv/issues-to-file.md#issue-2-feature-request-developer-warning-or-type-inference-when-query-predicate-type-differs-from-stored-attribute-fr-004) |
-| **FR-010** | `getBlockNumber()` not directly available on `PublicArkivClient` | Papercut | Solved via type cast in useChainHead.ts | Type gap on PublicArkivClient |
-| **FR-012** | Tiramisu RPC intermittently stalls on consecutive queries (reproduced once) | Low | Solved via 8s timeout wrapper & backoff | Observed once; not reproduced since |
+| **FR-003** | Uppercase attribute name rejected client-side with EntityMutationError (0 gas spent) | Minor | No gas spent; node-side simulation surfaces as generic EntityMutationError; SDK does not pre-validate | [Issue #1 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-silently-burns-gas-before-on-chain-rejection-fr-003) |
+| **FR-004** | Wrong number type in range query silently returns 0 results | Minor | Documented behaviour; solved via strict typed attributes in src/lib/arkiv.ts | [Issue #2 in arkiv/issues-to-file.md (Feature Request)](arkiv/issues-to-file.md#issue-2-feature-request-developer-warning-or-type-inference-when-query-predicate-type-differs-from-stored-attribute-fr-004) |
+| **FR-010** | `getBlockNumber()` not directly available on `PublicArkivClient` | Minor | Solved via type cast in useChainHead.ts | Type gap on PublicArkivClient |
+| **FR-012** | Tiramisu RPC intermittently stalls on consecutive queries (reproduced once) | Medium | Reproduced once; solved via 8s timeout wrapper & backoff | Observed once; not reproduced since |
 | **FR-017** | `watchEntityEvents` silently falls back to HTTP polling if fromBlock is supplied; passive expiration emits no log events | Medium | Solved via 1s client ticker with 4s margin | Documented in FR-017 (silent passive expiry) |
 
-### 2. Documentation Gaps (3 documentation items)
+### 2. Documentation Gaps (1 documentation items)
 
 | ID | Title | Severity | Status | Upstream Note |
 |---|---|---|---|---|
-| **FR-005** | Query index expiration semantics at block boundary (retested without ends_at predicate) | Minor | Verified on-chain: 0-block drop without ends_at predicate | Documented in FR-005 |
 | **FR-006** | Typo in `InvalidPredicateError` message | Cosmetic | Cosmetic typo in SDK error string | Documented in FR-006 |
-| **FR-016** | explorer.tiramisu.arkiv.network returns NXDOMAIN; official explorer is data.arkiv.network/?q=${key}&chain=tiramisu | Medium | Solved: migrated to data.arkiv.network | Documented in FR-016 |
 
-### 3. Notes, Ecosystem & Withdrawn Items (9 items)
+### 3. Notes, Ecosystem & Withdrawn Items (10 items)
 
 | ID | Title | Severity | Status | Upstream Note |
 |---|---|---|---|---|
-| **FR-002** | `BigInt` attribute values (`u64`) throw in `JSON.stringify` | Papercut | Solved via custom BigInt replacer | Standard JavaScript BigInt behavior |
-| **FR-003** | Uppercase attribute name rejected client-side with EntityMutationError (0 gas spent) | Minor | Rejected client-side; 0 gas burned | [Issue #1 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-silently-burns-gas-before-on-chain-rejection-fr-003) |
+| **FR-002** | `BigInt` attribute values (`u64`) throw in `JSON.stringify` | Cosmetic | Solved via custom BigInt replacer | Standard JavaScript BigInt behavior |
+| **FR-005** | Query index expiration semantics at block boundary (retested without ends_at predicate) | Withdrawn (Note) | Withdrawn as friction: early drop came from client ends_at > now predicate | Clock skew / client predicate note (raw log in Notes) |
 | **FR-007** | `erasableSyntaxOnly` compiler flag rejects class constructor parameter properties | Papercut | Solved via constructor field assignment | TypeScript / Vite configuration |
-| **FR-008** | Native token transfers require standard viem client rather than Arkiv wallet client | Minor | Solved via viem client for transfers | Standard EVM tooling |
-| **FR-009** | `getReputation` cannot recover slot creator after slot expires | Medium | Solved by Schema v2 storing creator in booking | Schema v1 design limitation |
-| **FR-011** | `getEntity({ key })` throws `Invalid key value` (withdrawn: positional call `getEntity(key)` succeeds) | Withdrawn | Withdrawn: our own call-shape error ({ key } vs key) | Withdrawn; positional getEntity(key) succeeds |
-| **FR-013** | Storage rent between 14-day and 30-day entity expiry has zero marginal cost impact | Info / Note | 30-day expiry adopted for Schema v2 | Storage rent pricing observation |
-| **FR-014** | Same-block racing entity creations lack execution index in query attributes | Minor | Solved via deterministic tie-breaker in getWinningBooking | Block execution ordering observation |
-| **FR-015** | Schema v1 post-expiry reputation failure permanently solved by Schema v2 decoupling | Info / Note | Solved by Schema v2 decoupling | Architecture design note |
+| **FR-008** | Native token transfers require standard viem client rather than Arkiv wallet client | Papercut | Solved via viem client for transfers | Standard EVM tooling |
+| **FR-009** | `getReputation` cannot recover slot creator after slot expires | Architectural Note | Solved by Schema v2 storing creator in booking | Schema v1 design limitation |
+| **FR-011** | `getEntity({ key })` throws `Invalid key value` (withdrawn: positional call `getEntity(key)` succeeds) | Withdrawn (Note) | Withdrawn: our own call-shape error ({ key } vs key) | Withdrawn; positional getEntity(key) succeeds |
+| **FR-013** | Storage rent between 14-day and 30-day entity expiry has zero marginal cost impact | Economic Note | 30-day expiry adopted for Schema v2 | Storage rent pricing observation |
+| **FR-014** | Same-block racing entity creations lack execution index in query attributes | Architectural Note | Solved via deterministic tie-breaker in getWinningBooking | Block execution ordering observation |
+| **FR-015** | Schema v1 post-expiry reputation failure permanently solved by Schema v2 decoupling | Resolved Note | Solved by Schema v2 decoupling | Architecture design note |
+| **FR-016** | explorer.tiramisu.arkiv.network returns NXDOMAIN; official explorer is data.arkiv.network/?q=${key}&chain=tiramisu | Withdrawn (Note) | Withdrawn as friction: our guessed wrong hostname (tiramisu.explorer resolves) | Guessed wrong hostname |
 
 ### Why We Trust These Entries (Empirical Reproduction Register)
 
@@ -184,7 +184,14 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
   > - **Gas Used:** `0`
   > - **Wallet Balance After:** `29919742669947485340 wei` (29.91974266994748534 GLM)
   > - **Balance Delta:** `0 wei / 0 GLM`
-  > - **Correction:** The original Phase 0 hypothesis that uppercase attributes burn gas on-chain was incorrect. The SDK serializes and validates client-side, throwing before broadcast. Zero gas was spent. **Severity downgraded to Minor.**
+  > - **Correction:** The original Phase 0 hypothesis that uppercase attributes burn gas on-chain was incorrect. Zero gas was spent. **Severity downgraded to Minor.**
+  >
+  > **Update 2026-10-14 IST (Phase 10 Error Origin & Stack Inspection):**
+  > Stack and error-cause inspection via `scripts/retest-fr003.ts`:
+  > - **Origin:** Raised during `eth_estimateGas` node-side simulation (`ContractFunctionRevertedError: Error: Ident32InvalidByte(uint256 position, bytes1 value) (0, 0x50)` on `execute(...)`). It never reached `eth_sendRawTransaction`.
+  > - **Gas spent:** Exactly `0 wei / 0 GLM`.
+  > - **SDK behavior:** The SDK does not pre-validate attribute names locally before simulating. The node-side simulation error surfaces as a generic `EntityMutationError` rather than the exported `InvalidAttributeNameError`.
+  > - **Classification:** Moved to the Arkiv and SDK friction table as **Minor**.
 
 ---
 
@@ -247,15 +254,37 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
   >
   > | Block | Relative to Expiry | In Query Index (`select()`) | `getEntity(entityKey)` | Note |
   > |---|---|:---:|:---:|---|
-  > | #559425 | -4 blocks (active) | YES | YES | Live and visible in both |
-  > | #559426 | -3 blocks (active) | YES | YES | Live and visible in both |
-  > | #559427 | -2 blocks (active) | YES | YES | Live and visible in both |
-  > | #559428 | -1 block (active)  | YES | YES | Live and visible in both |
-  > | #559429 | Expiry block       | NO  | NO  | Dropped from both simultaneously |
-  > | #559430 | +1 block (expired) | NO  | NO (`NoEntityFoundError`) | Pruned from chain state |
-  > | #559431 | +2 blocks (expired)| NO  | NO (`NoEntityFoundError`) | Pruned from chain state |
+  > | #559409 | -20 blocks (active) | YES | ok | Live and visible in both |
+  > | #559410 | -19 blocks (active) | YES | ok | Live and visible in both |
+  > | #559411 | -18 blocks (active) | YES | ok | Live and visible in both |
+  > | #559412 | -17 blocks (active) | YES | ok | Live and visible in both |
+  > | #559413 | -16 blocks (active) | YES | ok | Live and visible in both |
+  > | #559414 | -15 blocks (active) | YES | ok | Live and visible in both |
+  > | #559415 | -14 blocks (active) | YES | ok | Live and visible in both |
+  > | #559416 | -13 blocks (active) | YES | ok | Live and visible in both |
+  > | #559417 | -12 blocks (active) | YES | ok | Live and visible in both |
+  > | #559418 | -11 blocks (active) | YES | ok | Live and visible in both |
+  > | #559419 | -10 blocks (active) | YES | ok | Live and visible in both |
+  > | #559420 | -9 blocks (active)  | YES | ok | Live and visible in both |
+  > | #559421 | -8 blocks (active)  | YES | ok | Live and visible in both |
+  > | #559422 | -7 blocks (active)  | YES | ok | Live and visible in both |
+  > | #559423 | -6 blocks (active)  | YES | ok | Live and visible in both |
+  > | #559424 | -5 blocks (active)  | YES | ok | Live and visible in both |
+  > | #559425 | -4 blocks (active)  | YES | ok | Live and visible in both |
+  > | #559426 | -3 blocks (active)  | YES | ok | Live and visible in both |
+  > | #559427 | -2 blocks (active)  | YES | ok | Live and visible in both |
+  > | #559428 | -1 block (active)   | YES | ok | Live and visible in both |
+  > | #559429 | Expiry block        | NO  | not-found | Dropped from both simultaneously at boundary |
+  > | #559430 | +1 block (expired)  | NO  | not-found (`NoEntityFoundError`) | Pruned from chain state |
+  > | #559431 | +2 blocks (expired) | NO  | not-found (`NoEntityFoundError`) | Pruned from chain state |
+  > | #559432 | +3 blocks (expired) | NO  | not-found (`NoEntityFoundError`) | Pruned from chain state |
+  > | #559433 | +4 blocks (expired) | NO  | not-found (`NoEntityFoundError`) | Pruned from chain state |
+  > | #559434 | +5 blocks (expired) | NO  | not-found (`NoEntityFoundError`) | Pruned from chain state |
   >
   > **Definitive Finding:** When the query does **NOT** include an application-level `ends_at` range predicate, the Arkiv query index and `getEntity` drop the entity at the exact same consensus expiry block (#559429; **0 blocks early**). The previous 1–2 block early-drop observation occurred exclusively because `gt("ends_at", u64(nowSec))` evaluated client wall-clock Unix seconds against consensus block timestamps.
+  >
+  > **Update 2026-10-14 IST (Phase 10 Friction Withdrawal to Notes):**
+  > FR-005 is withdrawn as friction (moved to Architectural Notes). The early drop came entirely from our own client predicate `ends_at > nowSec`. Arkiv's consensus expiration has zero block asymmetry. The 4-second client margin in `useLiveSlots.ts` exists strictly for browser/chain clock skew, not an Arkiv asymmetry.
 
 ---
 
@@ -587,6 +616,9 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
   > ```
   > Note: Tested from a single machine and network environment.
   > Verified via HTTP GET that both `https://data.arkiv.network/?q=<txHash>&chain=tiramisu` and `https://data.arkiv.network/?q=<entityKey>&chain=tiramisu` return HTTP `200` and display on-chain transaction/entity details properly.
+  >
+  > **Update 2026-10-14 IST (Phase 10 Friction Withdrawal to Notes):**
+  > FR-016 is withdrawn as friction (moved to Notes). `nslookup tiramisu.explorer.arkiv.network` successfully resolves to Cloudflare CDN IPs; only `explorer.tiramisu.arkiv.network` (a hostname we guessed) failed. In the application, transaction hashes link to `https://tiramisu.explorer.arkiv.network/tx/<hash>` and entity keys link to `https://data.arkiv.network/?q=<key>&chain=tiramisu`. Both patterns were verified in a real headless Chrome session (HTTP 200) with screenshots saved to `docs/screens/tiramisu-explorer-tx.png` and `docs/screens/data-arkiv-entity.png`.
 
 ---
 
