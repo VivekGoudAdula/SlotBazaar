@@ -216,6 +216,33 @@ async function runTests() {
     `${uniqueClusters.size} clusters`
   );
 
+  // Consecutive seeding spread test: Batch 2 must prioritize untouched clusters
+  const batch1Clusters = Array.from(uniqueClusters).slice(0, 5);
+  const batch2Slots = generateSeedSlots({
+    count: 5,
+    nowSec,
+    includeLong: true,
+    existingClusters: batch1Clusters,
+  });
+  const batch2Overlap = batch2Slots.filter((s) => batch1Clusters.includes(s.cluster));
+  assertTest(
+    "Seed Generator: Consecutive seed prioritizes unseeded clusters across India (zero overlap when clusters available)",
+    batch2Overlap.length === 0,
+    "0 overlapping clusters",
+    `${batch2Overlap.length} overlapping clusters`
+  );
+
+  // Indian geographic boundary check
+  const allInIndia = generatedSlots.every(
+    (s) => s.lat >= 8.0 && s.lat <= 33.0 && s.lon >= 68.0 && s.lon <= 94.0
+  );
+  assertTest(
+    "Seed Generator: All dispersed coordinates remain strictly within India boundaries",
+    allInIndia,
+    "true",
+    String(allInIndia)
+  );
+
   // Category spread
   const categories = new Set(generatedSlots.map((s) => s.category));
   assertTest(

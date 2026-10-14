@@ -117,6 +117,7 @@ export interface SeedGeneratorOptions {
   nowSec?: number;
   includeLong?: boolean;
   maxHours?: number;
+  existingClusters?: string[];
 }
 
 /**
@@ -150,6 +151,7 @@ export function formatDurationLabel(h: number): string {
  * Generates synthetic slots adhering to SlotBazaar seed guidelines:
  * - Deterministically spreads across industrial clusters.
  * - Balances machine, transport, and freelance categories.
+ * - Prioritizes unseeded Indian cities so consecutive seedings spread across all of India.
  * - Always injects slots under 15m (for fast testing) and some over 1 day when count >= 3.
  * - Refuses any computed slots that would expire in the past.
  */
@@ -201,8 +203,25 @@ export function generateSeedSlots(options: SeedGeneratorOptions): GeneratedSlot[
     }
   }
 
-  // Randomize cluster order across all available Indian manufacturing hubs
-  const availableClusters = [...CLUSTERS].sort(() => Math.random() - 0.5);
+  // Compute cluster occupancy from already-seeded slots to prevent repetitive clumping
+  const occupancyMap = new Map<string, number>();
+  for (const c of CLUSTERS) {
+    occupancyMap.set(c.name.toLowerCase(), 0);
+  }
+  if (options.existingClusters && options.existingClusters.length > 0) {
+    for (const ec of options.existingClusters) {
+      const k = ec.toLowerCase();
+      occupancyMap.set(k, (occupancyMap.get(k) ?? 0) + 1);
+    }
+  }
+
+  // Prioritize untouched/unseeded Indian hubs first, then least populated, with random tie-breaker
+  const availableClusters = [...CLUSTERS].sort((a, b) => {
+    const occA = occupancyMap.get(a.name.toLowerCase()) ?? 0;
+    const occB = occupancyMap.get(b.name.toLowerCase()) ?? 0;
+    if (occA !== occB) return occA - occB;
+    return Math.random() - 0.5;
+  });
 
   const results: GeneratedSlot[] = [];
 

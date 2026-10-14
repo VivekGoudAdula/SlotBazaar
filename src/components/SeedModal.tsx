@@ -89,10 +89,17 @@ export function SeedModal({
   // Preview generated slots for this modal session
   const [previewSlots, setPreviewSlots] = useState<GeneratedSlot[]>([]);
 
-  // Regenerate preview slots whenever modal opens or count adjusts
+  // Regenerate preview slots whenever modal opens or count adjusts, prioritizing untouched Indian hubs
   useEffect(() => {
     if (isOpen) {
-      setPreviewSlots(generateSeedSlots({ count: plannedBatchCount, includeLong: true }));
+      const existingClusters = liveSlots.map((s) => s.cluster);
+      setPreviewSlots(
+        generateSeedSlots({
+          count: plannedBatchCount,
+          includeLong: true,
+          existingClusters,
+        })
+      );
       setErrorCode(null);
       setErrorMessage(null);
       setErrorTxHash(null);
@@ -100,7 +107,7 @@ export function SeedModal({
       setCreatedKeys([]);
       setElapsedTimeMs(null);
     }
-  }, [isOpen, plannedBatchCount]);
+  }, [isOpen, plannedBatchCount, liveSlots]);
 
   // ─── Balance Fetcher ────────────────────────────────────────────────────────
   const fetchBalance = useCallback(async () => {
