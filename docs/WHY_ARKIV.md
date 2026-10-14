@@ -24,7 +24,7 @@ When building a decentralized bazaar for perishable SME capacity (machine hours,
     gt("ends_at", u64(nowSec))
   )
   ```
-  To query IPFS, an application must maintain a centralized indexing server (e.g., ElasticSearch), re-introducing the single point of failure and censorship.
+  To query IPFS, an application must maintain a centralized indexing server (e.g., ElasticSearch), re-introducing centralized operator dependency and censorship risks.
 * **Zero Native Entity Expiration:** IPFS content persists as long as pinned. Perishable time slots (e.g., a 2-hour CNC lathe slot expiring at 2:00 PM) would pollute IPFS storage indefinitely, forcing clients to download gigabytes of dead slots.
 
 ### C. What Breaks on The Graph / Subgraphs

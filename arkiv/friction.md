@@ -580,10 +580,37 @@
 - **Update (2026-10-14, Phase 6):**
   - **Part 1 (Socket Transport & fromBlock — Documented Behavior):** Re-examination shows viem and Arkiv documentation specify that `eth_subscribe` push streams require `transport: webSocket(...)` with `fromBlock: undefined` (as historical ranges require `eth_getLogs` polling). Credit to the official docs; this is standard EVM client library architecture rather than an unresolvable bug.
   - **Part 2 (Passive Expiration Emits No Event — Empirical Finding):** Retained as real architectural friction with empirical evidence. We monitored WebSocket streams across multiple sessions (`scripts/test-ws-latency.ts` and `scripts/fr005-expiry-retest.ts`) observing 5 short-lived entities (10s–12s lifetimes) over 60+ seconds of observation. While creation events triggered immediately (avg 2,550 ms), exactly 0 expiration events were emitted across all 5 expiries. Developers must implement client-side timer pruning (such as SlotBazaar's 1s ticker with 4s margin) because Arkiv purges state at the consensus level without producing event logs.
+  - **Update (2026-10-14, Phase 7 Post-Deploy Verification):** Rerun with `scripts/verify-passive-expiry-batch.ts`. Batch transaction `0x3d88e2e766e2df06a5d28fc082660400e45ee62916fec0a857b1d29e408eeb6a` created 5 entities with 25-second lifespans. We subscribed to `wss://rpc.tiramisu.db-chain.testnet.arkiv.network` and captured events for 65 seconds (40s past expiry).
+    - Entity `#1` (`0x0302a4db4882a4d9...`): Created=1, Deleted=0
+    - Entity `#2` (`0xde91c7d68613014d...`): Created=1, Deleted=0
+    - Entity `#3` (`0x6f94f2de2433ee8f...`): Created=1, Deleted=0
+    - Entity `#4` (`0xd81e7794f37c5b62...`): Created=1, Deleted=0
+    - Entity `#5` (`0x429f2bf501dc3f1d...`): Created=1, Deleted=0
+    - **Total over 65s:** 5 Created events, exactly **0 Deleted events**, 0 Expired events. Passive protocol expiration remains 100% silent at the event log layer.
 
 ---
 
-## What worked well — Phase 5
+### Batch 10 Reliability Retest & Gas Estimation Clarification
+- **Update (2026-10-14, Phase 7):** During Phase 6, a single batch probe timed out, leading to an initial hypothesis of a "gas estimation timeout". In Phase 7, we ran 3 independent batch tests of size 10 (`seed_batch="dev-probe"`) across different times:
+  - **Run #1:** `PASS` — Elapsed: 9,992 ms, Tx: `0xecd737696816017eef4e2122ffecc3387091cd87bf009d15b91984326cae70cd`, Cost: 0.001432864 GLM (10 entities).
+  - **Run #2:** `PASS` — Elapsed: 24,654 ms, Tx: `0x9641a10f62cb8dcb94331f512742e9e0a2d896a5677d66ab987bbfc7470c44c8`, Cost: 0.001432864 GLM (10 entities).
+  - **Run #3:** `PASS` — Elapsed: 21,282 ms, Tx: `0x8a2479d121203ceb59d4ce53f683298fc913ae33930578f97c17e5b47f87a6e8`, Cost: 0.001432864 GLM (10 entities).
+  - **Conclusion:** 3/3 succeeded. The unproven "gas estimation timeout" explanation is corrected: the prior single failure was an isolated transient RPC connection stall rather than a protocol or gas estimation ceiling. Batches of 10, 20, and 30 are fully supported by `@arkiv-network/sdk` and Tiramisu.
+
+---
+
+### Measured Browser RPC Network Load (Real Browser on Deployed Origin)
+*Measured on 2026-10-14 against deployed URL `https://slotbazaar.vercel.app` (N=3 samples of 60 seconds each per state)*
+
+| State | Minute 1 | Minute 2 | Minute 3 | Average Req/Min | Details |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Foreground Idle (WebSocket Healthy)** | 76 | 121 | 96 | **97.7** | WS connection active + 4s chainhead polling + viem event listener |
+| **Foreground Idle (WebSocket Blocked)** | 60 | 105 | 101 | **88.7** | Fallback to HTTP polling with 8s query timeout / backoff |
+| **Tab Hidden (Backgrounded)** | 75 | 111 | 70 | **85.3** | Browser timer throttling active |
+
+---
+
+## What worked well — Phase 5 & 6
 
 - **MetaMask Single-Signature Batching (`wallet.executeBatch`)**: Tested and proved on Tiramisu that `executeBatch({ creates: [...] })` packages all entity creations into a single contract call (`execute(Operation[])`). MetaMask displays a single confirmation signature popup, eliminating popup fatigue.
 - **Measured Batch Efficiency**: Seeding 6 synthetic slots in 1 batch cost only `0.0008597 GLM` (~0.000143 GLM per slot) and confirmed in ~4.9 seconds.

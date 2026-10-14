@@ -148,7 +148,7 @@ export function WhyArkivModal({ isOpen, onClose }: WhyArkivModalProps): React.Re
           3. Arkiv Features Leveraged in SlotBazaar
         </h3>
         <ul style={{ paddingLeft: "1.25rem", margin: "0 0 1rem 0" }}>
-          <li><strong>Cryptographic <code>$creator</code>:</strong> Authentic sender verification for trustless reputation derivation.</li>
+          <li><strong>Cryptographic <code>$creator</code>:</strong> Authentic sender verification for tamper-evident, creator-signed reputation derivation.</li>
           <li><strong>Typed Range Queries:</strong> Fast client-side and RPC filtering on numeric coordinates and timestamps.</li>
           <li><strong>EVM Native Batching:</strong> Single-signature broadcast of multiple slot entities via <code>executeBatch</code>.</li>
           <li><strong>Real-Time WebSockets:</strong> Instant event streaming of new slots and bookings without polling delays.</li>

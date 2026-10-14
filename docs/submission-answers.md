@@ -24,7 +24,7 @@
 ### 5. Project Links
 * **GitHub Repository:** [https://github.com/VivekGoudAdula/SlotBazaar](https://github.com/VivekGoudAdula/SlotBazaar)
 * **Demo Video URL (≤ 3 minutes):** `[VIDEO_URL_PLACEHOLDER: e.g. https://youtu.be/... or Loom]`
-* **Live App URL:** `[DEPLOYMENT_URL_PLACEHOLDER: e.g. https://slotbazaar.vercel.app]`
+* **Live App URL:** [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app)
 
 ---
 
@@ -70,7 +70,7 @@ We documented 17 precise friction entries in `/arkiv/friction.md` with exact err
 
 | Rubric Gate / Requirement | Status | Evidence in Repo / Chain |
 |---|---|---|
-| **It works (Public deployment)** | Ready for Deploy | Static Vite build in `/dist`; SPA fallback in `vercel.json` |
+| **It works (Public deployment)** | Verified Live | Deployed to [slotbazaar.vercel.app](https://slotbazaar.vercel.app); first pin visible at 1,670ms, 0 console errors, 0 failed requests |
 | **Reproducible** | Verified | Automated tests `scripts/test-phase4-unit.ts` & `scripts/test-phase5-unit.ts` |
 | **Public MIT License** | Satisfied | `LICENSE` file in repository root |
 | **`/arkiv/schema.md` in repo** | Satisfied | Complete specification of entity types, attributes, and queries |

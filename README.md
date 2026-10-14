@@ -4,7 +4,8 @@
 [![Network: Arkiv Tiramisu](https://img.shields.io/badge/Network-Arkiv%20Tiramisu%20(60138)-blue)](https://data.arkiv.network/?chain=tiramisu)
 [![Live App](https://img.shields.io/badge/Live%20App-Deploy%20on%20Vercel-success)](https://slotbazaar.vercel.app)
 
-> **Live Application URL:** [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app) *(Deployment target)*  
+> **Live Deployed Application URL:** [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app) *(Verified live on Vercel)*  
+> **Source Repository:** [https://github.com/VivekGoudAdula/SlotBazaar](https://github.com/VivekGoudAdula/SlotBazaar)  
 > Built for the **Arkiv Global Tour Stop Hackathon (9–18 October 2026)**.  
 > Tracks: **Best Indian Use Case** & **Censorship Resistance**.
 
@@ -12,7 +13,7 @@
 
 ## 1. One-Paragraph Pitch
 
-**SlotBazaar** is a decentralized, real-time discovery and reservation bazaar for perishable industrial capacity (machine tooling hours, intra-city freight trips, and freelance engineering sprints) across India’s manufacturing corridors. Powered entirely by **Arkiv Tiramisu**, SlotBazaar eliminates the 20–30% commission trap of centralized Web2 platforms. Time slots expire autonomously on-chain without background cron jobs, booking races are decided transparently by the earliest confirmed block, and two-sided cryptographic signatures generate verifiable, portable MSME reputation that no platform operator can delete or manipulate.
+**SlotBazaar** is a decentralized, real-time discovery and reservation bazaar for perishable industrial capacity (machine tooling hours, intra-city freight trips, and freelance engineering sprints) across India’s manufacturing corridors. Powered entirely by **Arkiv Tiramisu**, SlotBazaar eliminates the 20–30% commission trap of centralized Web2 platforms. Time slots expire autonomously on-chain without background cron jobs, booking races are decided transparently by the earliest confirmed block, and two-sided cryptographic signatures generate verifiable, portable MSME reputation that cannot be unilaterally altered after consensus.
 
 ---
 
@@ -157,9 +158,19 @@ In adherence to Arkiv friction logging rules, we transparently disclose existing
 3. **Public Unencrypted Data:** All entity payloads on Tiramisu are publicly readable. While appropriate for open B2B machinery and logistics discovery, confidential commercial terms require client-side zero-knowledge proofs or asymmetric encryption.
 4. **Free Sybil Addresses on Testnet:** Creating new testnet wallets is virtually free. Two-sided reputation proves mutual agreement between two distinct cryptographic accounts; enterprise mainnet deployment would integrate economic staking or proof-of-humanity credentials.
 
+### 8.1 Measured Browser RPC Network Load
+*Measured on 2026-10-14 in headless Chrome against deployed URL `https://slotbazaar.vercel.app` (N=3 samples of 60 seconds each per state)*
+
+| State | Minute 1 | Minute 2 | Minute 3 | Average Req/Min | Technical Note |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Foreground Idle (WebSocket Healthy)** | 76 | 121 | 96 | **97.7** | WS connection active + 4s chainhead polling + viem event listener |
+| **Foreground Idle (WebSocket Blocked)** | 60 | 105 | 101 | **88.7** | Fallback to HTTP polling with 8s query timeout / backoff |
+| **Tab Hidden (Backgrounded)** | 75 | 111 | 70 | **85.3** | Browser timer throttling active |
+
 ---
 
-## 9. License
+## 9. License & Repository
 
 This project is open-source under the [MIT License](LICENSE).  
+**Repository:** [https://github.com/VivekGoudAdula/SlotBazaar](https://github.com/VivekGoudAdula/SlotBazaar)  
 © 2026 Vivek Goud Adula and SlotBazaar Contributors.

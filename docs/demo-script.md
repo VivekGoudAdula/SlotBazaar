@@ -72,7 +72,7 @@ Before hitting record, ensure the following setup is configured:
   * Click **Hide Proofs ▲** to reveal the linked cryptographic signatures.
 * **Narration:**
   * *"Once the physical work is finished, both parties sign an EIP-712 job completion statement. Arkiv records both cryptographic receipts.*
-  * *Because both signatures match the on-chain slot creator and winning buyer, SlotBazaar's pure reputation engine instantly increments Ravi’s verified jobs score. It's tamper-proof, portable reputation owned by the SME, not locked inside a proprietary database."*
+  * *Because both signatures match the on-chain slot creator and winning buyer, SlotBazaar's pure reputation engine instantly increments Ravi’s verified jobs score. It's tamper-evident, creator-signed portable reputation owned by the SME, not locked inside a proprietary database."*
 
 ---
 
