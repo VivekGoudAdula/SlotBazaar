@@ -199,6 +199,29 @@ body {
   background: #E5DFC8;
 }
 
+@media (max-width: 640px) {
+  .header {
+    padding: 0 8px;
+    gap: 8px;
+    overflow: hidden;
+  }
+  .header__tagline {
+    display: none;
+  }
+  .header__chain-badge,
+  .header__judges-btn,
+  .header__seed-btn {
+    display: none !important;
+  }
+  .header__logo > span {
+    display: none;
+  }
+  .header__post-btn {
+    padding: 0 8px;
+    font-size: 0.72rem;
+  }
+}
+
 .header__seed-btn {
   display: inline-flex;
   align-items: center;

@@ -81,8 +81,15 @@ export function Header({
     <header className="header" role="banner" id="app-header">
       {/* Left: Brand */}
       <div className="header__brand">
-        <a className="header__logo" href="/" aria-label="SlotBazaar home">
-          Slot<span>Bazaar</span>
+        <a className="header__logo" href="/" aria-label="SlotBazaar home" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+          <img
+            src="/logo.png"
+            alt="SlotBazaar Logo"
+            width={32}
+            height={32}
+            style={{ height: "32px", width: "auto", objectFit: "contain", display: "inline-block" }}
+          />
+          <span>Slot<span>Bazaar</span></span>
         </a>
         <span className="header__tagline">
           Live India map for expiring time slots

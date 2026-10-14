@@ -41,10 +41,10 @@ Every UI label, button text, and modal heading used in this script has been audi
 
 ## 3. Second-by-Second Video Timeline (Total: 2:40 / 160s / 385 words)
 
-### [0:00 – 0:25] Segment 1: Problem & Why India (25 seconds, 61 words)
+### [0:00 – 0:25] Segment 1: Problem & Why India (25 seconds, 62 words)
 * **Visual:** Full-screen live SlotBazaar map centered on India, showing active industrial cluster pins in Jeedimetla, Surat, Tiruppur, Morbi, and Ludhiana.
 * **Narration:**
-  > *"Across industrial manufacturing clusters in India, machine shops face uncoordinated idle gaps between batch orders. High-end equipment like laser cutters and CNC mills sit idle, while neighboring workshops scramble for capacity. Centralized portals charge heavy platform fees and informal messaging groups lack structure and trust. SlotBazaar provides an open, real-time coordination map for expiring industrial capacity across India."*
+  > *"Across industrial manufacturing clusters in India, machine shops face uncoordinated idle gaps between batch orders. 76% of our 46 survey respondents say their machine or time sits idle almost every day, and 63% said what would make them trust a stranger is past jobs confirmed by both sides, which is exactly the reputation SlotBazaar records on-chain without broker fees or platform commissions."*
 
 ---
 

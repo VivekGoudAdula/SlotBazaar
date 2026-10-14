@@ -13,7 +13,7 @@ When building a decentralized bazaar for perishable SME capacity (machine hours,
 ### A. What Breaks on PostgreSQL / Centralized Databases
 * **Operator Monopoly & Feed Manipulation:** In a centralized database, the platform operator controls what users see. The operator can shadow-ban competing MSMEs, artificially demote listings, or front-run attractive time-slot reservations.
 * **Revision of Historical Truth:** Centralized database administrators can alter past job records or fabricate artificial 5-star seller ratings. On SlotBazaar, job completions are sealed by two cryptographic signatures (seller and buyer): SlotBazaar's front end cannot forge another wallet's signed entity; Tiramisu currently has a single sequencer, so Arkiv node operators remain a trust assumption.
-* **Platform Intermediary Fees:** Traditional Web2 aggregators capture network effects and extract steep broker commissions. A decentralized data layer eliminates platform rent extraction.
+* **Platform Intermediary Fees:** Traditional Web2 aggregators extract middleman fees (only 8.7% of surveyed workshop respondents use online marketplaces, while 15.2% pay agents or middlemen). A decentralized data layer eliminates platform rent extraction.
 
 ### B. What Breaks on IPFS & Arweave
 * **No Dynamic Attribute Querying:** IPFS and Arweave store static blobs indexed by Content Identifier (CID). You cannot execute structured range queries such as:

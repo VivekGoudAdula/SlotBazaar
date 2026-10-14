@@ -187,7 +187,7 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
   > - **Correction:** The original Phase 0 hypothesis that uppercase attributes burn gas on-chain was incorrect. Zero gas was spent. **Severity downgraded to Minor.**
   >
   > **Update 2026-10-14 IST (Phase 10 Error Origin & Stack Inspection):**
-  > Stack and error-cause inspection via `scripts/retest-fr003.ts`:
+  > Stack and error-cause inspection via `arkiv/repro/fr003-uppercase-attribute.ts`:
   > - **Origin:** Raised during `eth_estimateGas` node-side simulation (`ContractFunctionRevertedError: Error: Ident32InvalidByte(uint256 position, bytes1 value) (0, 0x50)` on `execute(...)`). It never reached `eth_sendRawTransaction`.
   > - **Gas spent:** Exactly `0 wei / 0 GLM`.
   > - **SDK behavior:** The SDK does not pre-validate attribute names locally before simulating. The node-side simulation error surfaces as a generic `EntityMutationError` rather than the exported `InvalidAttributeNameError`.
@@ -285,6 +285,7 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
   >
   > **Update 2026-10-14 IST (Phase 10 Friction Withdrawal to Notes):**
   > FR-005 is withdrawn as friction (moved to Architectural Notes). The early drop came entirely from our own client predicate `ends_at > nowSec`. Arkiv's consensus expiration has zero block asymmetry. The 4-second client margin in `useLiveSlots.ts` exists strictly for browser/chain clock skew, not an Arkiv asymmetry.
+  > Minimal runnable reproduction script: `arkiv/repro/fr005-expiry-boundary.ts`.
 
 ---
 
@@ -475,6 +476,7 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
   > - **Entity 3 (`0x5cb524efbda7a726...`):** Positional call `getEntity(key)` succeeded cleanly, returning valid payload and metadata.
   > - **Post-Expiry Retest:** After block expiry, positional call `getEntity(key)` threw: `NoEntityFoundError: No live entity with key 0x7f4b8f06... It was never created, or it has been deleted or has expired.`
   > - **Resolution:** FR-011 was entirely our own call-shape error: passing an object `{ key }` to a function expecting a positional string parameter `key: Hex`. **FR-011 is formally WITHDRAWN.** Removed from Arkiv/SDK friction table; SDK blame removed from `schema.md` L-005 and `submission-answers.md`.
+  > - **Reproduction Script:** `arkiv/repro/fr011-getentity-call-shape.ts`.
 
 ---
 

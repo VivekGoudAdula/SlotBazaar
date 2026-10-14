@@ -170,7 +170,7 @@ export function JudgePopover({
             <strong>Connect MetaMask:</strong> Click <strong>Connect Wallet</strong> (top right). Switch to Arkiv Tiramisu testnet when prompted.
           </li>
           <li>
-            <strong>Post a slot & see it live:</strong> Click <strong>+ Post a slot</strong>. Submit your time window. Within ~2.5 seconds, the slot appears on your screen and all open peer tabs via native Arkiv WebSocket push!
+            <strong>Post a slot & see it live:</strong> Click <strong>+ Post a slot</strong>. Submit your time window. Within sub-second median latency (0.74s median, under 3s across tests), the slot appears on your screen and all open peer tabs via native Arkiv WebSocket push!
           </li>
           <li>
             <strong>Book from a second account:</strong> Switch MetaMask to Account 2. Click <strong>Book Slot</strong> to create an on-chain reservation entity tied to that slot.
