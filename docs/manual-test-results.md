@@ -1,14 +1,14 @@
 # SlotBazaar — Live Deployed Site Manual Verification Results
 
-> **Target Deployed URL:** [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app)  
-> **Auditor / Tester:** Vivek Goud Adula (User Manual Two-Wallet Run)  
-> **Audited By Agent:** Antigravity (Code and Evidence Integrity Audit)  
-> **Network:** Arkiv Tiramisu Testnet (`chainId: 7738577` / `0x7614d1`)  
-> **Date of Evaluation:** October 2026 (Global Tour Pre-Devcon Hackathon)  
-> **Wallets Used:**  
-> - **Seller (Ravi Demo):** `0x55513e667106CD4b259A6BE332FeE1D65E253fc8`  
-> - **Buyer (Meena Demo):** `0xD87a9d5962430F06437EE8C126DbF42d11178c5D`  
-> - **User Seed Wallet (Manual Run):** `0xf48E7802a97781cca58750a6e5F1f1ab93763225`  
+> **Target Deployed URL:** [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app)<br>
+> **Auditor / Tester:** Vivek Goud Adula (User Manual Two-Wallet Run)<br>
+> **Audited By Agent:** Antigravity (Code and Evidence Integrity Audit)<br>
+> **Network:** Arkiv Tiramisu Testnet (`chainId: 7738577` / `0x7614d1`)<br>
+> **Date of Evaluation:** October 2026 (Global Tour Pre-Devcon Hackathon)<br>
+> **Wallets Used:**<br>
+> - **Seller (Ravi Demo):** `0x55513e667106CD4b259A6BE332FeE1D65E253fc8`<br>
+> - **Buyer (Meena Demo):** `0xD87a9d5962430F06437EE8C126DbF42d11178c5D`<br>
+> - **User Seed Wallet (Manual Run):** `0xf48E7802a97781cca58750a6e5F1f1ab93763225`
 
 ---
 
@@ -29,7 +29,7 @@ The user has executed an end-to-end live flow across two separate browser sessio
 | **S-01** | **Open deployed app in fresh browser (Unconnected Mode)** | App loads centered on India; cluster markers and slot cards render; no wallet popup or login required. | **PASS** *(Verified)* | Live site `https://slotbazaar.vercel.app` verified; zero-friction public read queries confirmed. |
 | **S-02** | **Connect seller wallet and post slot titled "test slot"** | Connects `0x5551...3fc8` (Ravi); submits slot titled "test slot" via `createSlot`; prompts 1 MetaMask signature. | **PASS (User Reported)** | User reported successful submission. *Tx hash pending user entry.* |
 | **S-03** | **Verify listing appears on map with correct wallet creator** | "test slot" appears in cluster pins and card list; drawer displays creator matching `0x5551...3fc8`. | **PASS (User Reported / Code Verified)** | User observed card in UI; unit test `isProductionSlot` confirms slots titled "test slot" are never filtered. |
-| **S-04** | **Observe listing in second browser without manual refresh** | New slot streams into peer browser context via WebSocket subscription (`watchEntityEvents`). | **PASS (User Reported / Benchmark Backed)** | User observed live update in second window. Benchmark log (`latency-run2.txt`) shows 8/10 push with 2.60s median on localhost; missed events heal via fallback poll. |
+| **S-04** | **Observe listing in second browser without manual refresh** | New slot streams into peer browser context via WebSocket subscription (`watchEntityEvents`). | **PASS (User Reported / Benchmark Backed)** | User observed live update in second window. Benchmark log (`latency-run2.txt`) shows 8/10 appeared with 2.60s median on localhost; 2 timed out at 35s (fallback polling is implemented, though recovery was not demonstrated in those two samples). |
 | **S-05** | **Connect buyer wallet and book the listing** | Buyer connects `0xD87a...8c5D` (Meena); clicks "Book This Slot"; submits on-chain booking entity (`createBooking`). | **PASS (User Reported)** | User reported booking confirmed in MetaMask. *Tx hash pending user entry.* |
 | **S-06** | **Verify booking record and visible booked state** | Slot transitions to `🔒 Booked`; drawer displays winning buyer; earliest confirmed block wins. | **PASS (User Reported / Unit Tested)** | User reported booked state visible across sessions; `getWinningBooking` block ordering verified by unit tests. |
 | **S-07** | **Seller and buyer separately confirm completion** | Seller signs `createCompletion` (`role="seller"`); buyer signs `createCompletion` (`role="buyer"`); independent entities stored on Arkiv. | **PASS (User Reported)** | User executed both completion signatures. *Tx hashes pending user entry.* |

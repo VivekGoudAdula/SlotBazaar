@@ -62,7 +62,7 @@ When an Arkiv block reaches timestamp `ends_at`, the entity is dropped automatic
 | **Typed Attribute Filtering** | `fetchLiveSlots`, `fetchAllBookings` | Enables rich client-side and RPC queries (`str`, `u64`, `i32`, `bool`) without centralized middleware. |
 | **Numeric Coordinate Scaling (`e4`)** | Cluster spatial coordinates (`lat_e4`, `lon_e4`) | Scaled integer coordinates (`Math.round(lat * 10000)`) enable native integer range filtering within industrial corridor clusters. |
 | **Single-Signature Batching** | In-app seed & bulk post (`executeBatch`) | Bundles multiple slot entities into a single EVM transaction call (`execute(Operation[])`). MetaMask prompts the user only **once**, preventing signature fatigue. |
-| **Native WebSocket Streams** | Real-time map updates (`watchEntityEvents`) | Subscribes to `wss://` RPC without polling overhead. Pushes newly posted slots to open peer tabs with real empirical latency measured on localhost (8 of 10 appeared; median 2.60 s, p90: 6.93 s; missed events heal via the 30s fallback poll). |
+| **Native WebSocket Streams** | Real-time map updates (`watchEntityEvents`) | Subscribes to `wss://` RPC without polling overhead. Pushes newly posted slots to open peer tabs with real empirical latency measured on localhost (8 of 10 appeared; median 2.60 s, p90: 6.93 s; 2 timed out at 35s; 30s fallback polling is implemented, though recovery was not demonstrated in those two samples). |
 
 ---
 

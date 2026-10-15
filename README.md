@@ -32,7 +32,7 @@ With **SlotBazaar**:
 2. Meena opens the live interactive map with **zero login and no wallet required**. She instantly spots Ravi's slot.
 3. Meena connects MetaMask and clicks **Book Slot**. Arkiv records her reservation entity.
 4. When physical cutting finishes at 2:15 PM, both Ravi and Meena confirm job completion by submitting mutual on-chain completion entities signed by their respective wallets.
-5. Arkiv verifies both cryptographic signatures, instantly unlocking a **🏆 1 Verified Job** reputation badge on Ravi's on-chain profile. Both businesses thrive without platform fees or middleman commissions.
+5. Arkiv verifies both cryptographic signatures, unlocking a **🏆 1 Verified Job** reputation badge on Ravi's on-chain profile once confirmed. Both businesses thrive without platform fees or middleman commissions.
 
 ---
 
@@ -79,10 +79,10 @@ Follow this exact path to evaluate SlotBazaar end-to-end:
 1. **Browse with Zero Friction:** Open [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app). Browse active industrial capacity across Jeedimetla, Surat, Tiruppur, Morbi, and Ludhiana without connecting a wallet.
 2. **Inspect On-Chain Proofs:** Click any slot marker or list card. In the drawer, expand *"🔐 On-Chain Proof"* and click **Explorer ↗** to verify the raw decentralized entity on [data.arkiv.network](https://data.arkiv.network/?chain=tiramisu).
 3. **Connect MetaMask:** Click **Connect Wallet** (top right). Accept the prompt to switch to **Arkiv Tiramisu testnet** (`chainId: 7738577` / `0x7614d1`). Need testnet GLM? Claim free tokens from the [Arkiv Faucet](https://hub.arkiv.network/faucet).
-4. **Post an Append-Only Slot:** Click **+ Post a slot**. Select your industrial cluster and category. Submit your time window (minimum 15 minutes, maximum 7 days). Within **measured live-update latency on localhost (8 of 10 appeared; median 2.60 s, p90: 6.93 s; missed events heal via the 30s fallback poll)**, the new slot appears live on your screen and all open peer tabs via native Arkiv WebSocket streaming!
+4. **Post an Append-Only Slot:** Click **+ Post a slot**. Select your industrial cluster and category. Submit your time window (minimum 15 minutes, maximum 7 days). Within **measured live-update latency on localhost (8 of 10 appeared; median 2.60 s, p90: 6.93 s; 2 timed out at 35s; a 30s fallback poll is implemented, though recovery was not demonstrated in those two samples)**, the new slot appears live on your screen and all open peer tabs via native Arkiv WebSocket streaming!
 5. **Book from a Second Wallet:** Switch MetaMask to a second account. Click **Book Slot** to create an on-chain reservation entity (30-day lifecycle).
 6. **Mutual Job Completion Confirmation:** Open the slot drawer / *My Jobs* on both accounts and click **Confirm Job Completion** to sign and submit mutual on-chain completion entities.
-7. **Instant Verifiable Reputation:** Both transactions are cryptographically verified on-chain, immediately displaying the verified reputation badge (`🏆 1 Verified Job`) on the seller's card!
+7. **Verifiable On-Chain Reputation:** Both transactions are cryptographically verified on-chain, displaying the verified reputation badge (`🏆 1 Verified Job`) on the seller's card once confirmed!
 
 ---
 
@@ -224,7 +224,7 @@ In adherence to Arkiv friction logging rules, we transparently disclose existing
 | Sample 10 | `0xbd7e29...301b3f` | 6:39:04 pm | N/A | TIMEOUT | Timeout after 35s |
 | **Summary** | **8 of 10 appeared** | — | — | **Median: 2.60 s** | p90: 6.93 s, max: 6.93 s; 2 timeouts |
 
-*(Measured empirically in Run 2 on localhost dev server against Arkiv Tiramisu RPC/WSS. 8 of 10 posted slots appeared live via WebSocket; true median latency was 2.60 s across completed samples, p90 was 6.93 s, and max was 6.93 s; 2 samples timed out after 35s. Any missed WebSocket events heal via the 30-second fallback polling loop in `useLiveSlots.ts`. The deployed production site will reflect this behavior when redeployed).*
+*(Measured empirically in Run 2 on localhost dev server against Arkiv Tiramisu RPC/WSS. 8 of 10 posted slots appeared live via WebSocket; true median latency was 2.60 s across completed samples, p90 was 6.93 s, and max was 6.93 s; 2 samples timed out at 35s. Fallback polling every 30 seconds is implemented in `useLiveSlots.ts`, though recovery was not demonstrated in those two timed-out samples within the test window).*
 
 ---
 

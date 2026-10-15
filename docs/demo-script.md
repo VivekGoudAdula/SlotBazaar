@@ -70,9 +70,9 @@ Every UI label, button text, and modal heading used in this script has been audi
 ---
 
 ### [1:40 – 2:05] Segment 5: Two-Sided Completion & Verified Reputation (25 seconds, 60 words)
-* **Visual:** Physical work is done. On Ravi's drawer, click **✅ Confirm Job Completion (Seller)** -> **Sign as Seller**. On Meena's drawer, click **✅ Confirm Job Done (Buyer)** -> **Sign as Buyer**. Drawer updates instantly showing the `🏆 1 Verified Job` reputation badge.
+* **Visual:** Physical work is done. On Ravi's drawer, click **✅ Confirm Job Completion (Seller)** -> **Sign as Seller**. On Meena's drawer, click **✅ Confirm Job Done (Buyer)** -> **Sign as Buyer**. Drawer updates showing the `🏆 1 Verified Job` reputation badge once confirmed.
 * **Narration:**
-  > *"After the physical milling completes, both parties sign mutual completion entities on Arkiv Tiramisu. Ravi clicks 'Confirm Job Completion' as seller, and Meena signs as buyer. Arkiv verifies both wallet signatures, immediately unlocking the '🏆 1 Verified Job' badge on Ravi's card. This portable reputation is verifiable on-chain and persists for 30 days without centralized platform lock-in."*
+  > *"After the physical milling completes, both parties sign mutual completion entities on Arkiv Tiramisu. Ravi clicks 'Confirm Job Completion' as seller, and Meena signs as buyer. Arkiv verifies both wallet signatures, unlocking the '🏆 1 Verified Job' badge on Ravi's card. This portable reputation is verifiable on-chain and persists for 30 days without centralized platform lock-in."*
 
 ---
 

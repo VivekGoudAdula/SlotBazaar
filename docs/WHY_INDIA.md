@@ -41,7 +41,7 @@ SlotBazaar focuses on high-density industrial hubs where spatial proximity enabl
 * **Location:** Jeedimetla Industrial Estate, Hyderabad
 * **Business:** Operates two 4-axis CNC milling machines and a metal shearing unit.
 * **Pain Point:** Frequently experiences 2- to 4-hour gaps between major automotive part orders. Machine depreciation and electrical load charges continue regardless of utilization.
-* **SlotBazaar Workflow:** Opens SlotBazaar on his phone, selects the Jeedimetla corridor cluster, selects "Machine", enters "3-axis CNC milling (2h available)", sets expiry to 4:00 PM, and signs with MetaMask. The slot broadcasts instantly across the cluster.
+* **SlotBazaar Workflow:** Opens SlotBazaar on his phone, selects the Jeedimetla corridor cluster, selects "Machine", enters "3-axis CNC milling (2h available)", sets expiry to 4:00 PM, and signs with MetaMask. The slot broadcasts across the cluster.
 
 ### Persona B: Meena (The Buyer) — Illustrative Fictional Persona (Small Assembly Contractor)
 * **Location:** Balanagar / Jeedimetla, Hyderabad

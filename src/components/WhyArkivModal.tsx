@@ -151,7 +151,7 @@ export function WhyArkivModal({ isOpen, onClose }: WhyArkivModalProps): React.Re
           <li><strong>Cryptographic <code>$creator</code>:</strong> Authentic sender verification for tamper-evident, creator-signed reputation derivation.</li>
           <li><strong>Typed Range Queries:</strong> Fast client-side and RPC filtering on numeric coordinates and timestamps.</li>
           <li><strong>EVM Native Batching:</strong> Single-signature broadcast of multiple slot entities via <code>executeBatch</code>.</li>
-          <li><strong>Real-Time WebSockets:</strong> Instant event streaming of new slots and bookings without polling delays.</li>
+          <li><strong>Real-Time WebSockets:</strong> Live event streaming of new slots and bookings via WebSocket subscriptions.</li>
         </ul>
 
         {/* Section 4: What We Deliberately Kept Off Arkiv */}

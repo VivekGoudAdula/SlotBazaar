@@ -749,7 +749,7 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 | Sample 10 | `0xbd7e29...301b3f` | 6:39:04 pm | N/A | TIMEOUT | Timeout after 35s |
 | **Summary** | **8 of 10 appeared** | — | — | **Median: 2.60 s** | p90: 6.93 s, max: 6.93 s; 2 timeouts |
 
-*(Measured empirically in Run 2 on localhost dev server against Arkiv Tiramisu RPC/WSS. 8 of 10 posted slots appeared live via WebSocket; true median latency was 2.60 s across completed samples, p90 was 6.93 s, and max was 6.93 s; 2 samples timed out after 35s. Any missed WebSocket events heal via the 30-second fallback polling loop in `useLiveSlots.ts`).*
+*(Measured empirically in Run 2 on localhost dev server against Arkiv Tiramisu RPC/WSS. 8 of 10 posted slots appeared live via WebSocket; true median latency was 2.60 s across completed samples, p90 was 6.93 s, and max was 6.93 s; 2 samples timed out at 35s. Fallback polling every 30 seconds is implemented in `useLiveSlots.ts`, though recovery was not demonstrated in those two timed-out samples within the test window).*
 
 
 

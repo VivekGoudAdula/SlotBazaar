@@ -170,7 +170,7 @@ export function JudgePopover({
             <strong>Connect MetaMask:</strong> Click <strong>Connect Wallet</strong> (top right). Switch to Arkiv Tiramisu testnet when prompted.
           </li>
           <li>
-            <strong>Post a slot & see it live:</strong> Click <strong>+ Post a slot</strong>. Submit your time window. Within measured live-update latency on localhost (8 of 10 appeared; median 2.60 s; missed events heal via 30s fallback poll), the slot appears on your screen and all open peer tabs via native Arkiv WebSocket push!
+            <strong>Post a slot & see it live:</strong> Click <strong>+ Post a slot</strong>. Submit your time window. Within measured live-update latency on localhost (8 of 10 appeared; median 2.60 s; 2 timed out at 35s; 30s fallback polling is implemented), the slot appears on your screen and all open peer tabs via native Arkiv WebSocket push!
           </li>
           <li>
             <strong>Book from a second account:</strong> Switch MetaMask to Account 2. Click <strong>Book Slot</strong> to create an on-chain reservation entity tied to that slot.
@@ -179,7 +179,7 @@ export function JudgePopover({
             <strong>Two-sided completion confirmation:</strong> Both seller and buyer click <strong>Confirm Job Completion</strong>. Each submits an on-chain completion entity signed by their wallet transaction.
           </li>
           <li>
-            <strong>Instant on-chain reputation:</strong> The verified job proof links both on-chain receipts symmetrically. The <strong>🏆 1 Verified Job</strong> reputation badge renders dynamically on the seller's drawer and wallet!
+            <strong>Verifiable on-chain reputation:</strong> The verified job proof links both on-chain receipts symmetrically. The <strong>🏆 1 Verified Job</strong> reputation badge renders dynamically on the seller's drawer and wallet!
           </li>
         </ol>
 
