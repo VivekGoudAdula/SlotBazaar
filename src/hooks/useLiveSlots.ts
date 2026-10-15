@@ -548,12 +548,8 @@ export function useLiveSlots(): UseLiveSlotsResult {
           return;
         }
 
-        // When WebSocket is healthy and recently fetched, skip background polling to keep RPC load low
-        if (isSocketHealthyRef.current && (Date.now() - lastFetchTimeRef.current < 45_000)) {
-          scheduleNext();
-          return;
-        }
-
+        // Fallback polling: runs every 30 seconds regardless of WebSocket socket state
+        // to guarantee that any dropped or missed WebSocket event heals within 30 seconds at most.
         try {
           await doFetch();
           // Reset backoff delay on successful fetch

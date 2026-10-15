@@ -84,8 +84,8 @@ export function parseFrictionDoc(): { entries: FrictionEntry[]; content: string 
     } else if (e.id === "FR-003") {
       e.category = "sdk";
       e.severity = "Minor";
-      e.status = '0 gas spent; node simulation reverts; error message lists "A"-"Z" as allowed while rejecting uppercase';
-      e.linkOrNote = "[Issue #1 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-silently-burns-gas-before-on-chain-rejection-fr-003)";
+      e.status = 'node-side simulation revert (execute reverted: Ident32InvalidByte(0, 0x50)), 0 gas spent; message lists "A"-"Z" as allowed while rejecting uppercase';
+      e.linkOrNote = "[Issue #1 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-throws-generic-entitymutationerror-instead-of-invalidattributenameerror-fr-003)";
     } else if (e.id === "FR-004") {
       e.category = "sdk";
       e.severity = "Minor";

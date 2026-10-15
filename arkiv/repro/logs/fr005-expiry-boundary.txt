@@ -1,39 +1,43 @@
-=== FR-005: Expiration Boundary Empirical Verification ===
-Run Date       : 2026-10-15T10:42:41.403Z
+﻿=== FR-005: Expiration Boundary Empirical Verification ===
+Run Date       : 2026-10-15T12:52:47.512Z
 SDK Version    : 0.8.1
 Viem Version   : 2.57.4
+Sampling Mode  : Fast polling (~300ms intervals; gaps logged per sample)
 Account        : 0x53491aA366E086C19da948669b340317eE6eA6e9
-Batch ID       : probe-fr005-1792060961488
+Batch ID       : probe-fr005-1792068770561
 
 1. Creating test entity expiring in ~50 seconds...
-Created entity key: 0xc24510bebcae9bdd1121ea70951eb539bd044b05c67172c0c8ce45f372929040
-Entity createdAt block : 605601
-Entity expiresAt block : 605626 (in ~24 blocks)
-Consensus Expiration   : expiresAt (605626) is treated as exclusive consensus expiration block.
+Created entity key: 0x0de31e8ffc972051cb94d21ff1a1ae243d7a83652da9166b0a665e9399e8bd9e
+Entity createdAt block : 609510
+Entity expiresAt block : 609535 (in ~24 blocks)
+Consensus Expiration   : expiresAt (609535) is treated as exclusive consensus expiration block.
 
-2. Polling every new block until block 605631 (5 blocks after expiry)...
+2. Sampling via fast polling (~300ms) until block 609540 (~5 blocks past expiry)...
 
-| Block | In Query | getEntity Result | Notes |
-|:-----:|:--------:|:-----------------|:------|
-| 605602 | YES | LIVE |  |
-| 605607 | YES | LIVE |  |
-| 605609 | YES | LIVE |  |
-| 605612 | YES | LIVE |  |
-| 605614 | YES | LIVE |  |
-| 605617 | YES | LIVE |  |
-| 605620 | YES | LIVE |  |
-| 605624 | YES | LIVE |  |
-| 605626 | NO | NoEntityFoundError (Expired) | <-- expiresAt block |
-| 605628 | NO | NoEntityFoundError (Expired) |  |
-| 605633 | NO | NoEntityFoundError (Expired) |  |
+| Block | Gap | In Query | getEntity Result | Notes |
+|:-----:|:---:|:--------:|:-----------------|:------|
+| 609511 | - | YES | LIVE |  |
+| 609513 | 2 | YES | LIVE | gap: 2 blks |
+| 609516 | 3 | YES | LIVE | gap: 3 blks |
+| 609518 | 2 | YES | LIVE | gap: 2 blks |
+| 609520 | 2 | YES | LIVE | gap: 2 blks |
+| 609522 | 2 | YES | LIVE | gap: 2 blks |
+| 609525 | 3 | YES | LIVE | gap: 3 blks |
+| 609527 | 2 | YES | LIVE | gap: 2 blks |
+| 609529 | 2 | YES | LIVE | gap: 2 blks |
+| 609531 | 2 | YES | LIVE | gap: 2 blks |
+| 609533 | 2 | YES | LIVE | gap: 2 blks |
+| 609536 | 3 | NO | NoEntityFoundError (Expired) | gap: 3 blks |
+| 609538 | 2 | NO | NoEntityFoundError (Expired) | gap: 2 blks |
+| 609540 | 2 | NO | NoEntityFoundError (Expired) | gap: 2 blks |
 
 --- Programmatic Expiration Boundary Evaluation ---
 Observed Boundary Results: {
-  expiresAtBlock: 605626,
-  blockQueryDropped: 605626,
-  blockGetEntityDropped: 605626,
-  queryDifferenceFromExpiresAt: 0,
-  getEntityDifferenceFromExpiresAt: 0,
+  expiresAtBlock: 609535,
+  blockQueryDropped: 609536,
+  blockGetEntityDropped: 609536,
+  queryDifferenceFromExpiresAt: 1,
+  getEntityDifferenceFromExpiresAt: 1,
   queryAndGetEntityAgree: true,
-  resolutionObservation: 'query and getEntity agree; entity not visible from block expiresAt+0 (sampling resolution +/- 1 block)'
+  hedgedConclusion: 'query and getEntity agree; entity not visible from block expiresAt-1 or expiresAt depending on sampling resolution (plus or minus 1 block)'
 }

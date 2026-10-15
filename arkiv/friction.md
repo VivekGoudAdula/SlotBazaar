@@ -15,7 +15,7 @@
 | ID | Title | Severity | Status | Upstream Issue Link / Note |
 |---|---|---|---|---|
 | **FR-001** | `InvalidPredicateError` not exported from main package | Minor | Workaround applied (import from `/query`) | [Issue #3 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-3-invalidpredicateerror-is-not-exported-from-the-main-arkiv-networksdk-entry-point-fr-001) |
-| **FR-003** | Uppercase attribute name rejected client-side with EntityMutationError (0 gas spent) | Minor | 0 gas spent; node simulation reverts; error message lists "A"-"Z" as allowed while rejecting uppercase | [Issue #1 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-silently-burns-gas-before-on-chain-rejection-fr-003) |
+| **FR-003** | node-side simulation revert (execute reverted: Ident32InvalidByte(0, 0x50)), 0 gas spent; message lists "A"-"Z" as allowed while rejecting uppercase | Minor | node-side simulation revert (execute reverted: Ident32InvalidByte(0, 0x50)), 0 gas spent; message lists "A"-"Z" as allowed while rejecting uppercase | [Issue #1 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-throws-generic-entitymutationerror-instead-of-invalidattributenameerror-fr-003) |
 | **FR-004** | Wrong number type in range query silently returns 0 results | Minor | Documented behaviour; solved via strict typed attributes in src/lib/arkiv.ts | [Issue #2 in arkiv/issues-to-file.md (Feature Request)](arkiv/issues-to-file.md#issue-2-feature-request-developer-warning-or-type-inference-when-query-predicate-type-differs-from-stored-attribute-fr-004) |
 | **FR-010** | `getBlockNumber()` not directly available on `PublicArkivClient` | Minor | Solved via type cast in useChainHead.ts | Type gap on PublicArkivClient |
 | **FR-012** | Tiramisu RPC intermittently stalls on consecutive queries (reproduced once) | Medium | Reproduced once; solved via 8s timeout wrapper & backoff | Observed once; not reproduced since |
@@ -147,7 +147,7 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 
   > **Update 2026-10-13 IST:** Note: not Arkiv-specific. `BigInt` serialization is a JavaScript platform limitation that affects all libraries using `bigint`. The SDK choice to use native `bigint` for `u64` is correct; the workaround (custom replacer or `.toString()`) is the standard approach. Severity downgraded to **cosmetic**.
 
-### FR-003 · Uppercase attribute name rejected client-side with EntityMutationError (0 gas spent)
+### FR-003 · node-side simulation revert (execute reverted: Ident32InvalidByte(0, 0x50)), 0 gas spent; message lists "A"-"Z" as allowed while rejecting uppercase
 
 - **Date/time (IST):** 2026-10-12, ~21:25 IST
 - **Phase:** 0
@@ -175,7 +175,7 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
   Enforce strict lowercase snake_case attribute names in app code and pre-validate before calling SDK methods.
 - **Suggested fix:**  
   Throw the specific `InvalidAttributeNameError` exported by the SDK rather than generic `EntityMutationError`.
-- **Upstream issue link:** [Issue #1 in issues-to-file.md](issues-to-file.md#issue-1-uppercase-attribute-name-silently-burns-gas-before-on-chain-rejection-fr-003)
+- **Upstream issue link:** [Issue #1 in issues-to-file.md](issues-to-file.md#issue-1-uppercase-attribute-name-throws-generic-entitymutationerror-instead-of-invalidattributenameerror-fr-003)
 
   > **Update 2026-10-14 IST (Phase 9 Controlled Balance Measurement):**
   > Controlled retest run against Tiramisu testnet wallet `0x5349...a6e9`:
@@ -733,19 +733,23 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 - **Immediate Local Pruning**: Client-side timestamp pruning with a 4-second (1-2 block) margin ensures expired slots vanish instantly from the user interface without waiting for the next server poll or indexer sweep.
 
 ### Measured Live-Update Latency Across Two Browser Contexts
-*Measured using two Puppeteer browser contexts (one posting a live slot on Arkiv Tiramisu, one observing the live map without refreshing; raw log in `arkiv/repro/logs/latency.txt`).*
+*Measured using two Puppeteer browser contexts with a fresh browser context per sample (one posting a live slot on Arkiv Tiramisu, one observing the live map without refreshing; raw log in [arkiv/repro/logs/latency-run2.txt](arkiv/repro/logs/latency-run2.txt)).*
 
-| Sample | Before Leading-Edge Fix (Artificial 2–12s debounce) | After Leading-Edge Fix (Immediate first event + single trailing) | Notes |
-| :---: | :---: | :---: | :--- |
-| Sample 1 | 0.11 s | 2.80 s | WebSocket event delivery + immediate DOM card render |
-| Sample 2 | 4.25 s | 0.18 s | *Flagged (<0.3s)*: Event received concurrently with node receipt resolution |
-| Sample 3 | 6.42 s | 0.01 s | *Flagged (<0.3s)*: Pre-event delivery before node receipt confirmation |
-| Sample 4 | 1.23 s | 1.10 s (rerun: 0.74 s) | Initial run timed out at 35s; rerun 1: 1.10 s; rerun 2: 0.74 s |
-| Sample 5 | 0.18 s | 0.74 s | Standard leading-edge push |
-| **All Completed** | **1.23 s** | **0.74 s** | Sub-second median across test batches (p90: 2.12 s, max: 2.80 s) |
-| **Clean (>0.3s)** | **—** | **0.74 s** | Clean sample median: 0.74 s (Sample 1: 2.80s, Sample 4: 1.10/0.74s, Sample 5: 0.74s; max: 2.80 s) |
+| Sample | Tx Hash | Confirmed At | DOM Appeared At | Latency (s) | Notes |
+| :---: | :--- | :--- | :--- | :---: | :--- |
+| Sample 1 | `0x0a108a...775be1` | 6:33:55 pm | 6:33:56 pm | 1.37 s | OK |
+| Sample 2 | `0x4a1abb...edbf7a` | 6:34:41 pm | 6:34:47 pm | 6.74 s | OK |
+| Sample 3 | `0x035f41...717767` | 6:35:13 pm | 6:35:15 pm | 1.40 s | OK |
+| Sample 4 | `0xbdd78b...3c0e15` | 6:35:39 pm | 6:35:41 pm | 2.45 s | OK |
+| Sample 5 | `0x29707b...d5b575` | 6:36:07 pm | 6:36:08 pm | 1.47 s | OK |
+| Sample 6 | `0x969f6d...e17071` | 6:36:28 pm | 6:36:35 pm | 6.93 s | OK |
+| Sample 7 | `0x6cf783...74b83f` | 6:37:00 pm | 6:37:03 pm | 2.74 s | OK |
+| Sample 8 | `0x34f8d7...37dd21` | 6:37:27 pm | N/A | TIMEOUT | Timeout after 35s |
+| Sample 9 | `0xfb00b2...44f079` | 6:38:35 pm | 6:38:40 pm | 4.04 s | OK |
+| Sample 10 | `0xbd7e29...301b3f` | 6:39:04 pm | N/A | TIMEOUT | Timeout after 35s |
+| **Summary** | **8 of 10 appeared** | — | — | **Median: 2.60 s** | p90: 6.93 s, max: 6.93 s; 2 timeouts |
 
-*(All raw samples recorded in `arkiv/repro/logs/latency.txt`; sub-0.30s measurements reflect concurrency artifacts between node transaction receipt and browser WebSocket pre-delivery).*
+*(Measured empirically in Run 2. 8 of 10 posted slots appeared live via WebSocket; true median latency was 2.60 s across completed samples, p90 was 6.93 s, and max was 6.93 s; 2 samples timed out after 35s. Any missed WebSocket events heal within 30 seconds via the fallback polling loop in `useLiveSlots.ts`).*
 
 
 

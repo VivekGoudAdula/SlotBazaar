@@ -1,0 +1,94 @@
+﻿========================================================
+  PHASE 14: MEASURING LIVE-UPDATE DOM LATENCY (10 SAMPLES)
+========================================================
+Run Date       : 2026-10-15T13:03:20.759Z
+SDK Version    : 0.8.1
+Viem Version   : 2.57.4
+Wallet         : 0x53491aA366E086C19da948669b340317eE6eA6e9
+Target URL     : http://localhost:5173
+Target Note    : Localhost dev server (active Phase 14 30s-fallback poll fix; deployed site not updated because git push is forbidden)
+Total Samples  : 10
+
+Launching Chrome headless browser...
+
+--- Sample 1/10: Testing "[LAT-1] Latency Slot T404162_1" ---
+  Tx submitted: 0x0a108a861d4b2f9a6fcb1253f40af5b80a97cad96860d683f45c588a9d775be1 (entityKey: 0x5f381b385b8c...)
+  Confirmed in block 609834 at 2026-10-15T13:03:55.402Z
+  Appeared in DOM: 1374 ms (1.37 s)
+  Cooldown 12s before next sample...
+
+--- Sample 2/10: Testing "[LAT-2] Latency Slot T448963_2" ---
+  Tx submitted: 0x4a1abbf4b97f61954472132548014357b1b76ddc56257cc1e9f9ba5daaedbf7a (entityKey: 0x6c806ba0a24d...)
+  Confirmed in block 609857 at 2026-10-15T13:04:41.242Z
+  Appeared in DOM: 6742 ms (6.74 s)
+  Cooldown 12s before next sample...
+
+--- Sample 3/10: Testing "[LAT-3] Latency Slot T500151_3" ---
+  Tx submitted: 0x035f417594b6954127b2791ad2fabd8b051c180ee8b94d6df6ef770455717767 (entityKey: 0xa4b9a44cee47...)
+  Confirmed in block 609873 at 2026-10-15T13:05:13.832Z
+  Appeared in DOM: 1400 ms (1.40 s)
+  Cooldown 12s before next sample...
+
+--- Sample 4/10: Testing "[LAT-4] Latency Slot T527266_4" ---
+  Tx submitted: 0xbdd78b68109933b7c3c3bedaf3a29581609166717001c30ba1974cb1e03c0e15 (entityKey: 0x98cf2fbfae32...)
+  Confirmed in block 609886 at 2026-10-15T13:05:39.342Z
+  Appeared in DOM: 2453 ms (2.45 s)
+  Cooldown 12s before next sample...
+
+--- Sample 5/10: Testing "[LAT-5] Latency Slot T553888_5" ---
+  Tx submitted: 0x29707b9969dec073b32469fb30e231bb232d3ab6b923b40c6b34d39fdcd5b575 (entityKey: 0x3fa9815e3a38...)
+  Confirmed in block 609900 at 2026-10-15T13:06:07.505Z
+  Appeared in DOM: 1467 ms (1.47 s)
+  Cooldown 12s before next sample...
+
+--- Sample 6/10: Testing "[LAT-6] Latency Slot T581038_6" ---
+  Tx submitted: 0x969f6d122e0b0b85e93e4fa3e34f0c3ee18826852e5db3d09717ea04f3e17071 (entityKey: 0xafd4aca43c80...)
+  Confirmed in block 609912 at 2026-10-15T13:06:28.770Z
+  Appeared in DOM: 6934 ms (6.93 s)
+  Cooldown 12s before next sample...
+
+--- Sample 7/10: Testing "[LAT-7] Latency Slot T607804_7" ---
+  Tx submitted: 0x6cf783aa450c8144c15ef054568ce03cc187a1b53f84c81b925cd559d474b83f (entityKey: 0xeb84d4b9ef92...)
+  Confirmed in block 609927 at 2026-10-15T13:07:00.394Z
+  Appeared in DOM: 2741 ms (2.74 s)
+  Cooldown 12s before next sample...
+
+--- Sample 8/10: Testing "[LAT-8] Latency Slot T635236_8" ---
+  Tx submitted: 0x34f8d7763e3681e882da60687c8eabd88716e37fc391966037265dada437dd21 (entityKey: 0xa102b51e24bd...)
+  Confirmed in block 609940 at 2026-10-15T13:07:27.941Z
+  TIMEOUT: Slot did not appear in watcher DOM within 35s
+  Cooldown 12s before next sample...
+
+--- Sample 9/10: Testing "[LAT-9] Latency Slot T695002_9" ---
+  Tx submitted: 0xfb00b2c074e60a3cb984c1893cf472e017abc18898078c91ecc1fed94144f079 (entityKey: 0x87bb3a6e18b3...)
+  Confirmed in block 609974 at 2026-10-15T13:08:35.977Z
+  Appeared in DOM: 4041 ms (4.04 s)
+  Cooldown 12s before next sample...
+
+--- Sample 10/10: Testing "[LAT-10] Latency Slot T732090_10" ---
+  Tx submitted: 0xbd7e294fe72260801d7cf7bea31f0c32c632d3cd2cf499485b57b7366e301b3f (entityKey: 0xb72e5362e0b5...)
+  Confirmed in block 609988 at 2026-10-15T13:09:04.103Z
+  TIMEOUT: Slot did not appear in watcher DOM within 35s
+
+========================================================
+  LATENCY MEASUREMENT RESULTS (RUN 2)
+========================================================
+| Sample | Tx Hash | Confirmed At | DOM Appeared At | Latency (s) | Notes |
+|:------:|:--------|:-------------|:----------------|:-----------:|:------|
+| 1 | `0x0a108a...775be1` | 6:33:55 pm | 6:33:56 pm | 1.37 | OK |
+| 2 | `0x4a1abb...edbf7a` | 6:34:41 pm | 6:34:47 pm | 6.74 | OK |
+| 3 | `0x035f41...717767` | 6:35:13 pm | 6:35:15 pm | 1.40 | OK |
+| 4 | `0xbdd78b...3c0e15` | 6:35:39 pm | 6:35:41 pm | 2.45 | OK |
+| 5 | `0x29707b...d5b575` | 6:36:07 pm | 6:36:08 pm | 1.47 | OK |
+| 6 | `0x969f6d...e17071` | 6:36:28 pm | 6:36:35 pm | 6.93 | OK |
+| 7 | `0x6cf783...74b83f` | 6:37:00 pm | 6:37:03 pm | 2.74 | OK |
+| 8 | `0x34f8d7...37dd21` | 6:37:27 pm | N/A | TIMEOUT | TIMEOUT |
+| 9 | `0xfb00b2...44f079` | 6:38:35 pm | 6:38:40 pm | 4.04 | OK |
+| 10 | `0xbd7e29...301b3f` | 6:39:04 pm | N/A | TIMEOUT | TIMEOUT |
+
+--- Latency Summary Statistics ---
+n_completed: 8
+n_timeouts: 2
+median: 2.60 s
+p90: 6.93 s
+max: 6.93 s

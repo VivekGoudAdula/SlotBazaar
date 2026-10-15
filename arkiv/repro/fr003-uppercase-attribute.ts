@@ -95,8 +95,11 @@ async function main() {
     console.log(stackLines.join("\n"));
 
     // Programmatically compute evaluation
-    const isGasFree = gasSpentWei === 0n;
-    const isRejectedBeforeBroadcast = isGasFree && !txHash;
+    const noGasSpent = gasSpentWei === 0n;
+    const nodeSideSimulationRevert = Boolean(
+      (caughtError.cause?.message && caughtError.cause.message.includes("revert")) ||
+      (caughtError.cause?.cause?.message && caughtError.cause.cause.message.includes("revert"))
+    );
     const mentionsCharset = caughtError.message.includes("outside the name charset");
     const charsetMentionsAtoZ = caughtError.message.includes('"A"-"Z"');
     const rejectsP = caughtError.message.includes('"P" (0x50)');
@@ -104,7 +107,8 @@ async function main() {
 
     console.log("\n--- Programmatic Evaluation ---");
     console.log("Observed Results:", {
-      rejectedLocally: isRejectedBeforeBroadcast,
+      noGasSpent,
+      nodeSideSimulationRevert,
       gasSpentWei: gasSpentWei.toString(),
       errorName: caughtError.name,
       mentionsCharset,

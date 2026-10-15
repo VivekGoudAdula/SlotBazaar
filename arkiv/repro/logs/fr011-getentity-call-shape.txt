@@ -1,5 +1,5 @@
 ﻿=== FR-011: getEntity Parameter Shape & Entity Inspection ===
-Run Date       : 2026-10-15T10:41:47.192Z
+Run Date       : 2026-10-15T12:54:54.953Z
 SDK Version    : 0.8.1
 Viem Version   : 2.57.4
 
@@ -19,19 +19,19 @@ SDK Entity instance keys: [
 ]
 
 2. Creating live test entity on Tiramisu...
-Created entity key: 0x8f2621c8dd46b1896a9185a12ab7db963d0ca56926c00c9d6f59d6f989f965fd
+Created entity key: 0x45c86ea6d2818b6a018b843ece51b1e5caa86660d0ddfb4de7b52761942ed16f
 
 3. Testing positional call: pub.getEntity(entityKey)...
 
 4. Testing object shape: pub.getEntity({ key: entityKey })...
 
 --- Observed Live Entity Fields ---
-key        : 0x8f2621c8dd46b1896a9185a12ab7db963d0ca56926c00c9d6f59d6f989f965fd
+key        : 0x45c86ea6d2818b6a018b843ece51b1e5caa86660d0ddfb4de7b52761942ed16f
 creator    : 0x53491aA366E086C19da948669b340317eE6eA6e9
 owner      : 0x53491aA366E086C19da948669b340317eE6eA6e9
-createdAt  : 605574 (block number)
-updatedAt  : 605574 (block number)
-expiresAt  : 605634 (block number)
+createdAt  : 609568 (block number)
+updatedAt  : 609568 (block number)
+expiresAt  : 609628 (block number)
 contentType: application/json
 
 --- EXACT CAUGHT OBJECT SHAPE ERROR PROPERTIES ---
@@ -39,13 +39,13 @@ error.name:
 InvalidValueError
 
 error.message:
-Invalid key value {"key":"0x8f2621c8dd46b1896a9185a12ab7db963d0ca56926c00c9d6f59d6f989f965fd"}: not 0x-prefixed hex.
+Invalid key value {"key":"0x45c86ea6d2818b6a018b843ece51b1e5caa86660d0ddfb4de7b52761942ed16f"}: not 0x-prefixed hex.
 
 error.cause?.message:
 undefined
 
 error.stack (first 5 lines):
-InvalidValueError: Invalid key value {"key":"0x8f2621c8dd46b1896a9185a12ab7db963d0ca56926c00c9d6f59d6f989f965fd"}: not 0x-prefixed hex.
+InvalidValueError: Invalid key value {"key":"0x45c86ea6d2818b6a018b843ece51b1e5caa86660d0ddfb4de7b52761942ed16f"}: not 0x-prefixed hex.
     at asFixedHex (C:\HACKATHONS\70. GLOBAL TOUR DEVCON - ARKIV\APP\node_modules\@arkiv-network\sdk\src\attr\values.ts:382:11)
     at key (C:\HACKATHONS\70. GLOBAL TOUR DEVCON - ARKIV\APP\node_modules\@arkiv-network\sdk\src\attr\values.ts:354:27)
     at getEntity (C:\HACKATHONS\70. GLOBAL TOUR DEVCON - ARKIV\APP\node_modules\@arkiv-network\sdk\src\actions\public\getEntity.ts:23:23)
@@ -55,8 +55,8 @@ InvalidValueError: Invalid key value {"key":"0x8f2621c8dd46b1896a9185a12ab7db963
 Observed Results: {
   positionalCallSuccess: true,
   objectCallFailed: true,
-  objectErrorMessage: 'Invalid key value {"key":"0x8f2621c8dd46b1896a9185a12ab7db963d0ca56926c00c9d6f59d6f989f965fd"}: not 0x-prefixed hex.',
+  objectErrorMessage: 'Invalid key value {"key":"0x45c86ea6d2818b6a018b843ece51b1e5caa86660d0ddfb4de7b52761942ed16f"}: not 0x-prefixed hex.',
   expiresAtType: 'bigint',
-  expiresAtBlockNumber: '605634',
+  expiresAtBlockNumber: '609628',
   expiresAtIsBlockNumber: true
 }

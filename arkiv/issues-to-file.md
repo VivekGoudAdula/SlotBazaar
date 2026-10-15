@@ -7,7 +7,7 @@
 
 ## Issue 1: Uppercase attribute name throws generic EntityMutationError instead of InvalidAttributeNameError (FR-003)
 
-**Title**: `createEntity` throws generic `EntityMutationError` instead of exported `InvalidAttributeNameError` on invalid attribute names
+**Title**: `createEntity` throws generic `EntityMutationError` on node-side simulation revert (`Ident32InvalidByte(0, 0x50)`); error message lists "A"-"Z" as allowed while rejecting uppercase
 
 **SDK version**: `@arkiv-network/sdk@0.8.1`  
 **viem version**: `2.57.4`  
@@ -35,31 +35,34 @@ await wallet.createEntity({
 });
 ```
 
-Run: `npx tsx scripts/edge-probes.ts`
+Run: `npx tsx arkiv/repro/fr003-uppercase-attribute.ts`
 
 ### Expected behaviour
 
-`createEntity` should call `validateAttributeName(name)` before transaction submission. When an attribute name violates the grammar, `InvalidAttributeNameError` (which is exported from `@arkiv-network/sdk`) should be thrown client-side.
+`createEntity` should validate attribute names client-side before transaction simulation. When an attribute name violates the grammar, `InvalidAttributeNameError` (which is exported from `@arkiv-network/sdk`) should be thrown client-side.
 
 ### Actual behaviour
 
-The SDK catches the error client-side before transaction submission (0 gas burned, never broadcast to the network), but throws a generic `EntityMutationError`:
+The transaction reverts during node-side `eth_estimateGas` simulation (`execute` reverted with `Ident32InvalidByte(0, 0x50)`). Zero gas is burned (0 wei) because the transaction is never broadcast via `eth_sendRawTransaction`. The SDK surfaces this node revert as a generic `EntityMutationError`:
 
 ```
-EntityMutationError: Transaction failed: an attribute name holds "P" (0x50) at byte 0,
-which is outside the name charset ("A"–"Z", "a"–"z", "0"–"9", ".", "-" and "_", with a letter first)
+EntityMutationError: Transaction failed: an attribute name holds "P" (0x50) at byte 0, which is outside the name charset ("A"-"Z", "a"-"z", "0"-"9", ".", "-" and "_", with a letter first)
+```
+Underlying cause:
+```
+The contract function "execute" reverted. Error: Ident32InvalidByte(uint256 position, bytes1 value) (0, 0x50)
 ```
 
-Developers catching `InvalidAttributeNameError` will not catch this error.
+Furthermore, there is a documentation / error-message inconsistency: the message explicitly states that `"A"-"Z"` is in the allowed name charset, yet it rejects byte `0x50` (`"P"`), which is an uppercase letter directly in `"A"-"Z"`.
 
 ### Severity
 
-**Minor (DX / Error Typing)** — While no gas is consumed on-chain (it is rejected client-side before broadcast), throwing `EntityMutationError` breaks expected error discrimination since `InvalidAttributeNameError` is documented and exported.
+**Minor (DX / Error Typing & Message Consistency)** — 0 gas is consumed (simulation revert before broadcast). However, throwing `EntityMutationError` breaks expected error discrimination since `InvalidAttributeNameError` is documented and exported, and the error string contradicts itself regarding `"A"-"Z"`.
 
 ### Suggested fix
 
 ```ts
-// Inside createEntity, before signing:
+// Inside createEntity, before signing/simulation:
 for (const [name] of Object.entries(attributes)) {
   validateAttributeName(name); // throws InvalidAttributeNameError synchronously
 }

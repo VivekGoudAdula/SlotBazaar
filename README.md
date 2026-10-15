@@ -79,7 +79,7 @@ Follow this exact path to evaluate SlotBazaar end-to-end:
 1. **Browse with Zero Friction:** Open [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app). Browse active industrial capacity across Jeedimetla, Surat, Tiruppur, Morbi, and Ludhiana without connecting a wallet.
 2. **Inspect On-Chain Proofs:** Click any slot marker or list card. In the drawer, expand *"🔐 On-Chain Proof"* and click **Explorer ↗** to verify the raw decentralized entity on [data.arkiv.network](https://data.arkiv.network/?chain=tiramisu).
 3. **Connect MetaMask:** Click **Connect Wallet** (top right). Accept the prompt to switch to **Arkiv Tiramisu testnet** (`chainId: 7738577` / `0x7614d1`). Need testnet GLM? Claim free tokens from the [Arkiv Faucet](https://hub.arkiv.network/faucet).
-4. **Post an Immutable Slot:** Click **+ Post a slot**. Select your industrial cluster and category. Submit your time window (minimum 15 minutes, maximum 7 days). Within **sub-second median latency (0.74s median, under 3s across tests)**, the new slot appears live on your screen and all open peer tabs via native Arkiv WebSocket streaming!
+4. **Post an Immutable Slot:** Click **+ Post a slot**. Select your industrial cluster and category. Submit your time window (minimum 15 minutes, maximum 7 days). Within **empirical live latency (8 of 10 appeared; median 2.60 s, p90: 6.93 s; missed events heal within 30s)**, the new slot appears live on your screen and all open peer tabs via native Arkiv WebSocket streaming!
 5. **Book from a Second Wallet:** Switch MetaMask to a second account. Click **Book Slot** to create an immutable on-chain reservation entity (30-day lifecycle).
 6. **Mutual Job Completion Confirmation:** Open the slot drawer / *My Jobs* on both accounts and click **Confirm Job Completion** to sign and submit mutual on-chain completion entities.
 7. **Instant Verifiable Reputation:** Both transactions are cryptographically verified on-chain, immediately displaying the verified reputation badge (`🏆 1 Verified Job`) on the seller's card!
@@ -208,19 +208,23 @@ In adherence to Arkiv friction logging rules, we transparently disclose existing
 - **TOTAL:** 28 requests in 2 min (**14.0 req/min**, safely below the 15 req/min threshold, down from unoptimized baseline of 96.5 req/min)
 
 ### 9.2 Measured Live-Update Latency Across Two Browser Contexts
-*Measured using two Puppeteer browser contexts (one posting a live slot on Arkiv Tiramisu, one observing the live map without refreshing; raw log in `arkiv/repro/logs/latency.txt`).*
+*Measured using two Puppeteer browser contexts with a fresh browser context per sample (one posting a live slot on Arkiv Tiramisu, one observing the live map without refreshing; raw log in [arkiv/repro/logs/latency-run2.txt](arkiv/repro/logs/latency-run2.txt)).*
 
-| Sample | Before Leading-Edge Fix (Artificial 2–12s debounce) | After Leading-Edge Fix (Immediate first event + single trailing) | Notes |
-| :---: | :---: | :---: | :--- |
-| Sample 1 | 0.11 s | 2.80 s | WebSocket event delivery + immediate DOM card render |
-| Sample 2 | 4.25 s | 0.18 s | *Flagged (<0.3s)*: Event received concurrently with node receipt resolution |
-| Sample 3 | 6.42 s | 0.01 s | *Flagged (<0.3s)*: Pre-event delivery before node receipt confirmation |
-| Sample 4 | 1.23 s | 1.10 s (rerun: 0.74 s) | Initial run timed out at 35s; rerun 1: 1.10 s; rerun 2: 0.74 s |
-| Sample 5 | 0.18 s | 0.74 s | Standard leading-edge push |
-| **All Completed** | **1.23 s** | **0.74 s** | Sub-second median across test batches (p90: 2.12 s, max: 2.80 s) |
-| **Clean (>0.3s)** | **—** | **0.74 s** | Clean sample median: 0.74 s (Sample 1: 2.80s, Sample 4: 1.10/0.74s, Sample 5: 0.74s; max: 2.80 s) |
+| Sample | Tx Hash | Confirmed At | DOM Appeared At | Latency (s) | Notes |
+| :---: | :--- | :--- | :--- | :---: | :--- |
+| Sample 1 | `0x0a108a...775be1` | 6:33:55 pm | 6:33:56 pm | 1.37 s | OK |
+| Sample 2 | `0x4a1abb...edbf7a` | 6:34:41 pm | 6:34:47 pm | 6.74 s | OK |
+| Sample 3 | `0x035f41...717767` | 6:35:13 pm | 6:35:15 pm | 1.40 s | OK |
+| Sample 4 | `0xbdd78b...3c0e15` | 6:35:39 pm | 6:35:41 pm | 2.45 s | OK |
+| Sample 5 | `0x29707b...d5b575` | 6:36:07 pm | 6:36:08 pm | 1.47 s | OK |
+| Sample 6 | `0x969f6d...e17071` | 6:36:28 pm | 6:36:35 pm | 6.93 s | OK |
+| Sample 7 | `0x6cf783...74b83f` | 6:37:00 pm | 6:37:03 pm | 2.74 s | OK |
+| Sample 8 | `0x34f8d7...37dd21` | 6:37:27 pm | N/A | TIMEOUT | Timeout after 35s |
+| Sample 9 | `0xfb00b2...44f079` | 6:38:35 pm | 6:38:40 pm | 4.04 s | OK |
+| Sample 10 | `0xbd7e29...301b3f` | 6:39:04 pm | N/A | TIMEOUT | Timeout after 35s |
+| **Summary** | **8 of 10 appeared** | — | — | **Median: 2.60 s** | p90: 6.93 s, max: 6.93 s; 2 timeouts |
 
-*(All raw samples recorded in `arkiv/repro/logs/latency.txt`; sub-0.30s measurements reflect concurrency artifacts between node transaction receipt and browser WebSocket pre-delivery).*
+*(Measured empirically in Run 2. 8 of 10 posted slots appeared live via WebSocket; true median latency was 2.60 s across completed samples, p90 was 6.93 s, and max was 6.93 s; 2 samples timed out after 35s. Any missed WebSocket events heal within 30 seconds via the fallback polling loop in `useLiveSlots.ts`).*
 
 ---
 

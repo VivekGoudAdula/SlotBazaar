@@ -2,18 +2,15 @@
  * arkiv/repro/fr005-expiry-boundary.ts
  *
  * Empirical verification of consensus expiration boundary on Arkiv Tiramisu:
- * 1. Creates a test entity expiring in ~60 seconds (ExpirationTime.fromSeconds(60)).
+ * 1. Creates a test entity expiring in ~50 seconds (ExpirationTime.fromSeconds(50)).
  * 2. Reads initial entity.expiresAt (the consensus expiration block number).
- * 3. Polls every 1 to 2 seconds until 5 blocks after expiresAt block.
- *    On each block:
+ * 3. Samples via fast client polling (~300ms intervals) until 5 blocks after expiresAt block.
+ *    Real block gaps between samples are measured and logged (network latency may skip blocks).
+ *    On each sampled block:
  *    (i)  Queries with NO ends_at predicate (project = 'slotbazaar-repro' AND test_batch = testBatch).
  *    (ii) Calls positional pub.getEntity(entityKey).
- * 4. Prints per-block table: | Block | In Query | getEntity Result |
- * 5. Programmatically computes:
- *    - Block where query dropped
- *    - Block where getEntity dropped
- *    - expiresAt block
- *    - Difference
+ * 4. Prints per-block table: | Block | Gap | In Query | getEntity Result | Notes |
+ * 5. Programmatically computes drop points with hedged conclusion (+/- 1 block resolution).
  *
  * Usage:
  * - npx tsx arkiv/repro/fr005-expiry-boundary.ts
@@ -34,6 +31,7 @@ import { http, type Hex } from "viem";
 
 interface PollRow {
   block: number;
+  gap: number;
   inQuery: boolean;
   getEntityResult: string;
 }
@@ -44,6 +42,7 @@ async function main() {
   console.log(`Run Date       : ${runDate}`);
   console.log(`SDK Version    : 0.8.1`);
   console.log(`Viem Version   : 2.57.4`);
+  console.log(`Sampling Mode  : Fast polling (~300ms intervals; gaps logged per sample)`);
 
   const raw = process.env.PRIVATE_KEY;
   if (!raw) throw new Error("PRIVATE_KEY required in .env");
@@ -90,9 +89,9 @@ async function main() {
   console.log(`Consensus Expiration   : expiresAt (${expiresAtBlock}) is treated as exclusive consensus expiration block.`);
 
   const targetEndBlock = expiresAtBlock + 5;
-  console.log(`\n2. Polling every new block until block ${targetEndBlock} (5 blocks after expiry)...`);
-  console.log("\n| Block | In Query | getEntity Result | Notes |");
-  console.log("|:-----:|:--------:|:-----------------|:------|");
+  console.log(`\n2. Sampling via fast polling (~300ms) until block ${targetEndBlock} (~5 blocks past expiry)...`);
+  console.log("\n| Block | Gap | In Query | getEntity Result | Notes |");
+  console.log("|:-----:|:---:|:--------:|:-----------------|:------|");
 
   const tableRows: PollRow[] = [];
   let lastSampledBlock = -1;
@@ -107,6 +106,8 @@ async function main() {
     }
 
     if (currentBlock > lastSampledBlock) {
+      const gap = lastSampledBlock === -1 ? 0 : currentBlock - lastSampledBlock;
+
       // (i) Query with NO ends_at predicate
       let inQuery = false;
       try {
@@ -128,15 +129,19 @@ async function main() {
         getEntityResult = err?.name === "NoEntityFoundError" ? "NoEntityFoundError (Expired)" : (err?.name || "Error");
       }
 
-      const note = currentBlock === expiresAtBlock ? "<-- expiresAt block" : (currentBlock === expiresAtBlock - 1 ? "<-- expiresAt - 1" : "");
+      const notes: string[] = [];
+      if (currentBlock === expiresAtBlock) notes.push("<-- expiresAt block");
+      else if (currentBlock === expiresAtBlock - 1) notes.push("<-- expiresAt - 1");
+      if (gap > 1) notes.push(`gap: ${gap} blks`);
 
       tableRows.push({
         block: currentBlock,
+        gap,
         inQuery,
         getEntityResult,
       });
 
-      console.log(`| ${currentBlock} | ${inQuery ? "YES" : "NO"} | ${getEntityResult} | ${note} |`);
+      console.log(`| ${currentBlock} | ${gap === 0 ? "-" : gap} | ${inQuery ? "YES" : "NO"} | ${getEntityResult} | ${notes.join(", ")} |`);
       lastSampledBlock = currentBlock;
 
       if (currentBlock >= targetEndBlock) {
@@ -144,7 +149,7 @@ async function main() {
       }
     }
 
-    // Fast polling interval: 300ms to catch every block
+    // Fast polling interval: 300ms
     await new Promise((r) => setTimeout(r, 300));
   }
 
@@ -167,7 +172,7 @@ async function main() {
     queryDifferenceFromExpiresAt: queryDiff,
     getEntityDifferenceFromExpiresAt: getEntityDiff,
     queryAndGetEntityAgree: queryAndGetEntityMatch,
-    resolutionObservation: `query and getEntity agree; entity not visible from block expiresAt${queryDiff !== null && queryDiff >= 0 ? `+${queryDiff}` : `${queryDiff}`} (sampling resolution +/- 1 block)`,
+    hedgedConclusion: "query and getEntity agree; entity not visible from block expiresAt-1 or expiresAt depending on sampling resolution (plus or minus 1 block)",
   });
 }
 
