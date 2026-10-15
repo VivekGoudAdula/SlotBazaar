@@ -13,7 +13,7 @@ When building a decentralized bazaar for perishable SME capacity (machine hours,
 ### A. What Breaks on PostgreSQL / Centralized Databases
 * **Operator Monopoly & Feed Manipulation:** In a centralized database, the platform operator controls what users see. The operator can shadow-ban competing MSMEs, artificially demote listings, or front-run attractive time-slot reservations.
 * **Revision of Historical Truth:** Centralized database administrators can alter past job records or fabricate artificial 5-star seller ratings. On SlotBazaar, job completions are sealed by two cryptographic signatures (seller and buyer): SlotBazaar's front end cannot forge another wallet's signed entity; Tiramisu currently has a single sequencer, so Arkiv node operators remain a trust assumption.
-* **Platform Intermediary Fees:** Traditional Web2 aggregators extract middleman fees (only 8.7% of surveyed workshop respondents use online marketplaces, while 15.2% pay agents or middlemen). A decentralized data layer eliminates platform rent extraction.
+* **Platform Intermediary Fees:** Traditional Web2 aggregators extract middleman fees (only 8.7% of our 46 survey respondents use online marketplaces, while 15.2% pay agents or middlemen). A decentralized data layer eliminates platform rent extraction.
 
 ### B. What Breaks on IPFS & Arweave
 * **No Dynamic Attribute Querying:** IPFS and Arweave store static blobs indexed by Content Identifier (CID). You cannot execute structured range queries such as:
@@ -62,7 +62,7 @@ When an Arkiv block reaches timestamp `ends_at`, the entity is dropped automatic
 | **Typed Attribute Filtering** | `fetchLiveSlots`, `fetchAllBookings` | Enables rich client-side and RPC queries (`str`, `u64`, `i32`, `bool`) without centralized middleware. |
 | **Numeric Coordinate Scaling (`e4`)** | Cluster spatial coordinates (`lat_e4`, `lon_e4`) | Scaled integer coordinates (`Math.round(lat * 10000)`) enable native integer range filtering within industrial corridor clusters. |
 | **Single-Signature Batching** | In-app seed & bulk post (`executeBatch`) | Bundles multiple slot entities into a single EVM transaction call (`execute(Operation[])`). MetaMask prompts the user only **once**, preventing signature fatigue. |
-| **Native WebSocket Streams** | Real-time map updates (`watchEntityEvents`) | Subscribes to `wss://` RPC without polling overhead. Pushes newly posted slots to open peer tabs with real empirical latency (8 of 10 appeared; median 2.60 s, p90: 6.93 s; missed events heal within 30s). |
+| **Native WebSocket Streams** | Real-time map updates (`watchEntityEvents`) | Subscribes to `wss://` RPC without polling overhead. Pushes newly posted slots to open peer tabs with real empirical latency measured on localhost (8 of 10 appeared; median 2.60 s, p90: 6.93 s; missed events heal via the 30s fallback poll). |
 
 ---
 

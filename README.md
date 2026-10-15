@@ -17,7 +17,7 @@
 
 ## 1. One-Paragraph Pitch
 
-**SlotBazaar** is a decentralized, real-time discovery and reservation bazaar for perishable industrial capacity (machine tooling hours, intra-city freight trips, and freelance engineering sprints) across India’s manufacturing corridors. 47.8% of surveyed workshop owners find buyers through informal WhatsApp groups and only 8.7% use online marketplaces. Powered entirely by **Arkiv Tiramisu**, SlotBazaar has no platform commission in the app; only network gas (about `0.00014 testnet GLM` per slot). Time slots expire autonomously on-chain without background cron jobs, booking races are decided transparently by the earliest confirmed block, and two-sided cryptographic signatures generate verifiable, portable MSME reputation. SlotBazaar's front end cannot forge another wallet's signed entity; Tiramisu currently has a single sequencer, so Arkiv node operators remain a trust assumption.
+**SlotBazaar** is a decentralized, real-time discovery and reservation bazaar for perishable industrial capacity (machine tooling hours, intra-city freight trips, and freelance engineering sprints) across India’s manufacturing corridors. 47.8% of our 46 survey respondents find buyers through informal WhatsApp groups and only 8.7% use online marketplaces. Powered entirely by **Arkiv Tiramisu**, SlotBazaar has no platform commission in the app; only network gas (about `0.00014 testnet GLM` per slot). Time slots expire autonomously on-chain without background cron jobs, booking races are decided transparently by the earliest confirmed block, and two-sided cryptographic signatures generate verifiable, portable MSME reputation. SlotBazaar's front end cannot forge another wallet's signed entity; Tiramisu currently has a single sequencer, so Arkiv node operators remain a trust assumption.
 
 ---
 
@@ -25,7 +25,7 @@
 
 In the industrial corridors of **Jeedimetla (Hyderabad)**, **Ravi** operates a precision job-shop with two 4-axis CNC milling machines. Between major automotive part batches, his machines frequently sit idle for 2- to 4-hour gaps. Machinery depreciation and high fixed electrical tariff charges continue regardless of whether a spindle is turning.
 
-Three kilometers away in Balanagar, **Meena** runs an assembly unit producing specialized water filtration systems. At 11:30 AM, her workshop’s primary die-cutting machine breaks down right before an urgent delivery deadline. Calling brokers means paying middleman fees (15.2% in our survey rely on agents or middlemen) or waiting on unstructured chats (47.8% use WhatsApp groups).
+Three kilometers away in Balanagar, **Meena** runs an assembly unit producing specialized water filtration systems. At 11:30 AM, her workshop’s primary die-cutting machine breaks down right before an urgent delivery deadline. Calling brokers means paying middleman fees (15.2% of our 46 survey respondents rely on agents or middlemen) or waiting on unstructured chats (47.8% of our 46 survey respondents use WhatsApp groups).
 
 With **SlotBazaar**:
 1. Ravi opens SlotBazaar on his phone. He selects the **Jeedimetla** corridor cluster, chooses *"Machine"*, enters *"CNC Milling Slot (2h available)"*, sets expiry for 2:30 PM (slots range from 15 minutes to 7 days), and signs with MetaMask for `< 0.0002 GLM`.
@@ -68,7 +68,7 @@ With **SlotBazaar**:
 
 > [!NOTE]
 > **How to read this:**  
-> Informal online survey of 46 respondents, shared via [FILL: where I shared it], not representative of all Indian MSMEs. The idle question included "your own time" so freelancers are included; the respondent mix between equipment owners, transport operators, and service freelancers is unknown. Question 3 described "no sign-up" while the app needs no login to browse but requires a wallet signature to post (wallet onboarding is the main adoption gap). Findings reflect the responses of this cohort and must not be generalised to all Indian MSMEs.
+> Informal online survey of 46 respondents, distributed through X, SME contacts, and WhatsApp groups. Respondents were self-selected and the sample is not representative of all Indian MSMEs. The idle question included "your own time" so freelancers are included; the respondent mix between equipment owners, transport operators, and service freelancers is unknown. Question 3 described "no sign-up" while the app needs no login to browse but requires a wallet signature to post (wallet onboarding is the main adoption gap). Findings reflect the responses of this cohort and must not be generalised to all Indian MSMEs.
 
 ---
 
@@ -79,8 +79,8 @@ Follow this exact path to evaluate SlotBazaar end-to-end:
 1. **Browse with Zero Friction:** Open [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app). Browse active industrial capacity across Jeedimetla, Surat, Tiruppur, Morbi, and Ludhiana without connecting a wallet.
 2. **Inspect On-Chain Proofs:** Click any slot marker or list card. In the drawer, expand *"🔐 On-Chain Proof"* and click **Explorer ↗** to verify the raw decentralized entity on [data.arkiv.network](https://data.arkiv.network/?chain=tiramisu).
 3. **Connect MetaMask:** Click **Connect Wallet** (top right). Accept the prompt to switch to **Arkiv Tiramisu testnet** (`chainId: 7738577` / `0x7614d1`). Need testnet GLM? Claim free tokens from the [Arkiv Faucet](https://hub.arkiv.network/faucet).
-4. **Post an Immutable Slot:** Click **+ Post a slot**. Select your industrial cluster and category. Submit your time window (minimum 15 minutes, maximum 7 days). Within **empirical live latency (8 of 10 appeared; median 2.60 s, p90: 6.93 s; missed events heal within 30s)**, the new slot appears live on your screen and all open peer tabs via native Arkiv WebSocket streaming!
-5. **Book from a Second Wallet:** Switch MetaMask to a second account. Click **Book Slot** to create an immutable on-chain reservation entity (30-day lifecycle).
+4. **Post an Append-Only Slot:** Click **+ Post a slot**. Select your industrial cluster and category. Submit your time window (minimum 15 minutes, maximum 7 days). Within **measured live-update latency on localhost (8 of 10 appeared; median 2.60 s, p90: 6.93 s; missed events heal via the 30s fallback poll)**, the new slot appears live on your screen and all open peer tabs via native Arkiv WebSocket streaming!
+5. **Book from a Second Wallet:** Switch MetaMask to a second account. Click **Book Slot** to create an on-chain reservation entity (30-day lifecycle).
 6. **Mutual Job Completion Confirmation:** Open the slot drawer / *My Jobs* on both accounts and click **Confirm Job Completion** to sign and submit mutual on-chain completion entities.
 7. **Instant Verifiable Reputation:** Both transactions are cryptographically verified on-chain, immediately displaying the verified reputation badge (`🏆 1 Verified Job`) on the seller's card!
 
@@ -224,7 +224,7 @@ In adherence to Arkiv friction logging rules, we transparently disclose existing
 | Sample 10 | `0xbd7e29...301b3f` | 6:39:04 pm | N/A | TIMEOUT | Timeout after 35s |
 | **Summary** | **8 of 10 appeared** | — | — | **Median: 2.60 s** | p90: 6.93 s, max: 6.93 s; 2 timeouts |
 
-*(Measured empirically in Run 2. 8 of 10 posted slots appeared live via WebSocket; true median latency was 2.60 s across completed samples, p90 was 6.93 s, and max was 6.93 s; 2 samples timed out after 35s. Any missed WebSocket events heal within 30 seconds via the fallback polling loop in `useLiveSlots.ts`).*
+*(Measured empirically in Run 2 on localhost dev server against Arkiv Tiramisu RPC/WSS. 8 of 10 posted slots appeared live via WebSocket; true median latency was 2.60 s across completed samples, p90 was 6.93 s, and max was 6.93 s; 2 samples timed out after 35s. Any missed WebSocket events heal via the 30-second fallback polling loop in `useLiveSlots.ts`. The deployed production site will reflect this behavior when redeployed).*
 
 ---
 

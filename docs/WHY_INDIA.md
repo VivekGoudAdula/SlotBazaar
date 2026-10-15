@@ -13,8 +13,8 @@ Across India's manufacturing and logistics corridors, micro, small, and medium e
 When an industrial laser cutting machine or multi-head embroidery machine in Surat finishes a textile die or embroidery batch at 11:00 AM, the workshop owner has no frictionless, low-cost way to broadcast that 3 hours of machine availability exist before the evening run. By 2:00 PM, that operational capacity has vanished with zero revenue captured.
 
 ### Why Today's Solutions Fail Indian MSMEs:
-1. **Limited Online Marketplace Penetration:** Only 8.7% of surveyed respondents find buyers via online marketplaces, while 15.2% rely on agents or middlemen who extract fees.
-2. **Reliance on Informal Groups:** 47.8% of surveyed respondents find buyers through WhatsApp groups, where messages are unstructured, difficult to filter by spatial proximity, and unindexed. Another 8.7% report their spare capacity goes completely unused.
+1. **Limited Online Marketplace Penetration:** Only 8.7% of our 46 survey respondents find buyers via online marketplaces, while 15.2% rely on agents or middlemen who extract fees.
+2. **Reliance on Informal Groups:** 47.8% of our 46 survey respondents find buyers through WhatsApp groups, where messages are unstructured, difficult to filter by spatial proximity, and unindexed. Another 8.7% report their spare capacity goes completely unused.
 3. **No Portable Reputation:** When an SME completes a job on time, the trust record stays trapped in private chats. If they move to a new client or platform, their credibility resets to zero.
 
 ---
@@ -83,7 +83,7 @@ SlotBazaar focuses on high-density industrial hubs where spatial proximity enabl
 
 > [!NOTE]
 > **How to read this:**  
-> Informal online survey of 46 respondents, shared via [FILL: where I shared it], not representative of all Indian MSMEs. The idle question included "your own time" so freelancers are included; the respondent mix between equipment owners, transport operators, and service freelancers is unknown. Question 3 described "no sign-up" while the app needs no login to browse but requires a wallet signature to post (wallet onboarding is the main adoption gap). Findings reflect the responses of this cohort and must not be generalised to all Indian MSMEs.
+> Informal online survey of 46 respondents, distributed through X, SME contacts, and WhatsApp groups. Respondents were self-selected and the sample is not representative of all Indian MSMEs. The idle question included "your own time" so freelancers are included; the respondent mix between equipment owners, transport operators, and service freelancers is unknown. Question 3 described "no sign-up" while the app needs no login to browse but requires a wallet signature to post (wallet onboarding is the main adoption gap). Findings reflect the responses of this cohort and must not be generalised to all Indian MSMEs.
 
 ---
 

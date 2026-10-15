@@ -733,7 +733,7 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 - **Immediate Local Pruning**: Client-side timestamp pruning with a 4-second (1-2 block) margin ensures expired slots vanish instantly from the user interface without waiting for the next server poll or indexer sweep.
 
 ### Measured Live-Update Latency Across Two Browser Contexts
-*Measured using two Puppeteer browser contexts with a fresh browser context per sample (one posting a live slot on Arkiv Tiramisu, one observing the live map without refreshing; raw log in [arkiv/repro/logs/latency-run2.txt](arkiv/repro/logs/latency-run2.txt)).*
+*Measured using two Puppeteer browser contexts with a fresh browser context per sample (one posting a live slot on Arkiv Tiramisu, one observing the live map on localhost dev server without refreshing; raw log in [arkiv/repro/logs/latency-run2.txt](arkiv/repro/logs/latency-run2.txt)).*
 
 | Sample | Tx Hash | Confirmed At | DOM Appeared At | Latency (s) | Notes |
 | :---: | :--- | :--- | :--- | :---: | :--- |
@@ -749,7 +749,7 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 | Sample 10 | `0xbd7e29...301b3f` | 6:39:04 pm | N/A | TIMEOUT | Timeout after 35s |
 | **Summary** | **8 of 10 appeared** | — | — | **Median: 2.60 s** | p90: 6.93 s, max: 6.93 s; 2 timeouts |
 
-*(Measured empirically in Run 2. 8 of 10 posted slots appeared live via WebSocket; true median latency was 2.60 s across completed samples, p90 was 6.93 s, and max was 6.93 s; 2 samples timed out after 35s. Any missed WebSocket events heal within 30 seconds via the fallback polling loop in `useLiveSlots.ts`).*
+*(Measured empirically in Run 2 on localhost dev server against Arkiv Tiramisu RPC/WSS. 8 of 10 posted slots appeared live via WebSocket; true median latency was 2.60 s across completed samples, p90 was 6.93 s, and max was 6.93 s; 2 samples timed out after 35s. Any missed WebSocket events heal via the 30-second fallback polling loop in `useLiveSlots.ts`).*
 
 
 

@@ -164,13 +164,13 @@ export function JudgePopover({
             <strong>Browse active cluster slots:</strong> Explore verified time slots across Jeedimetla, Surat, Tiruppur, Morbi, and Ludhiana on the interactive Leaflet map.
           </li>
           <li>
-            <strong>Open a Proof panel & verify on Arkiv:</strong> Click any slot marker or list card. In the drawer, expand <em>"🔐 On-Chain Proof"</em> and click <strong>Explorer ↗</strong> to view the raw immutable entity on Arkiv Tiramisu.
+            <strong>Open a Proof panel & verify on Arkiv:</strong> Click any slot marker or list card. In the drawer, expand <em>"🔐 On-Chain Proof"</em> and click <strong>Explorer ↗</strong> to view the raw entity on Arkiv Tiramisu.
           </li>
           <li>
             <strong>Connect MetaMask:</strong> Click <strong>Connect Wallet</strong> (top right). Switch to Arkiv Tiramisu testnet when prompted.
           </li>
           <li>
-            <strong>Post a slot & see it live:</strong> Click <strong>+ Post a slot</strong>. Submit your time window. Within live-update latency (8 of 10 appeared; median 2.60 s; missed events heal within 30s), the slot appears on your screen and all open peer tabs via native Arkiv WebSocket push!
+            <strong>Post a slot & see it live:</strong> Click <strong>+ Post a slot</strong>. Submit your time window. Within measured live-update latency on localhost (8 of 10 appeared; median 2.60 s; missed events heal via 30s fallback poll), the slot appears on your screen and all open peer tabs via native Arkiv WebSocket push!
           </li>
           <li>
             <strong>Book from a second account:</strong> Switch MetaMask to Account 2. Click <strong>Book Slot</strong> to create an on-chain reservation entity tied to that slot.

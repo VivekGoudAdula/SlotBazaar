@@ -5,7 +5,8 @@ This file tracks every wallet address used in SlotBazaar development.
 
 | Address | Role | Purpose | Notable Tx Hash |
 |---------|------|---------|-----------------|
-| `0x53491aA366E086C19da948669b340317eE6eA6e9` | seed-wallet / phase-0 | Creates synthetic slot entities for Phase 0 testing | `0xe8bca88098bb0525dd4c865f28d757e383f04a44b2ff01fbbb2a1025cd069ed2` |
+| `0x53491aA366E086C19da948669b340317eE6eA6e9` | seed-wallet / phase-0 | Automated test wallet; creates synthetic slot entities for Phase 0, 2B, 5 & 6 testing | `0xe8bca88098bb0525dd4c865f28d757e383f04a44b2ff01fbbb2a1025cd069ed2` |
+| `0xf48E7802a97781cca58750a6e5F1f1ab93763225` | User Seed Wallet (Manual Run) | User-provided wallet used for one manual seed run via UI SeedModal (not used for automated test scripts) | Manual seed run |
 | `0x55513e667106CD4b259A6BE332FeE1D65E253fc8` | Ravi (Seller Demo) | Demo seller persona (posts CNC / transport slots in Jeedimetla) | Two-wallet simulation |
 | `0xD87a9d5962430F06437EE8C126DbF42d11178c5D` | Meena (Buyer Demo) | Demo buyer persona (books slots, signs mutual completion) | Two-wallet simulation |
 

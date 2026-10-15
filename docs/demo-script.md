@@ -55,10 +55,10 @@ Every UI label, button text, and modal heading used in this script has been audi
 
 ---
 
-### [0:45 – 1:15] Segment 3: Seller Posts a Slot & Instant Push (30 seconds, 69 words)
+### [0:45 – 1:15] Segment 3: Seller Posts a Slot & Push Streaming (30 seconds, 68 words)
 * **Visual:** In Profile A (Ravi, `0x5551…3fc8`), click **+ Post a slot**. Select Jeedimetla cluster, CNC category, 2-hour duration. Click **Post to Arkiv**. Confirm MetaMask. In Profile B (Meena, `0xD87a…8c5D`) side-by-side, the slot pin appears live without page refresh.
 * **Narration:**
-  > *"Ravi, a precision workshop owner in Jeedimetla, clicks '+ Post a slot'. He selects a two-hour window for his CNC mill and clicks 'Post to Arkiv'. MetaMask confirms the transaction in one block, costing about 0.00014 testnet GLM. Instantly, Meena’s browser receives the slot via native Arkiv WebSocket streaming. Our measured latency has a 2.60-second median from block confirmation to DOM update, with no polling delay."*
+  > *"Ravi, a precision workshop owner in Jeedimetla, clicks '+ Post a slot'. He selects a two-hour window for his CNC mill and clicks 'Post to Arkiv'. MetaMask confirms the transaction in one block, costing about 0.00014 testnet GLM. Meena’s browser receives the slot via native Arkiv WebSocket streaming. Our measured latency has a 2.60-second median from block confirmation to DOM update on localhost, with no polling delay."*
 
 ---
 

@@ -12,16 +12,17 @@
    - Zero centralized database (no Postgres, MongoDB, or Firebase).
    - Zero custom backend API servers.
    - All state is read directly from and written directly to Arkiv Tiramisu.
-2. **Immutable Append-Only Records**:
-   - Entities are never mutated on-chain.
-   - Booking a slot creates an independent `booking` entity referencing `slot_key`.
-   - Confirming job fulfillment creates independent `completion` entities referencing `booking_key`.
+2. **Append-Only Architectural Records**:
+   - Entities are never mutated on-chain: booking a slot creates an independent `booking` entity referencing `slot_key`, and confirming fulfillment creates independent `completion` entities referencing `booking_key`.
+   - *Immutability Note:* Immutability is enforced at the application architecture level (the application never issues `patchEntity` mutations or updates; state transitions are recorded as new standalone entities). SlotBazaar does not currently set the SDK's protocol-level `readonly` flag (`flags.readonly` defaults to `false`), so immutability is architectural rather than protocol-enforced.
 3. **Indexed Typed Attributes vs. Unindexed Payload**:
    - `attributes`: Typed metadata fields evaluated in query predicates (`eq`, `gt`).
    - `payload`: Opaque UTF-8 JSON containing human-readable titles, descriptions, and notes.
-4. **Autonomous Protocol Expiration**:
-   - Slots expire at their exact `ends_at` Unix timestamp via `ExpirationTime.atDate(new Date(endsAt * 1000))`. The chain purges them automatically at the consensus level.
-   - Bookings and completions persist for **30 days** (`ExpirationTime.atDate(new Date(Date.now() + 30 * 86400 * 1000))`), ensuring counterparty verification and dispute resolution outlive short-duration slots.
+4. **Autonomous Protocol Expiration & Expiry Architecture**:
+   - *UI Countdown:* A local visual timer in the client displaying time remaining until `ends_at`.
+   - *Client-Side Pruning:* `useLiveSlots.ts` filters out ended slots with a 4-second (1-2 block) margin for browser/chain clock skew, ensuring stale listings vanish promptly from the interface.
+   - *Autonomous Network Expiration:* Slots are created with `expires: ExpirationTime.atDate(new Date(endsAt * 1000))`. The Arkiv consensus engine autonomously purges expired entities at block boundaries without off-chain cron bots or garbage-collection jobs.
+   - *History Preservation:* Bookings and completions persist for **30 days** (`ExpirationTime.atDate(new Date(Date.now() + 30 * 86400 * 1000))`), ensuring counterparty verification and reputation evaluation remain fully queryable even after the original slot has expired.
 5. **Cryptographic Authentication (`$creator`)**:
    - Entity creator address is verified directly from the EVM transaction signature, preventing impersonation.
 

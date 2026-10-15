@@ -20,11 +20,11 @@
 * **Secondary:** Censorship Resistance (CROPS Pillar)
 
 ### 4. Builders
-* Vivek Goud Adula (`[DEVFOLIO_USERNAME_PLACEHOLDER]`)
+* Vivek Goud Adula ([@Vivvi_0524](https://devfolio.co/@Vivvi_0524))
 
 ### 5. Project Links
 * **GitHub Repository:** [https://github.com/VivekGoudAdula/SlotBazaar](https://github.com/VivekGoudAdula/SlotBazaar)
-* **Demo Video URL (≤ 3 minutes):** `[VIDEO_URL_PLACEHOLDER: e.g. https://youtu.be/... or Loom]` (Script in [docs/demo-script.md](demo-script.md))
+* **Demo Video URL (≤ 3 minutes):** <!-- TODO: User will supply final unlisted YouTube / Loom URL upon recording --> [TODO: Final demo video URL to be added after recording — see docs/demo-script.md for the 2m 40s script]
 * **Live App URL:** [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app)
 
 ---
@@ -75,7 +75,7 @@ On SlotBazaar, **censorship resistance is enforced by consensus**:
 | **Compound Predicates & Ranges** | `src/lib/arkiv.ts:380-450` | Queries use `and()`, `eq()`, `gt("ends_at", u64(nowSec))` for live cluster and category filtering directly over RPC. |
 | **Autonomous Entity Expiration** | `src/lib/arkiv.ts:1099`, `schema.md` | Slots expire at `ends_at` (15m to 7d); bookings and completions persist for as long as their entities exist (30 days today) to enable post-slot completion and dispute settlement. |
 | **`$creator` Verification** | `src/lib/arkiv.ts:890`, `src/hooks/useLiveSlots.ts` | The reputation engine matches on-chain `$creator` against the slot owner and winning buyer; prevents impersonation and fake self-reviews. |
-| **WebSocket Entity Events** | `src/hooks/useLiveSlots.ts:413-480` | Subscribes via `watchEntityEvents` over `webSocket` transport (omitting `fromBlock` to avoid HTTP polling fallback). Pushes newly posted slots to all peer tabs with real empirical latency (8 of 10 appeared; median 2.60 s, p90: 6.93 s; missed events heal within 30s) on the leading edge. |
+| **WebSocket Entity Events** | `src/hooks/useLiveSlots.ts:413-480` | Subscribes via `watchEntityEvents` over `webSocket` transport (omitting `fromBlock` to avoid HTTP polling fallback). Pushes newly posted slots to all peer tabs with real empirical latency measured on localhost (8 of 10 appeared; median 2.60 s, p90: 6.93 s; missed events heal via the 30s fallback poll) on the leading edge. |
 | **Single-Signature Batch Writes** | `src/components/SeedModal.tsx:38`, `executeBatch` | Bundles up to 20 slots per transaction (`execute(Operation[])`). Prompts MetaMask only once, saving gas and eliminating signature fatigue. |
 | **Client-Side Expiry Guard** | `src/hooks/useLiveSlots.ts:491-505` | 1-second proactive ticker with 4-second client margin exists strictly for browser/chain clock skew, not an Arkiv asymmetry. |
 

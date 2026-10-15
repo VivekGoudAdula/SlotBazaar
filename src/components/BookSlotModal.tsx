@@ -117,6 +117,12 @@ export function BookSlotModal({
       return;
     }
 
+    if (slot.creator.toLowerCase() === address.toLowerCase()) {
+      setErrorNotice("You cannot book your own slot.");
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       setStage("preparing");
 
