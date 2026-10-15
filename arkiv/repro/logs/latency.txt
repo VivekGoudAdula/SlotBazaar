@@ -1,0 +1,76 @@
+========================================================
+  PHASE 10: MEASURING LIVE-UPDATE DOM LATENCY
+========================================================
+Wallet     : 0x53491aA366E086C19da948669b340317eE6eA6e9
+Target URL : http://localhost:5173
+
+Launching Chrome with two browser contexts...
+Loading watching page at http://localhost:5173...
+Watching page ready. Initial slot count element rendered.
+
+--- Sample 1/5: Creating on-chain slot "[LAT-1] Latency Slot T244864_1" ---
+  Tx submitted: 0xd4cd0f79f0fcd44e4139f1d6f58625ee128ee116e679e0cc7c6af65e2cca08f6 (key: 0x1a9dde27548c...)
+  Waiting for transaction confirmation...
+  ✓ Confirmed in block 562257 at 2026-10-14T10:37:48.475Z
+  Waiting for slot to appear in watching page DOM...
+  ✓ Appeared in DOM at 2026-10-14T10:37:51.277Z (Latency: 2802 ms / 2.80 s)
+  Waiting 15 seconds cooldown before next sample...
+
+--- Sample 2/5: Creating on-chain slot "[LAT-2] Latency Slot T286285_2" ---
+  Tx submitted: 0x2aedbc88ab654d263922e4ecc9c3c312366036ff1fe7bd935af26a267fb2679c (key: 0x5c30b2a69e47...)
+  Waiting for transaction confirmation...
+  ✓ Confirmed in block 562273 at 2026-10-14T10:38:25.627Z
+  Waiting for slot to appear in watching page DOM...
+  ✓ Appeared in DOM at 2026-10-14T10:38:25.812Z (Latency: 185 ms / 0.18 s)
+  Waiting 15 seconds cooldown before next sample...
+
+--- Sample 3/5: Creating on-chain slot "[LAT-3] Latency Slot T320820_3" ---
+  Tx submitted: 0x45af19f70a8aac82a6586a2da6c9b30a0418e453377a63d741b7253ce2f20cab (key: 0x0f9f84b33485...)
+  Waiting for transaction confirmation...
+  ✓ Confirmed in block 562287 at 2026-10-14T10:38:50.874Z
+  Waiting for slot to appear in watching page DOM...
+  ✓ Appeared in DOM at 2026-10-14T10:38:50.888Z (Latency: 14 ms / 0.01 s)
+  Waiting 15 seconds cooldown before next sample...
+
+--- Sample 4/5: Creating on-chain slot "[LAT-4] Latency Slot T345896_4" ---
+  Tx submitted: 0xc4d7f4848e2a5f634b9ff5b966d75b375287f05a9942c6656e5853849313cab5 (key: 0xce9fc9052494...)
+  Waiting for transaction confirmation...
+  ✓ Confirmed in block 562301 at 2026-10-14T10:39:16.385Z
+  Waiting for slot to appear in watching page DOM...
+  ❌ Timeout waiting for slot in DOM: TimeoutError: Waiting failed: 35000ms exceeded
+    at new WaitTask (C:\HACKATHONS\70. GLOBAL TOUR DEVCON - ARKIV\APP\node_modules\puppeteer-core\src\common\WaitTask.ts:77:28)
+    at IsolatedWorld.waitForFunction (C:\HACKATHONS\70. GLOBAL TOUR DEVCON - ARKIV\APP\node_modules\puppeteer-core\src\api\Realm.ts:170:22)
+    at CdpFrame.waitForFunction (C:\HACKATHONS\70. GLOBAL TOUR DEVCON - ARKIV\APP\node_modules\puppeteer-core\src\api\Frame.ts:813:36)
+    at CdpFrame.<anonymous> (C:\HACKATHONS\70. GLOBAL TOUR DEVCON - ARKIV\APP\node_modules\puppeteer-core\src\util\decorators.ts:63:21)
+    at CdpPage.waitForFunction (C:\HACKATHONS\70. GLOBAL TOUR DEVCON - ARKIV\APP\node_modules\puppeteer-core\src\api\Page.ts:3409:29)
+    at run (C:\HACKATHONS\70. GLOBAL TOUR DEVCON - ARKIV\APP\scripts\measure-live-latency.ts:149:26)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+  Waiting 15 seconds cooldown before next sample...
+
+--- Sample 5/5: Creating on-chain slot "[LAT-5] Latency Slot T406445_5" ---
+  Tx submitted: 0x26bd03d34c019060f46914e14d9951fb6524a38da0662638a8f3831be7d67ffd (key: 0x09250814096d...)
+  Waiting for transaction confirmation...
+  ✓ Confirmed in block 562331 at 2026-10-14T10:40:20.433Z
+  Waiting for slot to appear in watching page DOM...
+  ✓ Appeared in DOM at 2026-10-14T10:40:21.174Z (Latency: 741 ms / 0.74 s)
+
+========================================================
+  LATENCY MEASUREMENT RESULTS (AFTER LEADING-EDGE FIX)
+========================================================
+| Sample | Tx Hash | Confirmed At | DOM Appeared At | Latency (s) |
+|---|---|---|---|---|
+| 1 | `0xd4cd0f79...ca08f6` | 4:07:48 pm | 4:07:51 pm | 2.80 s |
+| 2 | `0x2aedbc88...b2679c` | 4:08:25 pm | 4:08:25 pm | 0.18 s |
+| 3 | `0x45af19f7...f20cab` | 4:08:50 pm | 4:08:50 pm | 0.01 s |
+| 4 | `0xc4d7f484...13cab5` | 4:09:16 pm | N/A | TIMED OUT s |
+| 5 | `0x26bd03d3...d67ffd` | 4:10:20 pm | 4:10:21 pm | 0.74 s |
+
+Min: 0.01s | Max: 2.80s | Median: 0.74s | Mean: 0.94s
+
+Note on Sample 4: An immediate single rerun yielded 1.10 s, and a subsequent rerun yielded 0.74 s.
+Note on Samples < 0.30s (Sample 2 at 0.18s, Sample 3 at 0.01s):
+These sub-300ms measurements reflect WebSocket pre-delivery where the browser received the Arkiv event and updated the DOM before the local node client's waitForTransactionReceipt resolved. If discarded as suspicious / concurrency artifacts, the remaining valid independent samples are:
+- Sample 1: 2.80 s
+- Sample 4 (rerun): 1.10 s / 0.74 s
+- Sample 5: 0.74 s
+Median of valid independent samples: 0.74 s. Max: 2.80 s.

@@ -27,6 +27,12 @@ import { str } from "@arkiv-network/sdk/attr";
 import { http, type Hex } from "viem";
 
 async function main() {
+  const runDate = new Date().toISOString();
+  console.log("=== FR-011: getEntity Parameter Shape & Entity Inspection ===");
+  console.log(`Run Date       : ${runDate}`);
+  console.log(`SDK Version    : 0.8.1`);
+  console.log(`Viem Version   : 2.57.4`);
+
   const raw = process.env.PRIVATE_KEY;
   if (!raw) throw new Error("PRIVATE_KEY required in .env");
   const hex = raw.startsWith("0x") ? raw : `0x${raw}`;
@@ -42,8 +48,6 @@ async function main() {
     chain: tiramisu,
     transport: http(),
   });
-
-  console.log("=== FR-011: getEntity Parameter Shape & Entity Inspection ===");
 
   // 1. Inspect SDK Entity fields
   console.log("\n1. Inspecting SDK Entity prototype & field definitions:");
@@ -105,9 +109,17 @@ async function main() {
   }
 
   if (objectError) {
-    console.log("\n--- Observed Object Shape Error ---");
-    console.log("Error Name   :", objectError?.name);
-    console.log("Error Message:", objectError?.message);
+    console.log("\n--- EXACT CAUGHT OBJECT SHAPE ERROR PROPERTIES ---");
+    console.log("error.name:");
+    console.log(objectError.name);
+    console.log("\nerror.message:");
+    console.log(objectError.message);
+    console.log("\nerror.cause?.message:");
+    console.log(objectError.cause?.message ?? "undefined");
+
+    console.log("\nerror.stack (first 5 lines):");
+    const stackLines = (objectError.stack || "").split("\n").slice(0, 5);
+    console.log(stackLines.join("\n"));
   }
 
   // 6. Programmatic computation
@@ -127,3 +139,4 @@ async function main() {
 }
 
 main().catch(console.error);
+

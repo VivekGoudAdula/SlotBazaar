@@ -26,6 +26,12 @@ import { str } from "@arkiv-network/sdk/attr";
 import { http, formatEther, type Hex } from "viem";
 
 async function main() {
+  const runDate = new Date().toISOString();
+  console.log("=== FR-003: Uppercase Attribute Name Validation Test ===");
+  console.log(`Run Date       : ${runDate}`);
+  console.log(`SDK Version    : 0.8.1`);
+  console.log(`Viem Version   : 2.57.4`);
+
   const raw = process.env.PRIVATE_KEY;
   if (!raw) throw new Error("PRIVATE_KEY required in .env");
   const hex = raw.startsWith("0x") ? raw : `0x${raw}`;
@@ -42,7 +48,6 @@ async function main() {
     transport: http(),
   });
 
-  console.log("=== FR-003: Uppercase Attribute Name Validation Test ===");
   const balBefore = await pub.getBalance({ address: account.address });
   console.log(`Account        : ${account.address}`);
   console.log(`Balance before : ${formatEther(balBefore)} GLM (${balBefore.toString()} wei)`);
@@ -72,25 +77,40 @@ async function main() {
   console.log(`Gas spent      : ${gasSpentWei.toString()} wei (${formatEther(gasSpentWei)} GLM)`);
 
   if (caughtError) {
-    const errorName = caughtError?.name ?? "UnknownError";
-    const errorMessage = String(caughtError?.message ?? caughtError);
-    const hasIdent32Revert = errorMessage.includes("Ident32InvalidByte");
+    console.log("\n--- EXACT CAUGHT ERROR PROPERTIES ---");
+    console.log("error.name:");
+    console.log(caughtError.name);
+    console.log("\nerror.message:");
+    console.log(caughtError.message);
+    console.log("\nerror.cause?.message:");
+    console.log(caughtError.cause?.message ?? "undefined");
 
-    console.log("\n--- Observed Error Trace ---");
-    console.log(`Error Name     : ${errorName}`);
-    console.log(`Error Snippet  : ${errorMessage.slice(0, 200)}...`);
-    console.log(`Ident32 Revert : ${hasIdent32Revert}`);
+    if (caughtError.cause?.cause?.message) {
+      console.log("\nerror.cause.cause?.message:");
+      console.log(caughtError.cause.cause.message);
+    }
+
+    console.log("\nerror.stack (first 5 lines):");
+    const stackLines = (caughtError.stack || "").split("\n").slice(0, 5);
+    console.log(stackLines.join("\n"));
 
     // Programmatically compute evaluation
     const isGasFree = gasSpentWei === 0n;
     const isRejectedBeforeBroadcast = isGasFree && !txHash;
+    const mentionsCharset = caughtError.message.includes("outside the name charset");
+    const charsetMentionsAtoZ = caughtError.message.includes('"A"-"Z"');
+    const rejectsP = caughtError.message.includes('"P" (0x50)');
+    const containsContradiction = charsetMentionsAtoZ && rejectsP;
 
     console.log("\n--- Programmatic Evaluation ---");
     console.log("Observed Results:", {
       rejectedLocally: isRejectedBeforeBroadcast,
       gasSpentWei: gasSpentWei.toString(),
-      errorName,
-      ident32InvalidByteDetected: hasIdent32Revert,
+      errorName: caughtError.name,
+      mentionsCharset,
+      charsetListsAtoZ: charsetMentionsAtoZ,
+      rejectedPByte: rejectsP,
+      messageSelfContradiction: containsContradiction,
     });
   } else {
     console.log("\n--- Programmatic Evaluation ---");
@@ -99,3 +119,4 @@ async function main() {
 }
 
 main().catch(console.error);
+

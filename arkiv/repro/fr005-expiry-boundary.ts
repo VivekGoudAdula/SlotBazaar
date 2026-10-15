@@ -39,6 +39,12 @@ interface PollRow {
 }
 
 async function main() {
+  const runDate = new Date().toISOString();
+  console.log("=== FR-005: Expiration Boundary Empirical Verification ===");
+  console.log(`Run Date       : ${runDate}`);
+  console.log(`SDK Version    : 0.8.1`);
+  console.log(`Viem Version   : 2.57.4`);
+
   const raw = process.env.PRIVATE_KEY;
   if (!raw) throw new Error("PRIVATE_KEY required in .env");
   const hex = raw.startsWith("0x") ? raw : `0x${raw}`;
@@ -55,13 +61,12 @@ async function main() {
     transport: http(),
   });
 
-  console.log("=== FR-005: Expiration Boundary Empirical Verification ===");
   const testBatch = `probe-fr005-${Date.now()}`;
-  console.log(`Account     : ${account.address}`);
-  console.log(`Batch ID    : ${testBatch}`);
+  console.log(`Account        : ${account.address}`);
+  console.log(`Batch ID       : ${testBatch}`);
 
-  // Create entity expiring in ~60 seconds
-  console.log("\n1. Creating test entity expiring in ~60 seconds...");
+  // 1. Create entity expiring in about 50 seconds (~25 blocks on Tiramisu)
+  console.log("\n1. Creating test entity expiring in ~50 seconds...");
   const createRes = await wallet.createEntity({
     payload: jsonToPayload({ batch: testBatch, purpose: "expiry-boundary-verification" }),
     contentType: "application/json",
@@ -69,33 +74,39 @@ async function main() {
       project: str("slotbazaar-repro"),
       test_batch: str(testBatch),
     },
-    expires: ExpirationTime.fromSeconds(60),
+    expires: ExpirationTime.fromSeconds(50),
   });
 
   const entityKey = (typeof createRes === "string" ? createRes : (createRes as any).entityKey) as Hex;
   console.log(`Created entity key: ${entityKey}`);
 
-  // Fetch initial entity to get exact expiresAt block
+  // 2. Fetch initial entity to get exact expiresAt block
   const initialEntity = await pub.getEntity(entityKey);
   const expiresAtBlock = Number(initialEntity.expiresAt);
   const currentBlockInitial = Number(await (pub as any).getBlockNumber());
 
   console.log(`Entity createdAt block : ${initialEntity.createdAt}`);
   console.log(`Entity expiresAt block : ${expiresAtBlock} (in ~${expiresAtBlock - currentBlockInitial} blocks)`);
+  console.log(`Consensus Expiration   : expiresAt (${expiresAtBlock}) is treated as exclusive consensus expiration block.`);
 
   const targetEndBlock = expiresAtBlock + 5;
-  console.log(`\n2. Polling every 1.5s until block ${targetEndBlock} (5 blocks after expiry)...`);
-  console.log("\n| Block | In Query | getEntity Result |");
-  console.log("|:-----:|:--------:|:-----------------|");
+  console.log(`\n2. Polling every new block until block ${targetEndBlock} (5 blocks after expiry)...`);
+  console.log("\n| Block | In Query | getEntity Result | Notes |");
+  console.log("|:-----:|:--------:|:-----------------|:------|");
 
   const tableRows: PollRow[] = [];
-  let lastLoggedBlock = -1;
+  let lastSampledBlock = -1;
 
   while (true) {
-    const currentBlock = Number(await (pub as any).getBlockNumber());
+    let currentBlock = 0;
+    try {
+      currentBlock = Number(await (pub as any).getBlockNumber());
+    } catch {
+      await new Promise((r) => setTimeout(r, 250));
+      continue;
+    }
 
-    // Only record once per block
-    if (currentBlock !== lastLoggedBlock) {
+    if (currentBlock > lastSampledBlock) {
       // (i) Query with NO ends_at predicate
       let inQuery = false;
       try {
@@ -105,7 +116,7 @@ async function main() {
           .where(eq("test_batch", str(testBatch)))
           .fetch();
         inQuery = queryPage.entities.some((e) => e.key?.toLowerCase() === entityKey.toLowerCase());
-      } catch (err: any) {
+      } catch {
         inQuery = false;
       }
 
@@ -117,22 +128,24 @@ async function main() {
         getEntityResult = err?.name === "NoEntityFoundError" ? "NoEntityFoundError (Expired)" : (err?.name || "Error");
       }
 
+      const note = currentBlock === expiresAtBlock ? "<-- expiresAt block" : (currentBlock === expiresAtBlock - 1 ? "<-- expiresAt - 1" : "");
+
       tableRows.push({
         block: currentBlock,
         inQuery,
         getEntityResult,
       });
 
-      console.log(`| ${currentBlock} | ${inQuery ? "YES" : "NO"} | ${getEntityResult} |`);
-      lastLoggedBlock = currentBlock;
+      console.log(`| ${currentBlock} | ${inQuery ? "YES" : "NO"} | ${getEntityResult} | ${note} |`);
+      lastSampledBlock = currentBlock;
 
       if (currentBlock >= targetEndBlock) {
         break;
       }
     }
 
-    // Sleep 1500 ms
-    await new Promise((r) => setTimeout(r, 1500));
+    // Fast polling interval: 300ms to catch every block
+    await new Promise((r) => setTimeout(r, 300));
   }
 
   // 3. Programmatically compute drop blocks
@@ -144,15 +157,19 @@ async function main() {
 
   const queryDiff = blockQueryDropped !== null ? blockQueryDropped - expiresAtBlock : null;
   const getEntityDiff = blockGetEntityDropped !== null ? blockGetEntityDropped - expiresAtBlock : null;
+  const queryAndGetEntityMatch = blockQueryDropped === blockGetEntityDropped;
 
   console.log("\n--- Programmatic Expiration Boundary Evaluation ---");
-  console.log({
+  console.log("Observed Boundary Results:", {
     expiresAtBlock,
     blockQueryDropped,
     blockGetEntityDropped,
     queryDifferenceFromExpiresAt: queryDiff,
     getEntityDifferenceFromExpiresAt: getEntityDiff,
+    queryAndGetEntityAgree: queryAndGetEntityMatch,
+    resolutionObservation: `query and getEntity agree; entity not visible from block expiresAt${queryDiff !== null && queryDiff >= 0 ? `+${queryDiff}` : `${queryDiff}`} (sampling resolution +/- 1 block)`,
   });
 }
 
 main().catch(console.error);
+

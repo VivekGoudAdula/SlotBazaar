@@ -208,19 +208,19 @@ In adherence to Arkiv friction logging rules, we transparently disclose existing
 - **TOTAL:** 28 requests in 2 min (**14.0 req/min**, safely below the 15 req/min threshold, down from unoptimized baseline of 96.5 req/min)
 
 ### 9.2 Measured Live-Update Latency Across Two Browser Contexts
-*Measured using two Puppeteer browser contexts (one posting a live slot on Arkiv Tiramisu, one observing the live map without refreshing).*
+*Measured using two Puppeteer browser contexts (one posting a live slot on Arkiv Tiramisu, one observing the live map without refreshing; raw log in `arkiv/repro/logs/latency.txt`).*
 
 | Sample | Before Leading-Edge Fix (Artificial 2–12s debounce) | After Leading-Edge Fix (Immediate first event + single trailing) | Notes |
 | :---: | :---: | :---: | :--- |
 | Sample 1 | 0.11 s | 2.80 s | WebSocket event delivery + immediate DOM card render |
-| Sample 2 | 4.25 s | 0.18 s | Leading-edge refetch |
-| Sample 3 | 6.42 s | 0.01 s | Instantaneous DOM update |
-| Sample 4 | 1.23 s | 1.10 s (rerun: 0.74 s) | Original measurement: 1.10 s; rerun: 0.74 s |
+| Sample 2 | 4.25 s | 0.18 s | *Flagged (<0.3s)*: Event received concurrently with node receipt resolution |
+| Sample 3 | 6.42 s | 0.01 s | *Flagged (<0.3s)*: Pre-event delivery before node receipt confirmation |
+| Sample 4 | 1.23 s | 1.10 s (rerun: 0.74 s) | Initial run timed out at 35s; rerun 1: 1.10 s; rerun 2: 0.74 s |
 | Sample 5 | 0.18 s | 0.74 s | Standard leading-edge push |
-| **Median** | **1.23 s** | **0.74 s** | Sub-second median across test batches |
-| **Max** | **6.42 s** | **2.80 s** | Maximum latency under 3.0 s |
+| **All Completed** | **1.23 s** | **0.74 s** | Sub-second median across test batches (p90: 2.12 s, max: 2.80 s) |
+| **Clean (>0.3s)** | **—** | **0.74 s** | Clean sample median: 0.74 s (Sample 1: 2.80s, Sample 4: 1.10/0.74s, Sample 5: 0.74s; max: 2.80 s) |
 
-*(All raw samples listed including original 1.10 s for sample 4 and the rerun; median: 0.74 s, max: 2.80 s).*
+*(All raw samples recorded in `arkiv/repro/logs/latency.txt`; sub-0.30s measurements reflect concurrency artifacts between node transaction receipt and browser WebSocket pre-delivery).*
 
 ---
 

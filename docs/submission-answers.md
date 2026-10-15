@@ -136,8 +136,8 @@ Every submission must pass all 11 gates to be eligible for scoring:
 | **1. Why India? (Best Indian Use Case)** | 25 | Names real MSME users (precision job shops in Jeedimetla, Surat, Tiruppur) losing idle machine hours. Solves high broker cuts and lack of portable reputation. Works live today. Documented in [docs/WHY_INDIA.md](WHY_INDIA.md). |
 | **1 (Alt). Why Censorship Resistance?** | 25 | Proves data is queryable by anyone via public Arkiv RPCs without our backend. Platform operators cannot alter transaction records or manipulate ratings. Documented in [docs/WHY_ARKIV.md](WHY_ARKIV.md). |
 | **2. Why Arkiv?** | 25 | Thoroughly analyzes why PostgreSQL, IPFS/Arweave, Subgraphs, and custom APIs fail. Explains why autonomous entity expiration IS the product. Discloses what deliberately stays off Arkiv (PII, map tiles, transient UI state). Documented in [docs/WHY_ARKIV.md](WHY_ARKIV.md). |
-| **3. How You Use Arkiv** | 25 | Every feature tied to core UX: typed attributes vs payload, compound range predicates, autonomous expiration (15m to 7d slots, 30d bookings/completions), `$creator` reputation verification, `watchEntityEvents` WebSocket live updates, single-sig `executeBatch` writes (up to 20 slots/tx). 44 unit tests verify behavior. |
-| **4. Friction Report** | 25 | 17 comprehensive friction entries (5 genuine SDK findings, 3 doc gaps, 9 notes/withdrawn) in [arkiv/friction.md](../arkiv/friction.md). Includes exact error text, SDK/viem versions, minimal reproduction code, and upstream issue pointers. |
+| **3. How You Use Arkiv** | 25 | Every feature tied to core UX: typed attributes vs payload, compound range predicates, autonomous expiration (15m to 7d slots, 30d bookings/completions), `$creator` reputation verification, `watchEntityEvents` WebSocket live updates, single-sig `executeBatch` writes (up to 20 slots/tx). 46 unit tests verify behavior. |
+| **4. Friction Report** | 25 | 17 comprehensive friction entries (6 small SDK and DX findings, 1 cosmetic typo, 10 notes/withdrawn) in [arkiv/friction.md](../arkiv/friction.md). Includes exact error text, SDK/viem versions, minimal reproduction code, and upstream issue pointers. |
 
 ---
 
@@ -154,6 +154,6 @@ Every submission must pass all 11 gates to be eligible for scoring:
 | **Completion Entity Expiry** | 30 days (`30 * 86400 * 1000ms`) | `src/lib/arkiv.ts:1222` |
 | **Real Batch Write Limit** | 20 slots per tx | `src/components/SeedModal.tsx:38` (`REAL_BATCH_LIMIT`) |
 | **Max Live Synthetic Cap** | 40 slots | `src/components/SeedModal.tsx:37` (`MAX_LIVE_SYNTHETIC_CAP`) |
-| **Pure Unit Test Count** | 44 tests (21 Phase 4 + 23 Phase 5) | `npm run test:unit` |
+| **Pure Unit Test Count** | 46 tests (21 Phase 4 + 25 Phase 5) | `npm run test:unit` |
 | **Foreground RPC Load** | 14.0 req/min (14 per min, CDP measured) | `README.md:196`, `friction.md` |
 | **Hidden Tab RPC Load** | 1.0 req/min (CDP measured) | `README.md:196`, `friction.md` |

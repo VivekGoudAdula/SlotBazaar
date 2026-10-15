@@ -84,7 +84,7 @@ export function parseFrictionDoc(): { entries: FrictionEntry[]; content: string 
     } else if (e.id === "FR-003") {
       e.category = "sdk";
       e.severity = "Minor";
-      e.status = "No gas spent; node-side simulation surfaces as generic EntityMutationError; SDK does not pre-validate";
+      e.status = '0 gas spent; node simulation reverts; error message lists "A"-"Z" as allowed while rejecting uppercase';
       e.linkOrNote = "[Issue #1 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-silently-burns-gas-before-on-chain-rejection-fr-003)";
     } else if (e.id === "FR-004") {
       e.category = "sdk";
@@ -119,7 +119,7 @@ export function parseFrictionDoc(): { entries: FrictionEntry[]; content: string 
         e.linkOrNote = "Standard JavaScript BigInt behavior";
       } else if (e.id === "FR-005") {
         e.severity = "Withdrawn (Note)";
-        e.status = "Withdrawn as friction: early drop came from client ends_at > now predicate";
+        e.status = "query and getEntity agree; entity not visible from block expiresAt-1 or expiresAt depending on sampling resolution (plus or minus 1 block)";
         e.linkOrNote = "Clock skew / client predicate note (raw log in Notes)";
       } else if (e.id === "FR-007") {
         e.severity = "Papercut";
@@ -135,7 +135,7 @@ export function parseFrictionDoc(): { entries: FrictionEntry[]; content: string 
         e.linkOrNote = "Schema v1 design limitation";
       } else if (e.id === "FR-011") {
         e.severity = "Withdrawn (Note)";
-        e.status = "Withdrawn: our own call-shape error ({ key } vs key)";
+        e.status = "Withdrawn: positional getEntity(key) succeeds; passing { key } throws Invalid key value (not 0x-prefixed hex)";
         e.linkOrNote = "Withdrawn; positional getEntity(key) succeeds";
       } else if (e.id === "FR-013") {
         e.severity = "Economic Note";

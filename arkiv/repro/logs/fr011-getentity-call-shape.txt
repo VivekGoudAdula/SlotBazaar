@@ -1,0 +1,62 @@
+﻿=== FR-011: getEntity Parameter Shape & Entity Inspection ===
+Run Date       : 2026-10-15T10:41:47.192Z
+SDK Version    : 0.8.1
+Viem Version   : 2.57.4
+
+1. Inspecting SDK Entity prototype & field definitions:
+SDK Entity instance keys: [
+  'key',
+  'owner',
+  'creator',
+  'createdAt',
+  'updatedAt',
+  'expiresAt',
+  'creationFlags',
+  'contentType',
+  'payload',
+  'attributeSchema',
+  'attributes'
+]
+
+2. Creating live test entity on Tiramisu...
+Created entity key: 0x8f2621c8dd46b1896a9185a12ab7db963d0ca56926c00c9d6f59d6f989f965fd
+
+3. Testing positional call: pub.getEntity(entityKey)...
+
+4. Testing object shape: pub.getEntity({ key: entityKey })...
+
+--- Observed Live Entity Fields ---
+key        : 0x8f2621c8dd46b1896a9185a12ab7db963d0ca56926c00c9d6f59d6f989f965fd
+creator    : 0x53491aA366E086C19da948669b340317eE6eA6e9
+owner      : 0x53491aA366E086C19da948669b340317eE6eA6e9
+createdAt  : 605574 (block number)
+updatedAt  : 605574 (block number)
+expiresAt  : 605634 (block number)
+contentType: application/json
+
+--- EXACT CAUGHT OBJECT SHAPE ERROR PROPERTIES ---
+error.name:
+InvalidValueError
+
+error.message:
+Invalid key value {"key":"0x8f2621c8dd46b1896a9185a12ab7db963d0ca56926c00c9d6f59d6f989f965fd"}: not 0x-prefixed hex.
+
+error.cause?.message:
+undefined
+
+error.stack (first 5 lines):
+InvalidValueError: Invalid key value {"key":"0x8f2621c8dd46b1896a9185a12ab7db963d0ca56926c00c9d6f59d6f989f965fd"}: not 0x-prefixed hex.
+    at asFixedHex (C:\HACKATHONS\70. GLOBAL TOUR DEVCON - ARKIV\APP\node_modules\@arkiv-network\sdk\src\attr\values.ts:382:11)
+    at key (C:\HACKATHONS\70. GLOBAL TOUR DEVCON - ARKIV\APP\node_modules\@arkiv-network\sdk\src\attr\values.ts:354:27)
+    at getEntity (C:\HACKATHONS\70. GLOBAL TOUR DEVCON - ARKIV\APP\node_modules\@arkiv-network\sdk\src\actions\public\getEntity.ts:23:23)
+    at Object.getEntity (C:\HACKATHONS\70. GLOBAL TOUR DEVCON - ARKIV\APP\node_modules\@arkiv-network\sdk\src\clients\decorators\arkivPublic.ts:309:30)
+
+--- Programmatic Evaluation ---
+Observed Results: {
+  positionalCallSuccess: true,
+  objectCallFailed: true,
+  objectErrorMessage: 'Invalid key value {"key":"0x8f2621c8dd46b1896a9185a12ab7db963d0ca56926c00c9d6f59d6f989f965fd"}: not 0x-prefixed hex.',
+  expiresAtType: 'bigint',
+  expiresAtBlockNumber: '605634',
+  expiresAtIsBlockNumber: true
+}

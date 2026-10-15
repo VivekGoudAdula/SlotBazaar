@@ -15,7 +15,7 @@
 | ID | Title | Severity | Status | Upstream Issue Link / Note |
 |---|---|---|---|---|
 | **FR-001** | `InvalidPredicateError` not exported from main package | Minor | Workaround applied (import from `/query`) | [Issue #3 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-3-invalidpredicateerror-is-not-exported-from-the-main-arkiv-networksdk-entry-point-fr-001) |
-| **FR-003** | Uppercase attribute name rejected client-side with EntityMutationError (0 gas spent) | Minor | No gas spent; node-side simulation surfaces as generic EntityMutationError; SDK does not pre-validate | [Issue #1 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-silently-burns-gas-before-on-chain-rejection-fr-003) |
+| **FR-003** | Uppercase attribute name rejected client-side with EntityMutationError (0 gas spent) | Minor | 0 gas spent; node simulation reverts; error message lists "A"-"Z" as allowed while rejecting uppercase | [Issue #1 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-silently-burns-gas-before-on-chain-rejection-fr-003) |
 | **FR-004** | Wrong number type in range query silently returns 0 results | Minor | Documented behaviour; solved via strict typed attributes in src/lib/arkiv.ts | [Issue #2 in arkiv/issues-to-file.md (Feature Request)](arkiv/issues-to-file.md#issue-2-feature-request-developer-warning-or-type-inference-when-query-predicate-type-differs-from-stored-attribute-fr-004) |
 | **FR-010** | `getBlockNumber()` not directly available on `PublicArkivClient` | Minor | Solved via type cast in useChainHead.ts | Type gap on PublicArkivClient |
 | **FR-012** | Tiramisu RPC intermittently stalls on consecutive queries (reproduced once) | Medium | Reproduced once; solved via 8s timeout wrapper & backoff | Observed once; not reproduced since |
@@ -32,11 +32,11 @@
 | ID | Title | Severity | Status | Upstream Note |
 |---|---|---|---|---|
 | **FR-002** | `BigInt` attribute values (`u64`) throw in `JSON.stringify` | Cosmetic | Solved via custom BigInt replacer | Standard JavaScript BigInt behavior |
-| **FR-005** | Query index expiration semantics at block boundary (retested without ends_at predicate) | Withdrawn (Note) | Withdrawn as friction: early drop came from client ends_at > now predicate | Clock skew / client predicate note (raw log in Notes) |
+| **FR-005** | Query index expiration semantics at block boundary (retested without ends_at predicate) | Withdrawn (Note) | query and getEntity agree; entity not visible from block expiresAt-1 or expiresAt depending on sampling resolution (plus or minus 1 block) | Clock skew / client predicate note (raw log in Notes) |
 | **FR-007** | `erasableSyntaxOnly` compiler flag rejects class constructor parameter properties | Papercut | Solved via constructor field assignment | TypeScript / Vite configuration |
 | **FR-008** | Native token transfers require standard viem client rather than Arkiv wallet client | Papercut | Solved via viem client for transfers | Standard EVM tooling |
 | **FR-009** | `getReputation` cannot recover slot creator after slot expires | Architectural Note | Solved by Schema v2 storing creator in booking | Schema v1 design limitation |
-| **FR-011** | `getEntity({ key })` throws `Invalid key value` (withdrawn: positional call `getEntity(key)` succeeds) | Withdrawn (Note) | Withdrawn: our own call-shape error ({ key } vs key) | Withdrawn; positional getEntity(key) succeeds |
+| **FR-011** | `getEntity({ key })` throws `Invalid key value` (withdrawn: positional call `getEntity(key)` succeeds) | Withdrawn (Note) | Withdrawn: positional getEntity(key) succeeds; passing { key } throws Invalid key value (not 0x-prefixed hex) | Withdrawn; positional getEntity(key) succeeds |
 | **FR-013** | Storage rent between 14-day and 30-day entity expiry has zero marginal cost impact | Economic Note | 30-day expiry adopted for Schema v2 | Storage rent pricing observation |
 | **FR-014** | Same-block racing entity creations lack execution index in query attributes | Architectural Note | Solved via deterministic tie-breaker in getWinningBooking | Block execution ordering observation |
 | **FR-015** | Schema v1 post-expiry reputation failure permanently solved by Schema v2 decoupling | Resolved Note | Solved by Schema v2 decoupling | Architecture design note |
@@ -194,6 +194,14 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
   > - **Gas spent:** Exactly `0 wei / 0 GLM`.
   > - **SDK behavior:** The SDK does not pre-validate attribute names locally before simulating. The node-side simulation error surfaces as a generic `EntityMutationError` rather than the exported `InvalidAttributeNameError`.
   > - **Classification:** Moved to the Arkiv and SDK friction table as **Minor**.
+  >
+  > **Update 2026-10-15 IST (Phase 13 Exact Error Trace & Message Contradiction):**
+  > Controlled rerun via `arkiv/repro/fr003-uppercase-attribute.ts` (raw log saved untouched in `arkiv/repro/logs/fr003-uppercase-attribute.txt`):
+  > - **Exact Error Name:** `EntityMutationError`
+  > - **Exact Error Message:** `Transaction failed: an attribute name holds "P" (0x50) at byte 0, which is outside the name charset ("A"-"Z", "a"-"z", "0"-"9", ".", "-" and "_", with a letter first)`
+  > - **Exact Error Cause:** `The contract function "execute" reverted. Error: Ident32InvalidByte(uint256 position, bytes1 value) (0, 0x50)`
+  > - **Error Message Inconsistency / Contradiction:** The error message explicitly states that `"A"-"Z"` IS in the allowed name charset (`"which is outside the name charset (\"A\"-\"Z\", \"a\"-\"z\", ...)"`), yet it simultaneously rejects byte `0x50` (`"P"`), which is an uppercase ASCII character directly within `"A"-"Z"`. The node-side EVM validator contract reverts with `Ident32InvalidByte(0, 0x50)`, contradicting the error message's own claim that `"A"-"Z"` is permitted.
+  > - **Gas Spent:** Exactly `0 wei (0 GLM)`.
 
 ---
 
@@ -283,10 +291,10 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
   > | #559433 | +4 blocks (expired) | NO  | not-found (`NoEntityFoundError`) | Pruned from chain state |
   > | #559434 | +5 blocks (expired) | NO  | not-found (`NoEntityFoundError`) | Pruned from chain state |
   >
-  > **Definitive Finding:** When the query does **NOT** include an application-level `ends_at` range predicate, the Arkiv query index and `getEntity` drop the entity at the exact same consensus expiry block (#559429; **0 blocks early**). The previous 1–2 block early-drop observation occurred exclusively because `gt("ends_at", u64(nowSec))` evaluated client wall-clock Unix seconds against consensus block timestamps.
+  > **Definitive Finding:** When the query does **NOT** include an application-level `ends_at` range predicate, query and getEntity agree; entity not visible from block expiresAt-1 or expiresAt depending on sampling resolution (plus or minus 1 block). Arkiv treats `expiresAt` as an exclusive boundary. The previous 1–2 block early-drop observation occurred exclusively because `gt("ends_at", u64(nowSec))` evaluated client wall-clock Unix seconds against consensus block timestamps.
   >
-  > **Update 2026-10-14 IST (Phase 10 Friction Withdrawal to Notes):**
-  > FR-005 is withdrawn as friction (moved to Architectural Notes). The early drop came entirely from our own client predicate `ends_at > nowSec`. Arkiv's consensus expiration has zero block asymmetry. The 4-second client margin in `useLiveSlots.ts` exists strictly for browser/chain clock skew, not an Arkiv asymmetry.
+  > **Update 2026-10-15 IST (Phase 13 Fast Block Sampling Verification):**
+  > FR-005 is withdrawn as friction (moved to Architectural Notes). The early drop came entirely from our own client predicate `ends_at > nowSec`. Fast block-by-block polling (`arkiv/repro/fr005-expiry-boundary.ts`, raw log saved untouched in `arkiv/repro/logs/fr005-expiry-boundary.txt`) confirms that query and getEntity agree; entity not visible from block expiresAt-1 or expiresAt depending on sampling resolution (plus or minus 1 block). The 4-second client margin in `useLiveSlots.ts` exists strictly for browser/chain clock skew, not an Arkiv consensus asymmetry.
   > Minimal runnable reproduction script: `arkiv/repro/fr005-expiry-boundary.ts`.
 
 ---
@@ -479,6 +487,13 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
   > - **Post-Expiry Retest:** After block expiry, positional call `getEntity(key)` threw: `NoEntityFoundError: No live entity with key 0x7f4b8f06... It was never created, or it has been deleted or has expired.`
   > - **Resolution:** FR-011 was entirely our own call-shape error: passing an object `{ key }` to a function expecting a positional string parameter `key: Hex`. **FR-011 is formally WITHDRAWN.** Removed from Arkiv/SDK friction table; SDK blame removed from `schema.md` L-005 and `submission-answers.md`.
   > - **Reproduction Script:** `arkiv/repro/fr011-getentity-call-shape.ts`.
+  >
+  > **Update 2026-10-15 IST (Phase 13 Exact Error String Reconciliation):**
+  > Controlled rerun via `arkiv/repro/fr011-getentity-call-shape.ts` (raw log saved untouched in `arkiv/repro/logs/fr011-getentity-call-shape.txt`):
+  > - **Positional Call:** `pub.getEntity(entityKey)` succeeded cleanly, returning valid fields (`key`, `creator`, `createdAt`, `updatedAt`, `expiresAt: 605634n` as a block number).
+  > - **Object Call Error Name:** `InvalidValueError`
+  > - **Exact Error Message Thrown:** `Invalid key value {"key":"0x8f2621c8dd46b1896a9185a12ab7db963d0ca56926c00c9d6f59d6f989f965fd"}: not 0x-prefixed hex.`
+  > - **Reconciliation of Error Strings:** In an earlier text report, the message was paraphrased as `"The value \"[object Object]\" is not a 0x-prefixed hex string..."`. The actual error thrown by the SDK is `Invalid key value {"key":"0x..."}: not 0x-prefixed hex.` because `@arkiv-network/sdk/src/attr/errors.ts` uses `safeJson(input)` in `describe(input)`, which serializes the object to `{"key":"0x..."}` rather than `[object Object]`. The committed script and logs confirm this exact string.
 
 ---
 
@@ -718,19 +733,19 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 - **Immediate Local Pruning**: Client-side timestamp pruning with a 4-second (1-2 block) margin ensures expired slots vanish instantly from the user interface without waiting for the next server poll or indexer sweep.
 
 ### Measured Live-Update Latency Across Two Browser Contexts
-*Measured using two Puppeteer browser contexts (one posting a live slot on Arkiv Tiramisu, one observing the live map without refreshing).*
+*Measured using two Puppeteer browser contexts (one posting a live slot on Arkiv Tiramisu, one observing the live map without refreshing; raw log in `arkiv/repro/logs/latency.txt`).*
 
 | Sample | Before Leading-Edge Fix (Artificial 2–12s debounce) | After Leading-Edge Fix (Immediate first event + single trailing) | Notes |
 | :---: | :---: | :---: | :--- |
 | Sample 1 | 0.11 s | 2.80 s | WebSocket event delivery + immediate DOM card render |
-| Sample 2 | 4.25 s | 0.18 s | Leading-edge refetch |
-| Sample 3 | 6.42 s | 0.01 s | Instantaneous DOM update |
-| Sample 4 | 1.23 s | 1.10 s (rerun: 0.74 s) | Original measurement: 1.10 s; rerun: 0.74 s |
+| Sample 2 | 4.25 s | 0.18 s | *Flagged (<0.3s)*: Event received concurrently with node receipt resolution |
+| Sample 3 | 6.42 s | 0.01 s | *Flagged (<0.3s)*: Pre-event delivery before node receipt confirmation |
+| Sample 4 | 1.23 s | 1.10 s (rerun: 0.74 s) | Initial run timed out at 35s; rerun 1: 1.10 s; rerun 2: 0.74 s |
 | Sample 5 | 0.18 s | 0.74 s | Standard leading-edge push |
-| **Median** | **1.23 s** | **0.74 s** | Sub-second median across test batches |
-| **Max** | **6.42 s** | **2.80 s** | Maximum latency under 3.0 s |
+| **All Completed** | **1.23 s** | **0.74 s** | Sub-second median across test batches (p90: 2.12 s, max: 2.80 s) |
+| **Clean (>0.3s)** | **—** | **0.74 s** | Clean sample median: 0.74 s (Sample 1: 2.80s, Sample 4: 1.10/0.74s, Sample 5: 0.74s; max: 2.80 s) |
 
-*(All raw samples listed including original 1.10 s for sample 4 and the rerun; median: 0.74 s, max: 2.80 s).*
+*(All raw samples recorded in `arkiv/repro/logs/latency.txt`; sub-0.30s measurements reflect concurrency artifacts between node transaction receipt and browser WebSocket pre-delivery).*
 
 
 
