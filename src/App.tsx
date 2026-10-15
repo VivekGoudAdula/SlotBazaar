@@ -726,19 +726,19 @@ function AppInner(): React.ReactElement {
           }
           onOpenSeedDemo={() => setIsSeedOpen(true)}
         />
-      </main>
 
-      {/* Slot Drawer modal for detailed booking / viewing */}
-      <SlotDrawer
-        slot={selectedSlot}
-        onClose={handleClose}
-        winningBooking={selectedSlot ? winningBookingsBySlot.get(selectedSlot.key.toLowerCase()) : undefined}
-        userBookings={selectedSlot ? bookingsBySlot.get(selectedSlot.key.toLowerCase()) ?? [] : []}
-        completions={selectedSlot ? completions : []}
-        sellerReputation={selectedSlot ? reputationByAddress.get(selectedSlot.creator.toLowerCase()) : undefined}
-        onOpenBook={handleOpenBook}
-        onOpenConfirmJob={handleOpenConfirmJob}
-      />
+        {/* Slot Drawer modal for detailed booking / viewing */}
+        <SlotDrawer
+          slot={selectedSlot}
+          onClose={handleClose}
+          winningBooking={selectedSlot ? winningBookingsBySlot.get(selectedSlot.key.toLowerCase()) : undefined}
+          userBookings={selectedSlot ? bookingsBySlot.get(selectedSlot.key.toLowerCase()) ?? [] : []}
+          completions={selectedSlot ? completions : []}
+          sellerReputation={selectedSlot ? reputationByAddress.get(selectedSlot.creator.toLowerCase()) : undefined}
+          onOpenBook={handleOpenBook}
+          onOpenConfirmJob={handleOpenConfirmJob}
+        />
+      </main>
 
       {/* Post Slot Modal */}
       <PostSlotModal

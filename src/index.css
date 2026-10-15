@@ -1403,10 +1403,10 @@ body {
 ───────────────────────────────────────────────────────────── */
 
 .drawer-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: rgba(27, 26, 23, 0.4);
-  z-index: var(--z-drawer);
+  z-index: 1000;
   cursor: pointer;
   animation: fade-in 150ms ease-out;
 }
@@ -1417,7 +1417,7 @@ body {
 }
 
 .drawer {
-  position: fixed;
+  position: absolute;
   right: 0;
   top: 0;
   bottom: 0;
@@ -1426,7 +1426,7 @@ body {
   background: var(--c-paper);
   border-left: var(--border-3);
   box-shadow: -8px 0 0 var(--c-ink);
-  z-index: calc(var(--z-drawer) + 1);
+  z-index: 1001;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1768,7 +1768,7 @@ body {
 @media (max-width: 640px) {
   .header__tagline { display: none; }
   .header__chain-badge { display: none; }
-  .drawer { width: 100vw; }
+  .drawer { width: 100vw; max-width: 100%; }
   .filter-bar { padding: var(--sp-2) var(--sp-3); }
   .connect-prompt { font-size: 0.75rem; padding: var(--sp-3) var(--sp-4); flex-wrap: wrap; }
   .hero-strip__headline { font-size: 1rem; }
