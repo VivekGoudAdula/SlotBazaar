@@ -173,20 +173,25 @@ export function parseArkivError(err: unknown, defaultCode: ArkivErrorCode = "UNK
 // 3. IDEMPOTENCY GUARD
 // ─────────────────────────────────────────────────────────────────────────────
 
-let isGlobalWritePending = false;
+let globalWritePendingSince = 0;
+let currentWriteAction: string | null = null;
+const WRITE_LOCK_TIMEOUT_MS = 60_000;
 
 function acquireWriteLock(actionName: string): void {
-  if (isGlobalWritePending) {
+  const now = Date.now();
+  if (globalWritePendingSince > 0 && (now - globalWritePendingSince) < WRITE_LOCK_TIMEOUT_MS) {
     throw new ArkivError(
       "CONCURRENT_SUBMISSION",
-      `Cannot execute ${actionName}: an on-chain transaction is already in progress.`
+      `Cannot execute ${actionName}: an on-chain transaction (${currentWriteAction || "write"}) is currently awaiting wallet approval or confirmation on-chain.`
     );
   }
-  isGlobalWritePending = true;
+  globalWritePendingSince = now;
+  currentWriteAction = actionName;
 }
 
 function releaseWriteLock(): void {
-  isGlobalWritePending = false;
+  globalWritePendingSince = 0;
+  currentWriteAction = null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1695,25 +1700,27 @@ export async function extendProofEntity(
   daysFromNow: number = 60,
   publicClient: PublicArkivClient = getArkivPublicClient()
 ): Promise<ExtendProofOutput> {
+  // 1. Read and validate entity flags first (without locking write mutex)
+  let entity: FullEntity;
+  try {
+    entity = await publicClient.getEntity(entityKey);
+  } catch {
+    throw new ArkivError(
+      "QUERY_ERROR",
+      `Target entity ${entityKey} could not be found or has already expired on Arkiv.`
+    );
+  }
+
+  if (!entity.creationFlags?.permissionlessExtension) {
+    throw new ArkivError(
+      "INVALID_PAYLOAD",
+      `Entity ${entityKey} was not created with permissionlessExtension: true.`
+    );
+  }
+
+  // 2. Acquire lock strictly for the wallet transaction
   acquireWriteLock("extendProofEntity");
   try {
-    let entity: FullEntity;
-    try {
-      entity = await publicClient.getEntity(entityKey);
-    } catch {
-      throw new ArkivError(
-        "QUERY_ERROR",
-        `Target entity ${entityKey} could not be found or has already expired on Arkiv.`
-      );
-    }
-
-    if (!entity.creationFlags?.permissionlessExtension) {
-      throw new ArkivError(
-        "INVALID_PAYLOAD",
-        `Entity ${entityKey} was not created with permissionlessExtension: true.`
-      );
-    }
-
     const expires = ExpirationTime.fromDays(daysFromNow);
     const result = await wallet.extendEntity({
       entityKey,

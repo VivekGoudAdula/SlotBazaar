@@ -245,6 +245,7 @@ export function SlotDrawer({
   };
 
   const handleExtendProof = async (proofKey: Hex) => {
+    if (extendingKey !== null) return;
     if (!walletConnected) {
       setExtendError("Connect MetaMask to extend proof lifetime.");
       return;
@@ -618,19 +619,20 @@ export function SlotDrawer({
                       <button
                         type="button"
                         onClick={() => handleExtendProof(p.sellerCompletionKey)}
-                        disabled={extendingKey === p.sellerCompletionKey}
+                        disabled={extendingKey !== null}
                         style={{
                           background: "none",
                           border: "1px solid var(--c-ink)",
                           fontSize: "0.68rem",
                           padding: "1px 6px",
-                          cursor: "pointer",
+                          cursor: extendingKey !== null ? "not-allowed" : "pointer",
                           fontWeight: 700,
                           borderRadius: 2,
+                          opacity: extendingKey !== null && extendingKey !== p.sellerCompletionKey ? 0.5 : 1,
                         }}
                         title="Permissionlessly extend public cryptographic availability of this completion proof for another 60 days on Arkiv."
                       >
-                        {extendingKey === p.sellerCompletionKey ? "Extending…" : "🛡️ Preserve proof (extend 60d)"}
+                        {extendingKey === p.sellerCompletionKey ? "Confirming in MetaMask…" : "🛡️ Preserve proof (extend 60d)"}
                       </button>
                     </div>
                     <div style={{ marginTop: 2, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 4 }}>
@@ -643,21 +645,27 @@ export function SlotDrawer({
                       <button
                         type="button"
                         onClick={() => handleExtendProof(p.buyerCompletionKey)}
-                        disabled={extendingKey === p.buyerCompletionKey}
+                        disabled={extendingKey !== null}
                         style={{
                           background: "none",
                           border: "1px solid var(--c-ink)",
                           fontSize: "0.68rem",
                           padding: "1px 6px",
-                          cursor: "pointer",
+                          cursor: extendingKey !== null ? "not-allowed" : "pointer",
                           fontWeight: 700,
                           borderRadius: 2,
+                          opacity: extendingKey !== null && extendingKey !== p.buyerCompletionKey ? 0.5 : 1,
                         }}
                         title="Permissionlessly extend public cryptographic availability of this completion proof for another 60 days on Arkiv."
                       >
-                        {extendingKey === p.buyerCompletionKey ? "Extending…" : "🛡️ Preserve proof (extend 60d)"}
+                        {extendingKey === p.buyerCompletionKey ? "Confirming in MetaMask…" : "🛡️ Preserve proof (extend 60d)"}
                       </button>
                     </div>
+                    {extendingKey && (
+                      <div style={{ padding: "4px 8px", background: "rgba(59, 130, 246, 0.12)", border: "1px solid #3b82f6", color: "#1d4ed8", fontSize: "0.70rem", marginTop: 4, borderRadius: 2 }}>
+                        ⏳ Please review and confirm the extension transaction in your MetaMask wallet popup…
+                      </div>
+                    )}
                     <div style={{ fontSize: "0.65rem", opacity: 0.75, marginTop: 2 }}>
                       ℹ️ Extension preserves on-chain receipt availability; it does not reopen the job window.
                     </div>
