@@ -125,8 +125,8 @@ async function runTests() {
 
   const ineligibleEntity: Partial<FullEntity> = {
     key: INELIGIBLE_KEY,
-    creator: WALLET_ADDRESS,
-    owner: WALLET_ADDRESS,
+    creator: "0x2222222222222222222222222222222222222222" as Address,
+    owner: "0x2222222222222222222222222222222222222222" as Address,
     createdAt: 100000n,
     expiresAt: 1938046n,
     creationFlags: { readonly: true, permissionlessExtension: false, raw: 1 },

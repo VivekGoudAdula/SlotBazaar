@@ -345,8 +345,15 @@ function AppInner(): React.ReactElement {
     addSlot,
     updateSlotOwner,
     addBooking,
+    liveCount,
+    lastAppliedBlock,
+    pendingLocalCount,
+    lastUpdateSource,
+    refreshFailed,
   } = useLiveSlots();
   const { address, status } = useWallet();
+
+  const isDebug = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1";
 
   const isConnected = status === "connected" && Boolean(address);
 
@@ -612,6 +619,7 @@ function AppInner(): React.ReactElement {
         onOpenDemoGuide={() => setIsDemoGuideOpen(true)}
         isSocketHealthy={isSocketHealthy}
         lastFetched={lastFetched}
+        refreshFailed={refreshFailed}
       />
 
       {/* First Paint Useful with No Wallet: Low-slots banner explaining autonomous entity expiration */}
@@ -769,6 +777,7 @@ function AppInner(): React.ReactElement {
           onClose={handleClose}
           winningBooking={selectedSlot ? winningBookingsBySlot.get(selectedSlot.key.toLowerCase()) : undefined}
           userBookings={selectedSlot ? bookingsBySlot.get(selectedSlot.key.toLowerCase()) ?? [] : []}
+          allBookings={bookings}
           completions={selectedSlot ? completions : []}
           sellerReputation={selectedSlot ? reputationByAddress.get(selectedSlot.creator.toLowerCase()) : undefined}
           onOpenBook={handleOpenBook}
@@ -902,6 +911,41 @@ function AppInner(): React.ReactElement {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Hidden ?debug=1 diagnostic overlay */}
+      {isDebug && (
+        <aside
+          id="debug-overlay"
+          role="region"
+          aria-label="Debug Panel"
+          style={{
+            position: "fixed",
+            bottom: "20px",
+            right: "20px",
+            zIndex: 999999,
+            background: "rgba(18, 22, 28, 0.94)",
+            color: "#e2e8f0",
+            border: "1px solid #334155",
+            borderRadius: "8px",
+            padding: "12px 16px",
+            fontFamily: "monospace",
+            fontSize: "12px",
+            lineHeight: "1.6",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+            backdropFilter: "blur(8px)",
+            pointerEvents: "auto",
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: "6px", color: "#38bdf8", borderBottom: "1px solid #334155", paddingBottom: "4px" }}>
+            🛠️ SlotBazaar Debug (?debug=1)
+          </div>
+          <div>Live Count: <span id="debug-live-count" style={{ color: "#4ade80", fontWeight: 700 }}>{liveCount}</span></div>
+          <div>Last Applied Block: <span id="debug-last-block" style={{ color: "#facc15" }}>{lastAppliedBlock !== null ? `#${lastAppliedBlock.toLocaleString("en-US")}` : "None"}</span></div>
+          <div>Pending Local Additions: <span id="debug-pending-count" style={{ color: "#fb923c" }}>{pendingLocalCount}</span></div>
+          <div>Last Update Source: <span id="debug-last-source" style={{ color: "#c084fc", textTransform: "capitalize" }}>{lastUpdateSource ?? "none"}</span></div>
+          <div>Refresh Status: <span style={{ color: refreshFailed ? "#f87171" : "#4ade80" }}>{refreshFailed ? "failed (preserving previous list)" : "ok"}</span></div>
+        </aside>
       )}
     </div>
   );

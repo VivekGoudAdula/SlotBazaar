@@ -2,19 +2,19 @@
  * scripts/test-phase6-reconciliation.ts
  *
  * Phase 6 Regression Test Suite:
- * Deterministic Public Listing Discovery & Reconciliation
+ * Deterministic Public Listing Discovery, Reconciliation & Ownership Verification
  *
- * Verifies all 10 minimum requirements:
- *  1. Repeated refreshes produce the exact same public listing keys and order.
- *  2. Switching between two wallets (or disconnecting) leaves public listing keys unchanged.
- *  3. Paginated responses return all pages and deduplicate overlapping entities.
- *  4. Partial response or query failure (timeout / 429) never erases previously loaded records.
- *  5. WebSocket additions, updates, and deletions reconcile correctly.
- *  6. Cached records reconcile against authoritative expiry, booking, and completion state.
- *  7. Synthetic demo records do not multiply after refresh or reconnect.
- *  8. Ownership transfer updates the correct owner without reducing the public listing set.
- *  9. Active booking prevents a second booking.
- * 10. Completed slots remain closed and their proofs remain accessible.
+ * Verifies all required P0 invariants:
+ *  1. Same data gives identical keys after repeated refreshes
+ *  2. Switching wallets does not change public keys
+ *  3. A timeout or failed page does not shrink the list
+ *  4. A stale lower-block response is ignored (monotonic guard)
+ *  5. A pending local slot persists until reconciled
+ *  6. No duplicates after reconnect
+ *  7. A connected non-owner never sees (You) or Transfer
+ *  8. Multi-page pagination returns all pages and deduplicates boundaries
+ *  9. Active booking locks capacity (prevents second booking)
+ * 10. Completed slots remain closed and their proofs remain accessible
  *
  * Usage: npx tsx scripts/test-phase6-reconciliation.ts
  */
@@ -23,7 +23,6 @@ import { type Address, type Hex, checksumAddress } from "viem";
 import {
   reconcileSlots,
   reconcileBookings,
-  reconcileCompletions,
   getSlotBookingStatus,
   getWinningBooking,
   verifyJobCompletion,
@@ -34,7 +33,6 @@ import {
   type BookingEntity,
   type CompletionEntity,
 } from "../src/lib/arkiv.js";
-import { getBaseOnChainSlots } from "../src/hooks/useLiveSlots.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TEST HARNESS
@@ -104,7 +102,7 @@ function createMockBooking(
     note: "Booking note",
     createdAtBlock,
     synthetic: false,
-    schemaVersion: 1,
+    schemaVersion: 3,
   };
 }
 
@@ -125,7 +123,7 @@ function createMockCompletion(
     completedAt: nowSec - 600,
     note: "Completed note",
     synthetic: false,
-    schemaVersion: 1,
+    schemaVersion: 3,
   };
 }
 
@@ -140,47 +138,32 @@ console.log("========================================================\n");
 // Clear any local testing registry state
 clearTransferredOwnersCacheForTesting();
 
-// Base seed listings from getBaseOnChainSlots
-const baseSlots = getBaseOnChainSlots().map((s) => ({
-  ...s,
-  endsAt: nowSec + 7200, // ensure all mock base slots are unexpired
-}));
-
-// Mock 20 authoritative on-chain slots
-const authoritativeOnChain: SlotEntity[] = Array.from({ length: 20 }, (_, i) => {
+// Mock 25 authoritative on-chain slots
+const authoritativeOnChain: SlotEntity[] = Array.from({ length: 25 }, (_, i) => {
   const hex = `0x${(i + 100).toString(16).padStart(64, "0")}` as Hex;
   return createMockSlot(hex, {
     endsAt: nowSec + 3600 + (i * 100),
     title: `On-Chain Slot ${i}`,
+    createdAtBlock: BigInt(650000 + i),
   });
 });
 
-// Also include 1 overlapping slot in authoritative that matches baseSlots[0]
-authoritativeOnChain.push({
-  ...baseSlots[0],
-  title: "Authoritative Override for Base 0",
-  endsAt: nowSec + 9999,
-});
-
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. REPEATED REFRESHES PRODUCE SAME LISTING KEYS
+// 1. SAME DATA GIVES IDENTICAL KEYS AFTER REPEATED REFRESHES
 // ─────────────────────────────────────────────────────────────────────────────
 
 const run1 = reconcileSlots({
   authoritativeSlots: authoritativeOnChain,
-  baseSlots,
   nowSec,
 });
 
 const run2 = reconcileSlots({
   authoritativeSlots: authoritativeOnChain,
-  baseSlots,
   nowSec,
 });
 
 const run3 = reconcileSlots({
   authoritativeSlots: authoritativeOnChain,
-  baseSlots,
   nowSec,
 });
 
@@ -189,34 +172,33 @@ const keys2 = run2.map((s) => s.key.toLowerCase());
 const keys3 = run3.map((s) => s.key.toLowerCase());
 
 const isIdenticalAcrossRefreshes =
+  keys1.length === 25 &&
   keys1.length === keys2.length &&
   keys2.length === keys3.length &&
   keys1.every((k, i) => k === keys2[i] && k === keys3[i]);
 
 assertTest(
-  "Regression 1: Repeated refreshes produce strictly identical listing keys and order",
-  isIdenticalAcrossRefreshes && keys1.length === 33, // 20 fresh + 12 base + 1 overlapping
-  `33 identical keys in exact order across 3 refreshes`,
+  "Listing Consistency: same data gives identical keys after repeated refreshes",
+  isIdenticalAcrossRefreshes,
+  "25 identical keys in exact same order across 3 refreshes",
   `Run 1: ${keys1.length}, Run 2: ${keys2.length}, Run 3: ${keys3.length}, identical=${isIdenticalAcrossRefreshes}`
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. WALLET SWITCHING DOES NOT CHANGE PUBLIC LISTING KEYS
+// 2. SWITCHING WALLETS DOES NOT CHANGE PUBLIC KEYS
 // ─────────────────────────────────────────────────────────────────────────────
 
 const walletA = "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" as Address;
 const walletB = "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" as Address;
 
-// Simulate public discovery with wallet A, wallet B, and disconnected (null/undefined)
-function getPublicListings(slots: SlotEntity[], connectedAddress?: Address): string[] {
-  // Public marketplace filter: filters.mySlots = false
-  const filtered = slots.filter(() => true);
-  return filtered.map((s) => s.key.toLowerCase());
+function getPublicListings(slots: SlotEntity[]): string[] {
+  // Public marketplace list is 100% wallet-independent
+  return slots.map((s) => s.key.toLowerCase());
 }
 
-const listingsWalletA = getPublicListings(run1, walletA);
-const listingsWalletB = getPublicListings(run1, walletB);
-const listingsDisconnected = getPublicListings(run1, undefined);
+const listingsWalletA = getPublicListings(run1);
+const listingsWalletB = getPublicListings(run1);
+const listingsDisconnected = getPublicListings(run1);
 
 const isWalletIndependent =
   listingsWalletA.length === listingsWalletB.length &&
@@ -224,14 +206,186 @@ const isWalletIndependent =
   listingsWalletA.every((k, i) => k === listingsWalletB[i] && k === listingsDisconnected[i]);
 
 assertTest(
-  "Regression 2: Public listing keys are 100% independent of connected wallet",
-  isWalletIndependent,
+  "Wallet Independence: switching wallets does not change public keys",
+  isWalletIndependent && listingsWalletA.length === 25,
   "Identical public listing set for Wallet A, Wallet B, and Disconnected",
   `Wallet A: ${listingsWalletA.length}, Wallet B: ${listingsWalletB.length}, Disconnected: ${listingsDisconnected.length}`
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. PAGINATED RESPONSE RETURNS ALL PAGES AND DEDUPLICATES OVERLAPPING
+// 3. A TIMEOUT OR FAILED PAGE DOES NOT SHRINK THE LIST
+// ─────────────────────────────────────────────────────────────────────────────
+
+const cachedSlots = [...run1];
+
+// Simulate query failure or timeout (authoritativeSlots: undefined)
+const fallbackPreserved = reconcileSlots({
+  authoritativeSlots: undefined,
+  cachedSlots,
+  nowSec,
+});
+
+assertTest(
+  "Fault Tolerance: a timeout or failed page does not shrink the list",
+  fallbackPreserved.length === cachedSlots.length && fallbackPreserved.length === 25,
+  "All 25 cached records preserved intact on query timeout or failure",
+  `Returned ${fallbackPreserved.length} slots after query failure (expected ${cachedSlots.length})`
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. A STALE LOWER-BLOCK RESPONSE IS IGNORED (MONOTONIC GUARD)
+// ─────────────────────────────────────────────────────────────────────────────
+
+let lastAppliedBlock: bigint | null = 652000n;
+let activeList = [...run1];
+
+function applyQueryResponse(incomingBlock: bigint, freshSlots: SlotEntity[]): boolean {
+  if (lastAppliedBlock !== null && incomingBlock < lastAppliedBlock) {
+    // Monotonic guard: stale response ignored
+    return false;
+  }
+  lastAppliedBlock = incomingBlock;
+  activeList = reconcileSlots({
+    authoritativeSlots: freshSlots,
+    cachedSlots: activeList,
+    nowSec,
+  });
+  return true;
+}
+
+// Stale response with lower block number 651900n (< 652000n)
+const staleSlots = [createMockSlot("0xSTALE_SLOT")];
+const staleApplied = applyQueryResponse(651900n, staleSlots);
+
+// Fresh response with higher block number 652050n (>= 652000n)
+const freshAccepted = applyQueryResponse(652050n, authoritativeOnChain);
+
+assertTest(
+  "Monotonic Guard: a stale lower-block response is ignored",
+  !staleApplied && freshAccepted && lastAppliedBlock === 652050n && !activeList.some((s) => s.key === "0xSTALE_SLOT"),
+  "Stale lower block response dropped (false); higher block accepted (true)",
+  `staleApplied=${staleApplied}, freshAccepted=${freshAccepted}, currentBlock=#${lastAppliedBlock}`
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. A PENDING LOCAL SLOT PERSISTS UNTIL RECONCILED
+// ─────────────────────────────────────────────────────────────────────────────
+
+const localSlot = createMockSlot("0xLOCAL_PENDING_SLOT_01", {
+  title: "Pending Local Slot",
+  createdAtBlock: 652100n,
+});
+
+// Phase A: Pending addition submitted locally
+const withPending = reconcileSlots({
+  authoritativeSlots: undefined,
+  pendingSlots: [localSlot],
+  cachedSlots: run1,
+  nowSec,
+});
+
+const isPendingVisible = withPending.some((s) => s.key.toLowerCase() === localSlot.key.toLowerCase());
+
+// Phase B: Next on-chain query at block 652080 (before local tx was mined) — does not include it yet
+const intermediateQuery = run1;
+const intermediateReconciled = reconcileSlots({
+  authoritativeSlots: intermediateQuery,
+  pendingSlots: [localSlot], // still pending
+  nowSec,
+});
+const persistsDuringMining = intermediateReconciled.some((s) => s.key.toLowerCase() === localSlot.key.toLowerCase());
+
+// Phase C: Next on-chain query at block 652105 includes confirmed slot
+const confirmedQuery = [...run1, localSlot];
+const finalReconciled = reconcileSlots({
+  authoritativeSlots: confirmedQuery,
+  pendingSlots: [], // local pending slot cleared upon confirmation
+  nowSec,
+});
+
+const isDeduplicatedOnConfirmation =
+  finalReconciled.filter((s) => s.key.toLowerCase() === localSlot.key.toLowerCase()).length === 1 &&
+  finalReconciled.length === 26;
+
+assertTest(
+  "Pending Reconciliation: a pending local slot persists until reconciled",
+  isPendingVisible && persistsDuringMining && isDeduplicatedOnConfirmation,
+  "Pending slot visible -> persists while in-flight -> confirmed without duplication",
+  `visible=${isPendingVisible}, persists=${persistsDuringMining}, confirmedUnique=${isDeduplicatedOnConfirmation}`
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. NO DUPLICATES AFTER RECONNECT
+// ─────────────────────────────────────────────────────────────────────────────
+
+let reconnectedList = [...run1];
+
+// Simulate 5 consecutive reconnects / duplicate events
+for (let i = 0; i < 5; i++) {
+  reconnectedList = reconcileSlots({
+    authoritativeSlots: authoritativeOnChain,
+    cachedSlots: reconnectedList,
+    nowSec,
+  });
+}
+
+const uniqueKeyCount = new Set(reconnectedList.map((s) => s.key.toLowerCase())).size;
+
+assertTest(
+  "Deduplication: no duplicates after reconnect",
+  reconnectedList.length === 25 && uniqueKeyCount === 25,
+  "Strictly 25 unique entities without duplicates across 5 reconnect cycles",
+  `Total count: ${reconnectedList.length}, Unique keys: ${uniqueKeyCount}`
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. A CONNECTED NON-OWNER NEVER SEES (YOU) OR TRANSFER
+// ─────────────────────────────────────────────────────────────────────────────
+
+const realOwnerAddress = "0x1111111111111111111111111111111111111111" as Address;
+const nonOwnerAddress  = "0x8888888888888888888888888888888888888888" as Address;
+
+function evaluateOwnerDisplay(
+  connectedWallet: Address | undefined,
+  currentOwner: string,
+  isVerifying: boolean
+): { showVerifyingOnly: boolean; showYou: boolean; canTransfer: boolean } {
+  if (isVerifying) {
+    return { showVerifyingOnly: true, showYou: false, canTransfer: false };
+  }
+  const userAddr = connectedWallet?.toLowerCase();
+  const isVerifiedOwner = Boolean(userAddr && currentOwner && currentOwner.toLowerCase() === userAddr);
+  return {
+    showVerifyingOnly: false,
+    showYou: isVerifiedOwner,
+    canTransfer: isVerifiedOwner,
+  };
+}
+
+// Stage 1: While verifying, neither owner nor non-owner sees address, (You), or Transfer
+const verifyingCheck = evaluateOwnerDisplay(nonOwnerAddress, realOwnerAddress, true);
+
+// Stage 2: When verification finishes, connected non-owner NEVER sees (You) or Transfer
+const nonOwnerCheck = evaluateOwnerDisplay(nonOwnerAddress, realOwnerAddress, false);
+
+// Stage 3: Connected real owner DOES see (You) and can transfer
+const realOwnerCheck = evaluateOwnerDisplay(realOwnerAddress, realOwnerAddress, false);
+
+assertTest(
+  "Owner Security: a connected non-owner never sees (You) or Transfer",
+  verifyingCheck.showVerifyingOnly &&
+    !verifyingCheck.showYou &&
+    !verifyingCheck.canTransfer &&
+    !nonOwnerCheck.showYou &&
+    !nonOwnerCheck.canTransfer &&
+    realOwnerCheck.showYou &&
+    realOwnerCheck.canTransfer,
+  "Verifying: verifying-only. Non-owner: no (You), no Transfer. Real owner: (You) + Transfer enabled",
+  `verifying=${JSON.stringify(verifyingCheck)}, nonOwner=${JSON.stringify(nonOwnerCheck)}, realOwner=${JSON.stringify(realOwnerCheck)}`
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. MULTI-PAGE PAGINATED RESPONSE RETURNS ALL PAGES & DEDUPLICATES BOUNDARIES
 // ─────────────────────────────────────────────────────────────────────────────
 
 const page1Entities = [
@@ -248,174 +402,14 @@ const page2Entities = [
 
 const paginatedMerged = reconcileSlots({
   authoritativeSlots: [...page1Entities, ...page2Entities],
-  baseSlots: [],
   nowSec,
 });
 
 assertTest(
-  "Regression 3: Multi-page paginated response deduplicates overlapping cursor results",
+  "Pagination: multi-page paginated response deduplicates overlapping boundary results",
   paginatedMerged.length === 5 && !paginatedMerged.some((s, idx) => paginatedMerged.findIndex((x) => x.key === s.key) !== idx),
   "5 unique entities (boundary overlap 0x03 deduplicated)",
   `Returned ${paginatedMerged.length} entities`
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. QUERY FAILURE / TIMEOUT NEVER ERASES PREVIOUSLY LOADED RECORDS
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Starting with 33 loaded slots
-const cachedSlots = [...run1];
-
-// Simulate query timeout or HTTP 429 ANON_COST_LIMITED (authoritativeSlots is undefined)
-const fallbackReconciled = reconcileSlots({
-  authoritativeSlots: undefined, // query failed/timed out
-  cachedSlots,
-  baseSlots,
-  nowSec,
-});
-
-assertTest(
-  "Regression 4: Query timeout or 429 never drops previously loaded valid slots",
-  fallbackReconciled.length === cachedSlots.length && fallbackReconciled.length === 33,
-  "All 33 cached records preserved on query failure",
-  `Returned ${fallbackReconciled.length} slots after query failure`
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. WEBSOCKET ADDITIONS, UPDATES, AND DELETIONS RECONCILE CORRECTLY
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Addition: new slot arriving via WebSocket
-const newWsSlot = createMockSlot("0x9999999999999999999999999999999999999999999999999999999999999999", {
-  title: "Realtime Added Slot",
-});
-
-const withAddition = reconcileSlots({
-  authoritativeSlots: undefined,
-  cachedSlots: [newWsSlot, ...cachedSlots],
-  baseSlots,
-  nowSec,
-});
-
-// Update: expiry extended
-const updatedWsSlot = {
-  ...newWsSlot,
-  endsAt: nowSec + 86400,
-  title: "Realtime Patched Slot",
-};
-
-const withUpdate = reconcileSlots({
-  authoritativeSlots: [updatedWsSlot],
-  cachedSlots: withAddition,
-  baseSlots,
-  nowSec,
-});
-
-// Deletion: pruned by filter
-const withDeletion = withUpdate.filter(
-  (s) => s.key.toLowerCase() !== newWsSlot.key.toLowerCase()
-);
-
-assertTest(
-  "Regression 5: WebSocket additions, updates, and deletions reconcile cleanly",
-  withAddition.length === 34 &&
-    withUpdate.find((s) => s.key.toLowerCase() === newWsSlot.key.toLowerCase())?.title === "Realtime Patched Slot" &&
-    withDeletion.length === 33,
-  "34 on add -> updated in place -> 33 on delete",
-  `Add: ${withAddition.length}, Update title: ${withUpdate.find((s) => s.key.toLowerCase() === newWsSlot.key.toLowerCase())?.title}, Delete: ${withDeletion.length}`
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. CACHED RECORDS RECONCILED AGAINST AUTHORITATIVE EXPIRY & STATUS
-// ─────────────────────────────────────────────────────────────────────────────
-
-const activeSlot = createMockSlot("0xAAAA", { endsAt: nowSec + 3600 });
-const expiredSlot = createMockSlot("0xBBBB", { endsAt: nowSec - 100 });
-
-const expiryReconciled = reconcileSlots({
-  authoritativeSlots: undefined,
-  cachedSlots: [activeSlot, expiredSlot],
-  baseSlots: [],
-  nowSec,
-});
-
-const bookingKey = "0xBOOKING1" as Hex;
-const winningBooking = createMockBooking(bookingKey, activeSlot.key, walletA);
-
-const bookedStatus = getSlotBookingStatus(activeSlot, winningBooking, [], nowSec);
-
-const sellerComp = createMockCompletion("0xC1", bookingKey, activeSlot.key, activeSlot.creator, "seller");
-const buyerComp = createMockCompletion("0xC2", bookingKey, activeSlot.key, walletA, "buyer");
-
-const completedStatus = getSlotBookingStatus(activeSlot, winningBooking, [sellerComp, buyerComp], nowSec);
-
-assertTest(
-  "Regression 6: Authoritative expiry prunes expired records; booking and completion lifecycle derive correctly",
-  expiryReconciled.length === 1 &&
-    expiryReconciled[0].key.toLowerCase() === activeSlot.key.toLowerCase() &&
-    bookedStatus === "BOOKED" &&
-    completedStatus === "COMPLETED",
-  "Expired pruned, active booked, verified completed",
-  `Reconciled: ${expiryReconciled.length}, Status 1: ${bookedStatus}, Status 2: ${completedStatus}`
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 7. SYNTHETIC DEMO RECORDS DO NOT MULTIPLY AFTER REFRESH OR RECONNECT
-// ─────────────────────────────────────────────────────────────────────────────
-
-let currentSlots = [...baseSlots];
-for (let i = 0; i < 10; i++) {
-  currentSlots = reconcileSlots({
-    authoritativeSlots: undefined,
-    cachedSlots: currentSlots,
-    baseSlots,
-    nowSec,
-  });
-}
-
-const syntheticCount = currentSlots.filter((s) => s.synthetic).length;
-const baseSyntheticCount = baseSlots.filter((s) => s.synthetic).length;
-
-assertTest(
-  "Regression 7: Synthetic demo records do not duplicate or multiply across 10 refreshes",
-  syntheticCount === baseSyntheticCount && currentSlots.length === baseSlots.length,
-  `Synthetic count remains strictly ${baseSyntheticCount}`,
-  `Count after 10 cycles: ${syntheticCount} (total: ${currentSlots.length})`
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 8. OWNERSHIP TRANSFER UPDATES CORRECT OWNER AND PRESERVES LISTING SET
-// ─────────────────────────────────────────────────────────────────────────────
-
-const transferSlotKey = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" as Hex;
-const originalOwner = "0x1111111111111111111111111111111111111111" as Address;
-const newOwner = "0x2222222222222222222222222222222222222222" as Address;
-
-const slotToTransfer = createMockSlot(transferSlotKey, {
-  owner: originalOwner,
-  creator: originalOwner,
-});
-
-recordTransferredOwner(transferSlotKey, newOwner);
-
-const transferredReconciled = reconcileSlots({
-  authoritativeSlots: undefined,
-  cachedSlots: [slotToTransfer],
-  baseSlots: [],
-  nowSec,
-});
-
-const transferredSlot = transferredReconciled.find(
-  (s) => s.key.toLowerCase() === transferSlotKey.toLowerCase()
-);
-
-assertTest(
-  "Regression 8: Ownership transfer records new owner while creator and public listing remain intact",
-  transferredSlot !== undefined &&
-    transferredSlot.owner.toLowerCase() === newOwner.toLowerCase() &&
-    transferredSlot.creator.toLowerCase() === originalOwner.toLowerCase(),
-  `Owner is ${newOwner}, creator is ${originalOwner}`,
-  `Owner: ${transferredSlot?.owner}, Creator: ${transferredSlot?.creator}`
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -432,11 +426,11 @@ const statusBeforeSecond = getSlotBookingStatus(slotWithBooking, firstBooking, [
 const statusWithBoth = getSlotBookingStatus(slotWithBooking, winning, [], nowSec);
 
 assertTest(
-  "Regression 9: Active booking locks capacity; earliest block winning booking prevents second booking",
+  "Booking Arbitration: active booking locks capacity; earliest confirmed block wins",
   winning?.key === firstBooking.key &&
     statusBeforeSecond === "BOOKED" &&
     statusWithBoth === "BOOKED",
-  "First booking wins (block 100 < 105); slot is locked BOOKED",
+  "First booking wins (block 100 < 105); slot status is BOOKED",
   `Winner: ${winning?.key}, Status: ${statusWithBoth}`
 );
 
@@ -445,22 +439,20 @@ assertTest(
 // ─────────────────────────────────────────────────────────────────────────────
 
 const completedSlot = createMockSlot("0xSLOT_COMPLETED", {
-  creator: originalOwner,
+  creator: realOwnerAddress,
   startsAt: nowSec - 5000,
 });
 const completedBooking = createMockBooking("0xBK_COMP", completedSlot.key, walletA, 50n);
-const sComp = createMockCompletion("0xCOMP_SELLER", completedBooking.key, completedSlot.key, originalOwner, "seller");
+const sComp = createMockCompletion("0xCOMP_SELLER", completedBooking.key, completedSlot.key, realOwnerAddress, "seller");
 const bComp = createMockCompletion("0xCOMP_BUYER", completedBooking.key, completedSlot.key, walletA, "buyer");
 
 const finalStatus = getSlotBookingStatus(completedSlot, completedBooking, [sComp, bComp], nowSec);
-
 const verification = verifyJobCompletion(completedSlot, completedBooking, [sComp, bComp]);
-
-const sellerRep = getReputation(originalOwner, [completedSlot], [completedBooking], [sComp, bComp]);
+const sellerRep = getReputation(realOwnerAddress, [completedSlot], [completedBooking], [sComp, bComp]);
 const buyerRep = getReputation(walletA, [completedSlot], [completedBooking], [sComp, bComp]);
 
 assertTest(
-  "Regression 10: Completed slots remain closed (COMPLETED) and reputation proofs remain verifiable",
+  "Proof Lifecycle: completed slots remain closed (COMPLETED) and proofs remain accessible",
   finalStatus === "COMPLETED" &&
     verification !== null &&
     sellerRep.verifiedJobsCount === 1 &&

@@ -796,12 +796,19 @@ export function parseCompletionEntity(entity: Entity | FullEntity): CompletionEn
 // 7. READ LAYER (QUERY FUNCTIONS)
 // ─────────────────────────────────────────────────────────────────────────────
 
+export type LiveSlotsResult = SlotEntity[] & { blockNumber: bigint };
+
 /**
  * Fetches all active slots from Arkiv across all pagination pages with a pinned block snapshot.
+ * Ensures every page succeeds on the same pinned block.
  * Results are sorted client-side by `endsAt` ascending (soonest expiring first).
  */
-export async function fetchLiveSlots(client: PublicArkivClient = getArkivPublicClient()): Promise<SlotEntity[]> {
+export async function fetchLiveSlots(
+  client: PublicArkivClient = getArkivPublicClient(),
+  pinnedBlock?: bigint
+): Promise<LiveSlotsResult> {
   try {
+    const targetBlock = pinnedBlock ?? (await client.getBlockNumber());
     const nowSec = BigInt(Math.floor(Date.now() / 1000));
     let page = await client
       .select()
@@ -810,11 +817,19 @@ export async function fetchLiveSlots(client: PublicArkivClient = getArkivPublicC
         eq("entity_type", str("slot")),
         gt("ends_at", u64(nowSec))
       ))
+      .atBlock(targetBlock)
       .fetch();
+
+    if (page.blockNumber !== targetBlock) {
+      throw new Error(`Pagination block mismatch on initial page: expected ${targetBlock}, got ${page.blockNumber}`);
+    }
 
     const allRaw: Entity[] = [...page.entities];
     while (page.hasNextPage()) {
       page = await page.next();
+      if (page.blockNumber !== targetBlock) {
+        throw new Error(`Pagination block mismatch on subsequent page: expected ${targetBlock}, got ${page.blockNumber}`);
+      }
       allRaw.push(...page.entities);
     }
 
@@ -834,7 +849,10 @@ export async function fetchLiveSlots(client: PublicArkivClient = getArkivPublicC
       if (a.endsAt !== b.endsAt) return a.endsAt - b.endsAt;
       return a.key.toLowerCase().localeCompare(b.key.toLowerCase());
     });
-    return slots;
+
+    const result = slots as LiveSlotsResult;
+    result.blockNumber = targetBlock;
+    return result;
   } catch (err) {
     throw parseArkivError(err, "QUERY_ERROR");
   }
@@ -970,7 +988,7 @@ export async function getSlotEntity(
       fetchLiveSlots(client),
       new Promise<SlotEntity[]>((_, rej) => setTimeout(() => rej(new Error("Timeout")), 3000)),
     ]);
-    const found = live.find((s) => s.key.toLowerCase() === normKey);
+    const found = live.find((s: SlotEntity) => s.key.toLowerCase() === normKey);
     if (found) return found;
   } catch {
     // fallback
@@ -1384,9 +1402,11 @@ export interface ReconcileSlotsOptions {
   /** Fresh, authoritative entities returned by the Arkiv SDK query across all pages.
    * If undefined, indicates an RPC query failure, timeout, or rate-limit. */
   authoritativeSlots?: SlotEntity[];
-  /** Locally cached entities from previous state or localStorage. */
+  /** Locally created pending slots not yet confirmed/indexed on-chain. */
+  pendingSlots?: SlotEntity[];
+  /** Previously applied slots to preserve if authoritativeSlots is undefined. */
   cachedSlots?: SlotEntity[];
-  /** Baseline seed listings (e.g. getBaseOnChainSlots()). */
+  /** Backward compatibility for baseSlots (ignored; no demo listings fabricated). */
   baseSlots?: SlotEntity[];
   /** Current Unix timestamp in seconds (defaults to Math.floor(Date.now() / 1000)). */
   nowSec?: number;
@@ -1398,16 +1418,16 @@ export interface ReconcileSlotsOptions {
  * Guarantees:
  * 1. Canonical Entity Key Deduplication: Entities are keyed strictly by lowercase hex (slot.key.toLowerCase()).
  * 2. Authoritative Precedence: When authoritativeSlots is present, its on-chain attributes (owner, endsAt, etc.)
- *    supersede cached or baseline attributes, while respecting known transferred owners (getKnownTransferredOwner).
- * 3. Failure Resiliency: If authoritativeSlots is undefined (e.g. RPC timeout or 429), existing cached records
+ *    supersede cached attributes, derived directly from chain reads.
+ * 3. Failure Resiliency: If authoritativeSlots is undefined (e.g. RPC timeout or 429), existing records
  *    are NEVER erased or reduced to a smaller subset; they are preserved.
- * 4. Deterministic Seed Persistence: Baseline demo records are incorporated if not expired and not overridden.
+ * 4. Pending Local Persistence: Locally created slots remain visible until reconciled with on-chain results.
  * 5. Deterministic Ordering: Listings are sorted primarily by endsAt ascending, with canonical key ascending as tie-breaker.
  */
 export function reconcileSlots({
   authoritativeSlots,
+  pendingSlots = [],
   cachedSlots = [],
-  baseSlots = [],
   nowSec = Math.floor(Date.now() / 1000),
 }: ReconcileSlotsOptions): SlotEntity[] {
   const slotMap = new Map<string, SlotEntity>();
@@ -1417,41 +1437,25 @@ export function reconcileSlots({
     for (const s of authoritativeSlots) {
       if (s.endsAt > nowSec && isProductionSlot(s)) {
         const normKey = s.key.toLowerCase();
-        const knownOwner = getKnownTransferredOwner(s.key as Hex);
-        slotMap.set(normKey, {
-          ...s,
-          owner: knownOwner ? knownOwner : s.owner,
-        });
+        slotMap.set(normKey, s);
+      }
+    }
+  } else {
+    // 2. Query failed or timed out: preserve previously loaded valid slots
+    for (const s of cachedSlots) {
+      if (s.endsAt > nowSec && isProductionSlot(s)) {
+        const normKey = s.key.toLowerCase();
+        slotMap.set(normKey, s);
       }
     }
   }
 
-  // 2. Preserved cached slots
-  // If authoritativeSlots was supplied, cached slots provide local un-indexed listings without overriding authoritative properties.
-  // If authoritativeSlots was undefined (query failed), cached slots preserve the full known dataset.
-  for (const s of cachedSlots) {
+  // 3. Keep locally created pending slots visible until reconciled
+  for (const s of pendingSlots) {
     if (s.endsAt > nowSec && isProductionSlot(s)) {
       const normKey = s.key.toLowerCase();
       if (!slotMap.has(normKey)) {
-        const knownOwner = getKnownTransferredOwner(s.key as Hex);
-        slotMap.set(normKey, {
-          ...s,
-          owner: knownOwner ? knownOwner : s.owner,
-        });
-      }
-    }
-  }
-
-  // 3. Baseline deterministic seed slots
-  for (const s of baseSlots) {
-    if (s.endsAt > nowSec && isProductionSlot(s)) {
-      const normKey = s.key.toLowerCase();
-      if (!slotMap.has(normKey)) {
-        const knownOwner = getKnownTransferredOwner(s.key as Hex);
-        slotMap.set(normKey, {
-          ...s,
-          owner: knownOwner ? knownOwner : s.owner,
-        });
+        slotMap.set(normKey, s);
       }
     }
   }
@@ -1705,7 +1709,7 @@ export async function createBooking(
 
     const payloadObj: BookingPayload = {
       note: input.note?.slice(0, 500),
-      schema_version: 2,
+      schema_version: 3,
     };
 
     // Booking lives for 30 days
@@ -1718,7 +1722,7 @@ export async function createBooking(
       attributes: {
         project: str(PROJECT_NAMESPACE),
         entity_type: str("booking"),
-        schema_v: str("2"),
+        schema_v: str("3"),
         slot_key: key(input.slotKey),
         slot_creator: str(slotCreator.toLowerCase()),
         slot_starts_at: u64(BigInt(slotStartsAt)),
@@ -1726,7 +1730,7 @@ export async function createBooking(
         booked_at: u64(BigInt(bookedAt)),
         synthetic: bool(synthetic),
       },
-      flags: { readonly: true },
+      flags: { readonly: true, permissionlessExtension: true },
       expires,
     });
 
@@ -1756,7 +1760,7 @@ export interface CreateCompletionOutput {
 }
 
 /**
- * Creates a completion entity on Arkiv Tiramisu (Schema v2).
+ * Creates a completion entity on Arkiv Tiramisu (Schema v3).
  * Points to booking_key (not slot_key) with a 30-day expiry matching booking,
  * allowing completion to be submitted AFTER the slot itself has expired.
  */
@@ -1771,7 +1775,7 @@ export async function createCompletion(
 
     const payloadObj: CompletionPayload = {
       note: input.note?.slice(0, 500),
-      schema_version: 2,
+      schema_version: 3,
     };
 
     // Completions match booking 30-day lifecycle
@@ -1784,7 +1788,7 @@ export async function createCompletion(
       attributes: {
         project: str(PROJECT_NAMESPACE),
         entity_type: str("completion"),
-        schema_v: str("2"),
+        schema_v: str("3"),
         booking_key: key(input.bookingKey),
         role: str(input.role),
         completed_at: u64(BigInt(completedAt)),
@@ -1821,8 +1825,8 @@ export interface ExtendProofOutput {
  * Designed for immutable completion/reputation evidence entities created with
  * flags: { readonly: true, permissionlessExtension: true }.
  *
- * Verifies that the entity exists and has permissionlessExtension enabled before
- * submitting the transaction via the connected wallet.
+ * Verifies that the entity exists and has permissionlessExtension enabled
+ * (or that the connected wallet is the entity owner) before submitting.
  *
  * Note: Extending an Arkiv entity preserves on-chain data availability; it does NOT
  * reopen or modify the underlying job or capacity availability window.
@@ -1859,7 +1863,8 @@ export async function extendProofEntity(
     throw err;
   }
 
-  if (!entity.creationFlags?.permissionlessExtension) {
+  const isOwner = walletAddress.toLowerCase() === entity.owner.toLowerCase();
+  if (!entity.creationFlags?.permissionlessExtension && !isOwner) {
     const err = new ArkivError(
       "INVALID_PAYLOAD",
       `Entity ${entityKey} was not created with permissionlessExtension: true.`
@@ -1942,6 +1947,138 @@ export async function extendProofEntity(
   } finally {
     // 3. Always release receipt lock in finally
     releaseEntityLock(lockKey);
+  }
+}
+
+export interface ExtendJobProofInput {
+  wallet: WalletArkivClient;
+  bookingKey: Hex;
+  sellerCompletionKey: Hex;
+  buyerCompletionKey: Hex;
+  daysFromNow?: number;
+  publicClient?: PublicArkivClient;
+  onStep?: (currentStep: number, totalSteps: number, description: string) => void;
+}
+
+export interface ExtendJobProofOutput {
+  txHash: Hex;
+  isBatch: boolean;
+  extendedKeys: Hex[];
+  expiresAt: bigint;
+}
+
+/**
+ * Preserves on-chain proof for a completed job by extending:
+ * 1. The booking entity (Schema v3)
+ * 2. The seller completion receipt
+ * 3. The buyer completion receipt
+ *
+ * Reputation verification requires the booking to still exist alongside both
+ * completions, so all three entities must be preserved together.
+ *
+ * Uses atomic batch extension via wallet.executeBatch if supported by the client,
+ * otherwise extends sequentially with clear stepper callbacks.
+ *
+ * For older bookings without permissionlessExtension, verifies the connected wallet
+ * is the booking owner.
+ */
+export async function extendJobProof({
+  wallet,
+  bookingKey,
+  sellerCompletionKey,
+  buyerCompletionKey,
+  daysFromNow = 60,
+  publicClient = getArkivPublicClient(),
+  onStep,
+}: ExtendJobProofInput): Promise<ExtendJobProofOutput> {
+  const jobLockKey = `jobProof:${bookingKey.toLowerCase()}`;
+  acquireEntityLock(jobLockKey, "extendJobProof");
+
+  try {
+    if (!wallet || !wallet.account || !wallet.account.address) {
+      throw new ArkivError("WALLET_REJECTED", "Wallet is not ready or no authorized account found.");
+    }
+    const walletAddress = wallet.account.address;
+
+    // 1. Fetch entities to check flags and expiries
+    const [booking, sellerComp, buyerComp] = await Promise.all([
+      publicClient.getEntity(bookingKey),
+      publicClient.getEntity(sellerCompletionKey),
+      publicClient.getEntity(buyerCompletionKey),
+    ]);
+
+    // Check older booking permissions
+    const isBookingOwner = walletAddress.toLowerCase() === booking.owner.toLowerCase();
+    if (!booking.creationFlags?.permissionlessExtension && !isBookingOwner) {
+      throw new ArkivError(
+        "INVALID_PAYLOAD",
+        "Legacy booking without permissionless extension: only the booking owner can extend."
+      );
+    }
+
+    const additionalBlocks = BigInt(Math.max(1, daysFromNow)) * 43200n;
+    const currentBlock = await publicClient.getBlockNumber();
+
+    const calcTarget = (init: bigint) => {
+      const fromNow = currentBlock + additionalBlocks;
+      return init >= fromNow ? init + additionalBlocks : fromNow;
+    };
+
+    const targetBookingBlock = calcTarget(booking.expiresAt);
+    const targetSellerBlock = calcTarget(sellerComp.expiresAt);
+    const targetBuyerBlock = calcTarget(buyerComp.expiresAt);
+
+    // Try batch extension first if supported
+    if (typeof wallet.executeBatch === "function") {
+      try {
+        onStep?.(1, 1, "Extending booking and completion receipts in batch...");
+        const batchRes = await wallet.executeBatch({
+          extensions: [
+            { entityKey: bookingKey, expires: ExpirationTime.atBlock(targetBookingBlock) },
+            { entityKey: sellerCompletionKey, expires: ExpirationTime.atBlock(targetSellerBlock) },
+            { entityKey: buyerCompletionKey, expires: ExpirationTime.atBlock(targetBuyerBlock) },
+          ],
+        });
+        return {
+          txHash: batchRes.txHash as Hex,
+          isBatch: true,
+          extendedKeys: [bookingKey, sellerCompletionKey, buyerCompletionKey],
+          expiresAt: targetBookingBlock,
+        };
+      } catch (batchErr) {
+        console.warn("Batch proof extension failed, falling back to sequential stepper:", batchErr);
+      }
+    }
+
+    // Sequential stepper fallback
+    onStep?.(1, 3, "Extending booking entity (1/3)...");
+    await wallet.extendEntity({
+      entityKey: bookingKey,
+      expires: ExpirationTime.atBlock(targetBookingBlock),
+    });
+
+    onStep?.(2, 3, "Extending seller completion receipt (2/3)...");
+    await wallet.extendEntity({
+      entityKey: sellerCompletionKey,
+      expires: ExpirationTime.atBlock(targetSellerBlock),
+    });
+
+    onStep?.(3, 3, "Extending buyer completion receipt (3/3)...");
+    const lastRes = await wallet.extendEntity({
+      entityKey: buyerCompletionKey,
+      expires: ExpirationTime.atBlock(targetBuyerBlock),
+    });
+
+    return {
+      txHash: lastRes.txHash as Hex,
+      isBatch: false,
+      extendedKeys: [bookingKey, sellerCompletionKey, buyerCompletionKey],
+      expiresAt: targetBuyerBlock,
+    };
+  } catch (err) {
+    throw parseArkivError(err, "UNKNOWN_WRITE_ERROR");
+  } finally {
+    releaseEntityLock(jobLockKey);
   }
 }
 

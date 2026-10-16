@@ -1,0 +1,28 @@
+================================================================================
+                    ARKIV RPC SLOT COUNT STABILITY REPRO                        
+================================================================================
+Timestamp      : 2026-10-16T12:26:38.067Z
+RPC Endpoint   : https://rpc.tiramisu.db-chain.testnet.arkiv.network/ark_live_***
+Runs           : 10 iterations, 3s interval
+Query Filter   : project="slotbazaar" AND entity_type="slot" AND ends_at > nowSec
+Block Pinning  : atBlock(pinnedBlock) per run
+--------------------------------------------------------------------------------
+Run | Pinned Block | Page Count | Total Slots | Sorted Keys SHA-256 (12 chars)
+----+--------------+------------+-------------+-------------------------------
+  1 |       651917 |          1 |          27 |                    fdef8a47b8a9
+  2 |       651917 |          1 |          27 |                    fdef8a47b8a9
+  3 |       651921 |          1 |          27 |                    fdef8a47b8a9
+  4 |       651921 |          1 |          27 |                    fdef8a47b8a9
+  5 |       651924 |          1 |          27 |                    fdef8a47b8a9
+  6 |       651924 |          1 |          27 |                    fdef8a47b8a9
+  7 |       651928 |          1 |          27 |                    fdef8a47b8a9
+  8 |       651928 |          1 |          27 |                    fdef8a47b8a9
+  9 |       651931 |          1 |          27 |                    fdef8a47b8a9
+ 10 |       651931 |          1 |          27 |                    fdef8a47b8a9
+--------------------------------------------------------------------------------
+
+STABILITY VERDICT ANALYSIS:
+Block Monotonicity : PASS (Blocks advance monotonically forward)
+Count Stability    : STABLE (Identical count of 27 across all runs)
+Key Hash Identity  : IDENTICAL (fdef8a47b8a9)
+================================================================================

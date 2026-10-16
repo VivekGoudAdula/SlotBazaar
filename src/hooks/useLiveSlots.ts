@@ -18,14 +18,11 @@ import {
   verifyJobCompletion,
   reconcileSlots,
   reconcileBookings,
-  reconcileCompletions,
   type SlotEntity,
   type BookingEntity,
   type CompletionEntity,
   type ReputationResult,
   type ReputationProof,
-  getKnownTransferredOwner,
-  recordTransferredOwner,
 } from "../lib/arkiv.js";
 import { checksumAddress, type Address, type Hex } from "viem";
 
@@ -48,400 +45,74 @@ export interface UseLiveSlotsResult {
   addSlot: (slot: SlotEntity) => void;
   updateSlotOwner: (key: Hex, newOwner: Address) => void;
   addBooking: (booking: BookingEntity) => void;
-}
-
-const LOCAL_STORAGE_KEY = "slotbazaar_recent_slots";
-
-export function getBaseOnChainSlots(): SlotEntity[] {
-  const now = Math.floor(Date.now() / 1000);
-  return [
-    {
-      key: "0x6aa50234086b2db6b70562e021f0e8cef293127e2742b0a7d0220fc72a961d53",
-      creator: "0xf48e7802a97781cca58750a6e5f1f1ab93763225",
-      owner: (getKnownTransferredOwner("0x6aa50234086b2db6b70562e021f0e8cef293127e2742b0a7d0220fc72a961d53") || "0x53491aA366E086C19da948669b340317eE6eA6e9") as Address,
-      category: "transport",
-      cluster: "jeedimetla",
-      title: "Test - Express Mini Truck",
-      description: "",
-      sellerLabel: "0xf48e…3225",
-      priceBand: "mid",
-      lat: 17.4897,
-      lon: 78.5650,
-      startsAt: now - 3600,
-      endsAt: now + 4 * 3600,
-      synthetic: false,
-    },
-    {
-      key: "0x844c662541d77ebae8102ed29e0de86aaa06915ef452e034218b87a2679f4d47",
-      creator: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      owner: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      category: "machine",
-      cluster: "jeedimetla",
-      title: "test",
-      description: "Test Description",
-      sellerLabel: "0x5349…a6e9",
-      priceBand: "high",
-      lat: 17.4902,
-      lon: 78.5645,
-      startsAt: now - 1800,
-      endsAt: now + 4 * 3600,
-      synthetic: false,
-    },
-    {
-      key: "0x9005951fc5c031652cbde5d77c749f37c1b3ccabfe7c7573cad26c560ef6db8b",
-      creator: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      owner: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      category: "machine",
-      cluster: "jeedimetla",
-      title: "test description",
-      description: "test description",
-      sellerLabel: "0x5349…a6e9",
-      priceBand: "mid",
-      lat: 17.4896,
-      lon: 78.5642,
-      startsAt: now - 3600,
-      endsAt: now + 3 * 3600,
-      synthetic: false,
-    },
-    {
-      key: "0x8494ea41238f7fd65a5e03ca49dfc04bd1a6fd1e59f211a5b560e31c45e96bee",
-      creator: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      owner: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      category: "machine",
-      cluster: "surat",
-      title: "[SURAT] CNC Lathe block (2h)",
-      description: "5-axis CNC lathe for small batch runs. Min order 50 pcs. Coolant included.",
-      sellerLabel: "PrecisionWorks SME",
-      priceBand: "low",
-      lat: 21.2185,
-      lon: 72.8450,
-      startsAt: now - 600,
-      endsAt: now + 7200,
-      synthetic: true,
-    },
-    {
-      key: "0x852253c25bcb785dadbe0653a97a0e62ae228e14f53a114081c57a9ae54e4e84",
-      creator: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      owner: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      category: "transport",
-      cluster: "tiruppur",
-      title: "[TIRUPPUR] Mini-truck 2T (4h)",
-      description: "2-tonne pickup for intracity delivery. Driver included. Fuel extra.",
-      sellerLabel: "FastMove Logistics",
-      priceBand: "mid",
-      lat: 11.1085,
-      lon: 77.3411,
-      startsAt: now - 900,
-      endsAt: now + 14400,
-      synthetic: true,
-    },
-    {
-      key: "0x7049607d10d6a6d981b74f6b63aa77972358863995e6d3ee8e0e69e90347a73f",
-      creator: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      owner: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      category: "freelance",
-      cluster: "morbi",
-      title: "[MORBI] React engineer sprint (3h)",
-      description: "Senior React/TypeScript engineer. Vite, Next.js. Available for focused sprint.",
-      sellerLabel: "IndieDevIndia",
-      priceBand: "high",
-      lat: 22.8120,
-      lon: 70.8380,
-      startsAt: now - 1200,
-      endsAt: now + 10800,
-      synthetic: true,
-    },
-    {
-      key: "0x5ee1e7729da82f2559be2ad860a7b29d6b9e20263c7ff81f3aa4c1120b7d6f9e",
-      creator: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      owner: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      category: "machine",
-      cluster: "ludhiana",
-      title: "[LUDHIANA] 3D Printer — PLA/ABS (5h)",
-      description: "FDM printer, 300×300×400mm build volume. First-come first-served.",
-      sellerLabel: "MakerSpace Pune",
-      priceBand: "mid",
-      lat: 30.9010,
-      lon: 75.8573,
-      startsAt: now - 300,
-      endsAt: now + 18000,
-      synthetic: true,
-    },
-    {
-      key: "0xc73929653c7300ef0524ec17cdc9195b5f697736ac78a3317ec7a9b4fa3c4ec9",
-      creator: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      owner: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      category: "transport",
-      cluster: "jeedimetla",
-      title: "[JEEDIMETLA] E-rickshaw city run (2h)",
-      description: "Electric rickshaw for last-mile intracity goods delivery. Up to 300kg.",
-      sellerLabel: "GreenHaul",
-      priceBand: "low",
-      lat: 17.4897,
-      lon: 78.5650,
-      startsAt: now - 400,
-      endsAt: now + 7200,
-      synthetic: true,
-    },
-    {
-      key: "0x286b75451edefb9013d4cd722f019898756a5dcd4964aee62868290146081bba",
-      creator: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      owner: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      category: "freelance",
-      cluster: "coimbatore",
-      title: "[COIMBATORE] UX Designer — 1 day (6h)",
-      description: "Figma, Framer. Portfolio: dribbble.com/…. One full working day.",
-      sellerLabel: "PixelCraft Studio",
-      priceBand: "mid",
-      lat: 11.0168,
-      lon: 76.9558,
-      startsAt: now - 500,
-      endsAt: now + 21600,
-      synthetic: true,
-    },
-    {
-      key: "0x3b3fb83b48130a2231c17fef93062fbb72bd1013a3d63309d5f1993f7e2d35c3",
-      creator: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      owner: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      category: "machine",
-      cluster: "pune",
-      title: "[PUNE] Laser cutter 100W (6h)",
-      description: "100W CO₂ laser. Max 900×600mm sheet. Includes operator.",
-      sellerLabel: "FabricationHub BLR",
-      priceBand: "high",
-      lat: 18.5204,
-      lon: 73.8567,
-      startsAt: now - 600,
-      endsAt: now + 21600,
-      synthetic: true,
-    },
-    {
-      key: "0x01b0ec1126735030583c73d297b12040d1f7676030990ef408b8cef5eaaaa2ca",
-      creator: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      owner: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      category: "transport",
-      cluster: "rajkot",
-      title: "[RAJKOT] Heavy Crane 10T (8h)",
-      description: "Mobile crane 10-tonne capacity. Operator included. Fuel extra.",
-      sellerLabel: "Gujarat Lift Services",
-      priceBand: "high",
-      lat: 22.3039,
-      lon: 70.8022,
-      startsAt: now - 700,
-      endsAt: now + 28800,
-      synthetic: true,
-    },
-    {
-      key: "0x925512d97f69007bf97a6da317b05bcd7591ecd695c27b637d01dbbf05efa33b",
-      creator: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      owner: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      category: "freelance",
-      cluster: "mumbai",
-      title: "[MUMBAI] Content Writer Tech (4h)",
-      description: "Technical documentation and release notes writer. Immediate start.",
-      sellerLabel: "WordCraft Studio",
-      priceBand: "low",
-      lat: 19.0760,
-      lon: 72.8777,
-      startsAt: now - 800,
-      endsAt: now + 14400,
-      synthetic: true,
-    },
-    {
-      key: "0xe55fc916bac0593a8206dbac5fbcce351326a59e91e75ca6bb430eede68ccddc",
-      creator: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      owner: "0x53491aa366e086c19da948669b340317ee6ea6e9",
-      category: "machine",
-      cluster: "bengaluru",
-      title: "[BENGALURU] PCB SMT Line (3h)",
-      description: "Automated surface-mount assembly pick & place line. 200 components/hr.",
-      sellerLabel: "ElectroFab BLR",
-      priceBand: "mid",
-      lat: 12.9716,
-      lon: 77.5946,
-      startsAt: now - 900,
-      endsAt: now + 10800,
-      synthetic: true,
-    },
-  ];
-}
-
-function loadLocalRecentSlots(): SlotEntity[] {
-  const base = getBaseOnChainSlots();
-  if (typeof window === "undefined") return base;
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    const parsed = raw ? (JSON.parse(raw) as SlotEntity[]) : [];
-    const hydrated = parsed.map((s) => ({
-      ...s,
-      createdAtBlock: s.createdAtBlock ? BigInt(s.createdAtBlock) : undefined,
-      expiresAtBlock: s.expiresAtBlock ? BigInt(s.expiresAtBlock) : undefined,
-    }));
-    return reconcileSlots({
-      authoritativeSlots: undefined,
-      cachedSlots: hydrated,
-      baseSlots: base,
-      nowSec: Math.floor(Date.now() / 1000),
-    });
-  } catch {
-    return reconcileSlots({
-      authoritativeSlots: undefined,
-      cachedSlots: [],
-      baseSlots: base,
-      nowSec: Math.floor(Date.now() / 1000),
-    });
-  }
-}
-
-function saveLocalRecentSlots(slots: SlotEntity[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    const nowSec = Math.floor(Date.now() / 1000);
-    const valid = slots.filter((s) => s.endsAt > nowSec);
-    // Custom replacer handles BigInt serialization (e.g. createdAtBlock, expiresAtBlock)
-    const serialized = JSON.stringify(valid, (_, value) =>
-      typeof value === "bigint" ? value.toString() : value
-    );
-    localStorage.setItem(LOCAL_STORAGE_KEY, serialized);
-  } catch (err) {
-    console.error("Failed to persist slots to localStorage:", err);
-  }
-}
-
-const LOCAL_BOOKINGS_STORAGE_KEY = "slotbazaar_recent_bookings";
-
-function loadLocalRecentBookings(): BookingEntity[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(LOCAL_BOOKINGS_STORAGE_KEY);
-    const parsed = raw ? (JSON.parse(raw) as BookingEntity[]) : [];
-    const hydrated = parsed.map((b) => ({
-      ...b,
-      createdAtBlock: b.createdAtBlock ? BigInt(b.createdAtBlock) : undefined,
-      expiresAtBlock: b.expiresAtBlock ? BigInt(b.expiresAtBlock) : undefined,
-    }));
-    return reconcileBookings({
-      authoritativeBookings: undefined,
-      cachedBookings: hydrated,
-    });
-  } catch {
-    return [];
-  }
-}
-
-function saveLocalRecentBookings(bookings: BookingEntity[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    const serialized = JSON.stringify(bookings, (_, value) =>
-      typeof value === "bigint" ? value.toString() : value
-    );
-    localStorage.setItem(LOCAL_BOOKINGS_STORAGE_KEY, serialized);
-  } catch (err) {
-    console.error("Failed to persist bookings to localStorage:", err);
-  }
-}
-
-const LOCAL_COMPLETIONS_STORAGE_KEY = "slotbazaar_recent_completions";
-
-function loadLocalRecentCompletions(): CompletionEntity[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(LOCAL_COMPLETIONS_STORAGE_KEY);
-    const parsed = raw ? (JSON.parse(raw) as CompletionEntity[]) : [];
-    const hydrated = parsed.map((c) => ({
-      ...c,
-      createdAtBlock: c.createdAtBlock ? BigInt(c.createdAtBlock) : undefined,
-      expiresAtBlock: c.expiresAtBlock ? BigInt(c.expiresAtBlock) : undefined,
-    }));
-    return reconcileCompletions({
-      authoritativeCompletions: undefined,
-      cachedCompletions: hydrated,
-    });
-  } catch {
-    return [];
-  }
-}
-
-function saveLocalRecentCompletions(completions: CompletionEntity[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    const serialized = JSON.stringify(completions, (_, value) =>
-      typeof value === "bigint" ? value.toString() : value
-    );
-    localStorage.setItem(LOCAL_COMPLETIONS_STORAGE_KEY, serialized);
-  } catch (err) {
-    console.error("Failed to persist completions to localStorage:", err);
-  }
+  liveCount: number;
+  lastAppliedBlock: bigint | null;
+  pendingLocalCount: number;
+  lastUpdateSource: "poll" | "websocket" | "local" | null;
+  refreshFailed: boolean;
 }
 
 export function useLiveSlots(): UseLiveSlotsResult {
-  const [slots, setSlots] = useState<SlotEntity[]>(() => loadLocalRecentSlots());
-  const [bookings, setBookings] = useState<BookingEntity[]>(() => loadLocalRecentBookings());
-  const [completions, setCompletions] = useState<CompletionEntity[]>(() => loadLocalRecentCompletions());
+  const [slots, setSlots] = useState<SlotEntity[]>([]);
+  const [bookings, setBookings] = useState<BookingEntity[]>([]);
+  const [completions, setCompletions] = useState<CompletionEntity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
+
+  // Debug overlay & data flow tracking state
+  const [lastAppliedBlock, setLastAppliedBlock] = useState<bigint | null>(null);
+  const [pendingLocalCount, setPendingLocalCount] = useState<number>(0);
+  const [lastUpdateSource, setLastUpdateSource] = useState<"poll" | "websocket" | "local" | null>(null);
+  const [refreshFailed, setRefreshFailed] = useState<boolean>(false);
 
   const client = useRef(getArkivPublicClient()).current;
   const isMounted = useRef(true);
   const isFetchingRef = useRef(false);
   const lastFetchTimeRef = useRef(0);
-  const localSlotsRef = useRef<SlotEntity[]>(loadLocalRecentSlots());
-  const localBookingsRef = useRef<BookingEntity[]>(loadLocalRecentBookings());
-  const localCompletionsRef = useRef<CompletionEntity[]>(loadLocalRecentCompletions());
+  const lastAppliedBlockRef = useRef<bigint | null>(null);
+  const currentSlotsRef = useRef<SlotEntity[]>([]);
+  const pendingLocalSlotsRef = useRef<Map<string, { slot: SlotEntity; txBlock?: bigint }>>(new Map());
 
   const addSlot = useCallback((newSlot: SlotEntity) => {
-    const baseSlots = getBaseOnChainSlots();
+    const normKey = newSlot.key.toLowerCase();
+    pendingLocalSlotsRef.current.set(normKey, { slot: newSlot, txBlock: newSlot.createdAtBlock });
+    setPendingLocalCount(pendingLocalSlotsRef.current.size);
+    setLastUpdateSource("local");
+
     const nowSec = Math.floor(Date.now() / 1000);
+    const pendingList = Array.from(pendingLocalSlotsRef.current.values()).map((p) => p.slot);
     const reconciled = reconcileSlots({
       authoritativeSlots: undefined,
-      cachedSlots: [newSlot, ...localSlotsRef.current],
-      baseSlots,
+      pendingSlots: pendingList,
+      cachedSlots: currentSlotsRef.current,
       nowSec,
     });
-    localSlotsRef.current = reconciled;
-    saveLocalRecentSlots(reconciled);
+    currentSlotsRef.current = reconciled;
     setSlots(reconciled);
   }, []);
 
   const addBooking = useCallback((newBooking: BookingEntity) => {
-    const reconciled = reconcileBookings({
-      authoritativeBookings: undefined,
-      cachedBookings: [newBooking, ...localBookingsRef.current],
-    });
-    localBookingsRef.current = reconciled;
-    saveLocalRecentBookings(reconciled);
-    setBookings(reconciled);
+    setBookings((prev) => reconcileBookings({ authoritativeBookings: undefined, cachedBookings: [newBooking, ...prev] }));
   }, []);
 
   const updateSlotOwner = useCallback((key: Hex, newOwner: Address) => {
     const normKey = key.toLowerCase();
     const cOwner = checksumAddress(newOwner);
-    recordTransferredOwner(key, cOwner);
 
-    const updated = localSlotsRef.current.map((s) =>
+    const updated = currentSlotsRef.current.map((s) =>
       s.key.toLowerCase() === normKey ? { ...s, owner: cOwner } : s
     );
-    localSlotsRef.current = updated;
-    saveLocalRecentSlots(updated);
-
-    setSlots((prev) =>
-      prev.map((s) =>
-        s.key.toLowerCase() === normKey ? { ...s, owner: cOwner } : s
-      )
-    );
+    currentSlotsRef.current = updated;
+    setSlots(updated);
   }, []);
 
   // Fixed 3 queries per refresh cycle: 1 slots + 1 bookings + 1 completions
   const queryCount = 3;
 
-  const doFetch = useCallback(async (force = false) => {
-    // Shared fetch lock: prevent duplicate concurrent requests
+  const doFetch = useCallback(async (force = false, source: "poll" | "websocket" = "poll") => {
     if (isFetchingRef.current) return;
-    // Pause network queries completely if tab is hidden
     if (typeof document !== "undefined" && document.hidden) return;
-    // Cooldown throttle: don't fetch more often than every 10s unless forced,
-    // and even if forced (e.g. wallet change), require at least 2.5s between network calls to prevent 429 rate limit
     const now = Date.now();
     const minInterval = force ? 2500 : 10_000;
     if (now - lastFetchTimeRef.current < minInterval) return;
@@ -465,65 +136,74 @@ export function useLiveSlots(): UseLiveSlotsResult {
 
       if (isMounted.current) {
         const nowSec = Math.floor(Date.now() / 1000);
-        const baseSlots = getBaseOnChainSlots();
-
-        let queryError: string | null = null;
-        let freshSlots: SlotEntity[] | undefined = undefined;
 
         if (slotsRes.status === "fulfilled") {
-          freshSlots = slotsRes.value;
+          const freshSlotsResult = slotsRes.value;
+          const freshBlock = freshSlotsResult.blockNumber;
+
+          // Monotonic guard: ignore any result with a block number lower than last applied; retry once after 1s
+          if (lastAppliedBlockRef.current !== null && freshBlock < lastAppliedBlockRef.current) {
+            console.warn(`[useLiveSlots] Stale block response ignored: got #${freshBlock} < lastApplied #${lastAppliedBlockRef.current}. Retrying in 1s.`);
+            setTimeout(() => {
+              if (isMounted.current) {
+                doFetch(true, "poll");
+              }
+            }, 1000);
+            return;
+          }
+
+          lastAppliedBlockRef.current = freshBlock;
+          setLastAppliedBlock(freshBlock);
+          setRefreshFailed(false);
+          setError(null);
+
+          // Reconcile pending local additions: remove if included in fresh results
+          const authoritativeMap = new Set(freshSlotsResult.map((s: SlotEntity) => s.key.toLowerCase()));
+          for (const [k] of pendingLocalSlotsRef.current.entries()) {
+            if (authoritativeMap.has(k)) {
+              pendingLocalSlotsRef.current.delete(k);
+            }
+          }
+          setPendingLocalCount(pendingLocalSlotsRef.current.size);
+
+          const pendingList = Array.from(pendingLocalSlotsRef.current.values()).map((p) => p.slot);
+          const reconciledSlots = reconcileSlots({
+            authoritativeSlots: freshSlotsResult,
+            pendingSlots: pendingList,
+            nowSec,
+          });
+
+          currentSlotsRef.current = reconciledSlots;
+          setSlots(reconciledSlots);
+          setLastUpdateSource(source);
         } else {
+          // Timeout or error: keep the previous list intact; never clear or shrink silently
           const reason = slotsRes.reason instanceof Error ? slotsRes.reason.message : String(slotsRes.reason);
-          console.warn("Live slots query failed, preserving verified cached state:", reason);
-          queryError = /429|cost limit/i.test(reason)
-            ? "Arkiv RPC rate limit active — serving verified local state."
-            : "Arkiv indexer slow — displaying cached on-chain state.";
+          console.warn("Live slots query failed; preserving previous verified list:", reason);
+          setRefreshFailed(true);
+          setError(
+            /429|cost limit/i.test(reason)
+              ? "Arkiv RPC rate limit active — serving last verified state."
+              : "Arkiv refresh failed — displaying last verified on-chain state."
+          );
         }
-
-        // Reconcile slots deterministically
-        const reconciledSlots = reconcileSlots({
-          authoritativeSlots: freshSlots,
-          cachedSlots: localSlotsRef.current,
-          baseSlots,
-          nowSec,
-        });
-
-        localSlotsRef.current = reconciledSlots;
-        saveLocalRecentSlots(reconciledSlots);
-        setSlots(reconciledSlots);
 
         // Reconcile bookings
-        let freshBookings: BookingEntity[] | undefined = undefined;
         if (bookingsRes.status === "fulfilled") {
-          freshBookings = bookingsRes.value;
+          setBookings(bookingsRes.value);
         }
-        const reconciledBookings = reconcileBookings({
-          authoritativeBookings: freshBookings,
-          cachedBookings: localBookingsRef.current,
-        });
-        localBookingsRef.current = reconciledBookings;
-        saveLocalRecentBookings(reconciledBookings);
-        setBookings(reconciledBookings);
 
         // Reconcile completions
-        let freshCompletions: CompletionEntity[] | undefined = undefined;
         if (completionsRes.status === "fulfilled") {
-          freshCompletions = completionsRes.value;
+          setCompletions(completionsRes.value);
         }
-        const reconciledCompletions = reconcileCompletions({
-          authoritativeCompletions: freshCompletions,
-          cachedCompletions: localCompletionsRef.current,
-        });
-        localCompletionsRef.current = reconciledCompletions;
-        saveLocalRecentCompletions(reconciledCompletions);
-        setCompletions(reconciledCompletions);
 
-        setError(queryError);
         setLastFetched(new Date());
       }
     } catch (err) {
       if (isMounted.current) {
-        setError(err instanceof Error ? err.message : "Arkiv indexer slow — displaying cached on-chain state.");
+        setRefreshFailed(true);
+        setError(err instanceof Error ? err.message : "Arkiv indexer slow — displaying last verified on-chain state.");
       }
     } finally {
       isFetchingRef.current = false;
@@ -547,7 +227,7 @@ export function useLiveSlots(): UseLiveSlotsResult {
 
   // WebSocket-triggered refetches: LEADING EDGE + single trailing fetch
   // Fires immediately if cooldown window has passed; coalesces subsequent events into at most 1 trailing fetch.
-  const triggerDebouncedFetch = useCallback(() => {
+  const triggerDebouncedFetch = useCallback((source: "poll" | "websocket" = "websocket") => {
     if (typeof document !== "undefined" && document.hidden) return;
     const now = Date.now();
     const timeSinceLast = now - lastFetchTimeRef.current;
@@ -560,7 +240,7 @@ export function useLiveSlots(): UseLiveSlotsResult {
         trailingTimerRef.current = null;
       }
       trailingScheduledRef.current = false;
-      doFetch();
+      doFetch(false, source);
     } else if (!trailingScheduledRef.current) {
       // Cooldown window: schedule exactly one trailing fetch
       trailingScheduledRef.current = true;
@@ -568,7 +248,7 @@ export function useLiveSlots(): UseLiveSlotsResult {
       trailingTimerRef.current = setTimeout(() => {
         trailingScheduledRef.current = false;
         trailingTimerRef.current = null;
-        doFetch();
+        doFetch(false, source);
       }, delay);
     }
   }, [doFetch]);
@@ -663,9 +343,8 @@ export function useLiveSlots(): UseLiveSlotsResult {
       setSlots((prev) => {
         const remaining = prev.filter((s) => s.endsAt > nowSec + BLOCK_MARGIN_SEC);
         if (remaining.length !== prev.length) {
-          localSlotsRef.current = remaining;
-          saveLocalRecentSlots(remaining);
-          triggerDebouncedFetch();
+          currentSlotsRef.current = remaining;
+          triggerDebouncedFetch("poll");
           return remaining;
         }
         return prev;
@@ -862,9 +541,14 @@ export function useLiveSlots(): UseLiveSlotsResult {
     error,
     lastFetched,
     isSocketHealthy,
-    refresh: () => doFetch(true),
+    refresh: () => doFetch(true, "poll"),
     addSlot,
     updateSlotOwner,
     addBooking,
+    liveCount: slots.length,
+    lastAppliedBlock,
+    pendingLocalCount,
+    lastUpdateSource,
+    refreshFailed,
   };
 }

@@ -22,15 +22,15 @@ import {
   type BookingEntity,
   type CompletionEntity,
   type ReputationResult,
+  type ReputationProof,
   type SlotBookingStatus,
   getSlotBookingStatus,
   getEntityExplorerUrl,
   getTxExplorerUrl,
   getMetaMaskWalletClient,
   transferEntityOwnership,
-  extendProofEntity,
+  extendJobProof,
   fetchAuthoritativeEntityOwner,
-  getKnownTransferredOwner,
 } from "../lib/arkiv.js";
 import { formatTimeLeft, getUrgency, formatDateTime } from "../lib/time.js";
 import { useNow } from "../hooks/useNow.js";
@@ -83,6 +83,7 @@ export interface SlotDrawerProps {
   onClose: () => void;
   winningBooking?: BookingEntity;
   userBookings?: BookingEntity[];
+  allBookings?: BookingEntity[];
   completions?: CompletionEntity[];
   sellerReputation?: ReputationResult;
   onOpenBook?: (slot: SlotEntity) => void;
@@ -95,6 +96,7 @@ export function SlotDrawer({
   onClose,
   winningBooking,
   userBookings = [],
+  allBookings = [],
   completions = [],
   sellerReputation,
   onOpenBook,
@@ -105,13 +107,9 @@ export function SlotDrawer({
   const wallet = useWallet();
   const [showProofs, setShowProofs] = useState(false);
 
-  // Ownership transfer state
-  const [currentOwner, setCurrentOwner] = useState<string>(() => {
-    if (!slot) return "";
-    const known = getKnownTransferredOwner(slot.key);
-    return known || slot.owner || "";
-  });
-  const [isVerifyingOwner, setIsVerifyingOwner] = useState(false);
+  // Ownership transfer state: initialize empty & verifying = true so no premature owner / (You) / Transfer renders
+  const [currentOwner, setCurrentOwner] = useState<string>("");
+  const [isVerifyingOwner, setIsVerifyingOwner] = useState(true);
   const [ownerVerificationError, setOwnerVerificationError] = useState<string | null>(null);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [transferTarget, setTransferTarget] = useState("");
@@ -120,7 +118,8 @@ export function SlotDrawer({
   const [transferSuccessTx, setTransferSuccessTx] = useState<string | null>(null);
 
   // Proof extension state
-  const [extendingKeys, setExtendingKeys] = useState<Set<string>>(new Set());
+  const [extendingJobs, setExtendingJobs] = useState<Set<string>>(new Set());
+  const [extendJobStep, setExtendJobStep] = useState<Record<string, string>>({});
   const [extendError, setExtendError] = useState<string | null>(null);
   const [extendSuccess, setExtendSuccess] = useState<{ key: string; txHash: string; expiresAt: bigint } | null>(null);
 
@@ -137,34 +136,30 @@ export function SlotDrawer({
     slotOwnerRef.current = slotOwner;
   }, [slotOwner]);
 
-  // Keep currentOwner in sync with known local storage or slot prop updates
-  useEffect(() => {
-    if (!slotKey) return;
-    const known = getKnownTransferredOwner(slotKey);
-    if (known) {
-      setCurrentOwner(known);
-    } else if (slotOwner) {
-      setCurrentOwner(slotOwner);
-    }
-  }, [slotKey, slotOwner]);
-
   // Reset transient drawer interaction state ONLY when selected slot key or wallet account changes
   useEffect(() => {
     setIsTransferOpen(false);
     setTransferTarget("");
     setTransferError(null);
-    setExtendingKeys(new Set());
+    setExtendingJobs(new Set());
+    setExtendJobStep({});
     setExtendError(null);
     setExtendSuccess(null);
     setOwnerVerificationError(null);
   }, [slotKey, wallet.address]);
 
-  // Authoritatively verify entity state on Arkiv when slot changes
+  // Authoritatively verify entity state on Arkiv when slot changes.
+  // While verifying, currentOwner is empty and isVerifyingOwner is true.
   useEffect(() => {
-    if (!slotKey) return;
+    if (!slotKey) {
+      setCurrentOwner("");
+      setIsVerifyingOwner(false);
+      return;
+    }
 
     let active = true;
     setIsVerifyingOwner(true);
+    setCurrentOwner("");
 
     fetchAuthoritativeEntityOwner(slotKey)
       .then((auth) => {
@@ -180,6 +175,9 @@ export function SlotDrawer({
         if (!active) return;
         console.warn("Authoritative owner lookup failed:", err);
         setOwnerVerificationError(err instanceof Error ? err.message : String(err));
+        if (slotOwnerRef.current) {
+          setCurrentOwner(slotOwnerRef.current);
+        }
       })
       .finally(() => {
         if (active) setIsVerifyingOwner(false);
@@ -203,14 +201,15 @@ export function SlotDrawer({
   const isWrongNetwork = wallet.isWrongNetwork;
   const userAddr = wallet.address?.toLowerCase();
 
-  const isOwner = Boolean(userAddr && currentOwner.toLowerCase() === userAddr);
+  // Connected non-owner NEVER sees (You) or Transfer; verified owner ONLY after read completes
+  const isVerifiedOwner = !isVerifyingOwner && Boolean(userAddr && currentOwner && currentOwner.toLowerCase() === userAddr);
   const isMySlot = Boolean(
     userAddr &&
-    (slot.creator.toLowerCase() === userAddr || currentOwner.toLowerCase() === userAddr)
+    (slot.creator.toLowerCase() === userAddr || (!isVerifyingOwner && currentOwner.toLowerCase() === userAddr))
   );
 
   const handleTransferOwnership = async () => {
-    if (!walletConnected || !slot) return;
+    if (!walletConnected || !slot || !isVerifiedOwner) return;
     const target = transferTarget.trim();
     if (!target.startsWith("0x") || target.length !== 42) {
       setTransferError("Recipient must be a valid 42-character 0x EVM address.");
@@ -243,9 +242,16 @@ export function SlotDrawer({
     }
   };
 
-  const handleExtendProof = async (proofKey: Hex) => {
-    const keyLower = proofKey.toLowerCase();
-    if (extendingKeys.has(keyLower)) return;
+  /**
+   * Preserves proof for a completed job by extending:
+   * 1. The booking entity (Schema v3)
+   * 2. The seller completion receipt
+   * 3. The buyer completion receipt
+   * Uses batch extension if supported by SDK client, otherwise sequential stepper.
+   */
+  const handleExtendJobProof = async (proof: ReputationProof) => {
+    const jobKey = proof.bookingKey.toLowerCase();
+    if (extendingJobs.has(jobKey)) return;
 
     if (!walletConnected) {
       setExtendError("Please connect your MetaMask wallet before extending proof lifetime.");
@@ -260,20 +266,30 @@ export function SlotDrawer({
       return;
     }
 
-    setExtendingKeys((prev) => new Set(prev).add(keyLower));
+    setExtendingJobs((prev) => new Set(prev).add(jobKey));
     setExtendError(null);
     setExtendSuccess(null);
+    setExtendJobStep((prev) => ({ ...prev, [jobKey]: "Preparing proof extension..." }));
 
     try {
-      console.log(`[extendProof] Stage 1: Extension clicked for entity ${proofKey}`);
       const walletClient =
         wallet.client && wallet.status === "connected"
           ? wallet.client
           : await getMetaMaskWalletClient();
 
-      const res = await extendProofEntity(walletClient, proofKey, 60);
+      const res = await extendJobProof({
+        wallet: walletClient,
+        bookingKey: proof.bookingKey,
+        sellerCompletionKey: proof.sellerCompletionKey,
+        buyerCompletionKey: proof.buyerCompletionKey,
+        daysFromNow: 60,
+        onStep: (step, total, desc) => {
+          setExtendJobStep((prev) => ({ ...prev, [jobKey]: `(${step}/${total}) ${desc}` }));
+        },
+      });
+
       setExtendSuccess({
-        key: proofKey,
+        key: proof.bookingKey,
         txHash: res.txHash,
         expiresAt: res.expiresAt,
       });
@@ -281,13 +297,19 @@ export function SlotDrawer({
       const msg = err instanceof Error ? err.message : String(err);
       setExtendError(msg);
     } finally {
-      setExtendingKeys((prev) => {
+      setExtendingJobs((prev) => {
         const next = new Set(prev);
-        next.delete(keyLower);
+        next.delete(jobKey);
+        return next;
+      });
+      setExtendJobStep((prev) => {
+        const next = { ...prev };
+        delete next[jobKey];
         return next;
       });
     }
   };
+
 
   const hasUserBooking = Boolean(
     userAddr &&
@@ -530,11 +552,11 @@ export function SlotDrawer({
             >
               {userIsWinner ? (
                 <div>
-                  <strong>🎉 You booked this slot!</strong> Mined in block #{winningBooking.createdAtBlock?.toString() || "..."}.
+                  <strong>🎉 You booked this slot!</strong> Mined in block #{winningBooking.createdAtBlock ? winningBooking.createdAtBlock.toLocaleString("en-US") : "..."}.
                 </div>
               ) : hasUserBooking ? (
                 <div>
-                  <strong>⚠️ Missed: someone booked first</strong> (block #{winningBooking.createdAtBlock?.toString() || "..."}).
+                  <strong>⚠️ Missed: someone booked first</strong> (block #{winningBooking.createdAtBlock ? winningBooking.createdAtBlock.toLocaleString("en-US") : "..."}).
                   <div style={{ fontSize: "0.75rem", opacity: 0.85, marginTop: 4 }}>
                     Arkiv resolves races by earliest confirmed block (and key tie-break).
                   </div>
@@ -542,7 +564,7 @@ export function SlotDrawer({
               ) : (
                 <div>
                   <strong>🔒 Slot Booked</strong> by{" "}
-                  <code>{winningBooking.creator.slice(0, 8)}…{winningBooking.creator.slice(-6)}</code> (block #{winningBooking.createdAtBlock?.toString() || "..."}).
+                  <code>{winningBooking.creator.slice(0, 8)}…{winningBooking.creator.slice(-6)}</code> (block #{winningBooking.createdAtBlock ? winningBooking.createdAtBlock.toLocaleString("en-US") : "..."}).
                 </div>
               )}
             </div>
@@ -619,82 +641,103 @@ export function SlotDrawer({
                   gap: 6,
                 }}
               >
-                {sellerReputation.proofs.map((p, idx) => (
-                  <div key={p.bookingKey} style={{ borderBottom: idx < sellerReputation.proofs.length - 1 ? "1px dashed #ccc" : "none", paddingBottom: 6 }}>
-                    <div>
-                      <strong>Booking:</strong>{" "}
-                      <a href={getEntityExplorerUrl(p.bookingKey)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
-                        {p.bookingKey.slice(0, 10)}…{p.bookingKey.slice(-6)} ↗
-                      </a>
-                    </div>
-                    <div style={{ marginTop: 2, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 4 }}>
-                      <div>
+                {sellerReputation.proofs.map((p, idx) => {
+                  const jobKey = p.bookingKey.toLowerCase();
+                  const isExtending = extendingJobs.has(jobKey);
+                  const stepMsg = extendJobStep[jobKey];
+
+                  const targetBooking = allBookings.find(
+                    (b) => b.key.toLowerCase() === jobKey
+                  ) || userBookings.find(
+                    (b) => b.key.toLowerCase() === jobKey
+                  );
+
+                  // Older legacy bookings without permissionlessExtension require booking ownership
+                  const hasPermissionless = targetBooking?.creationFlags?.permissionlessExtension ?? true;
+                  const isBookingOwner = Boolean(
+                    userAddr &&
+                    targetBooking &&
+                    (targetBooking.owner?.toLowerCase() === userAddr || targetBooking.creator?.toLowerCase() === userAddr)
+                  );
+                  const isLegacyRestricted = targetBooking ? (!hasPermissionless && !isBookingOwner) : false;
+
+                  return (
+                    <div
+                      key={p.bookingKey}
+                      style={{
+                        borderBottom: idx < sellerReputation.proofs.length - 1 ? "1px dashed #ccc" : "none",
+                        paddingBottom: 8,
+                        marginBottom: 4,
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
+                        <div>
+                          <strong>Booking:</strong>{" "}
+                          <a href={getEntityExplorerUrl(p.bookingKey)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
+                            {p.bookingKey.slice(0, 10)}…{p.bookingKey.slice(-6)} ↗
+                          </a>
+                        </div>
+                        <button
+                          type="button"
+                          id={`preserve-proof-job-${p.bookingKey.slice(0, 10)}`}
+                          onClick={() => handleExtendJobProof(p)}
+                          disabled={isExtending || isLegacyRestricted}
+                          style={{
+                            background: "none",
+                            border: "1px solid var(--c-ink)",
+                            fontSize: "0.68rem",
+                            padding: "2px 8px",
+                            cursor: isExtending || isLegacyRestricted ? "not-allowed" : "pointer",
+                            fontWeight: 700,
+                            borderRadius: 2,
+                            opacity: isExtending || isLegacyRestricted ? 0.65 : 1,
+                          }}
+                          title={
+                            isLegacyRestricted
+                              ? "Legacy booking without permissionless extension: only the booking owner can extend."
+                              : "Extend booking and both completion receipts by 60 days on Arkiv."
+                          }
+                        >
+                          {isExtending ? (stepMsg || "⏳ Preserving proof…") : "🛡️ Preserve proof (extend 60d)"}
+                        </button>
+                      </div>
+
+                      {isLegacyRestricted && (
+                        <div style={{ color: "#b45309", fontSize: "0.68rem", marginTop: 2 }}>
+                          ⚠️ Legacy booking without permissionless extension: only the booking owner can extend.
+                        </div>
+                      )}
+
+                      <div style={{ marginTop: 3 }}>
                         <strong>Seller Signature:</strong>{" "}
                         <a href={getEntityExplorerUrl(p.sellerCompletionKey)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
                           {p.sellerCompletionKey.slice(0, 10)}…{p.sellerCompletionKey.slice(-6)} ↗
                         </a>
                       </div>
-                      <button
-                        type="button"
-                        id={`extend-proof-seller-${p.sellerCompletionKey.slice(0, 10)}`}
-                        onClick={() => handleExtendProof(p.sellerCompletionKey)}
-                        disabled={extendingKeys.has(p.sellerCompletionKey.toLowerCase())}
-                        style={{
-                          background: "none",
-                          border: "1px solid var(--c-ink)",
-                          fontSize: "0.68rem",
-                          padding: "1px 6px",
-                          cursor: extendingKeys.has(p.sellerCompletionKey.toLowerCase()) ? "not-allowed" : "pointer",
-                          fontWeight: 700,
-                          borderRadius: 2,
-                          opacity: extendingKeys.has(p.sellerCompletionKey.toLowerCase()) ? 0.7 : 1,
-                        }}
-                        title="Permissionlessly extend public cryptographic availability of this completion proof for another 60 days on Arkiv."
-                      >
-                        {extendingKeys.has(p.sellerCompletionKey.toLowerCase()) ? "⏳ Confirming in MetaMask…" : "🛡️ Preserve proof (extend 60d)"}
-                      </button>
-                    </div>
-                    <div style={{ marginTop: 2, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 4 }}>
-                      <div>
+
+                      <div style={{ marginTop: 2 }}>
                         <strong>Buyer Signature:</strong>{" "}
                         <a href={getEntityExplorerUrl(p.buyerCompletionKey)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
                           {p.buyerCompletionKey.slice(0, 10)}…{p.buyerCompletionKey.slice(-6)} ↗
                         </a>
                       </div>
-                      <button
-                        type="button"
-                        id={`extend-proof-buyer-${p.buyerCompletionKey.slice(0, 10)}`}
-                        onClick={() => handleExtendProof(p.buyerCompletionKey)}
-                        disabled={extendingKeys.has(p.buyerCompletionKey.toLowerCase())}
-                        style={{
-                          background: "none",
-                          border: "1px solid var(--c-ink)",
-                          fontSize: "0.68rem",
-                          padding: "1px 6px",
-                          cursor: extendingKeys.has(p.buyerCompletionKey.toLowerCase()) ? "not-allowed" : "pointer",
-                          fontWeight: 700,
-                          borderRadius: 2,
-                          opacity: extendingKeys.has(p.buyerCompletionKey.toLowerCase()) ? 0.7 : 1,
-                        }}
-                        title="Permissionlessly extend public cryptographic availability of this completion proof for another 60 days on Arkiv."
-                      >
-                        {extendingKeys.has(p.buyerCompletionKey.toLowerCase()) ? "⏳ Confirming in MetaMask…" : "🛡️ Preserve proof (extend 60d)"}
-                      </button>
-                    </div>
-                    {extendingKeys.size > 0 && (
-                      <div style={{ padding: "4px 8px", background: "rgba(59, 130, 246, 0.12)", border: "1px solid #3b82f6", color: "#1d4ed8", fontSize: "0.70rem", marginTop: 4, borderRadius: 2 }}>
-                        ⏳ Please review and confirm the extension transaction in your MetaMask wallet popup…
+
+                      {isExtending && (
+                        <div style={{ padding: "4px 8px", background: "rgba(59, 130, 246, 0.12)", border: "1px solid #3b82f6", color: "#1d4ed8", fontSize: "0.70rem", marginTop: 4, borderRadius: 2 }}>
+                          ⏳ {stepMsg || "Please review and confirm transaction in MetaMask…"}
+                        </div>
+                      )}
+
+                      <div style={{ fontSize: "0.65rem", opacity: 0.75, marginTop: 3 }}>
+                        ℹ️ Extension preserves on-chain receipt availability (booking + 2 signatures); it does not reopen the job window.
                       </div>
-                    )}
-                    <div style={{ fontSize: "0.65rem", opacity: 0.75, marginTop: 2 }}>
-                      ℹ️ Extension preserves on-chain receipt availability; it does not reopen the job window.
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {extendSuccess && (
                   <div style={{ padding: "6px 8px", background: "rgba(34, 197, 94, 0.15)", border: "1px solid #22c55e", color: "#15803d", fontSize: "0.72rem" }}>
-                    ✓ Proof extended to block #{extendSuccess.expiresAt.toLocaleString()}!{" "}
+                    ✓ Proof extended to block #{extendSuccess.expiresAt.toLocaleString("en-US")}!{" "}
                     <a href={getTxExplorerUrl(extendSuccess.txHash)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline" }}>
                       Tx ↗
                     </a>
@@ -805,56 +848,58 @@ export function SlotDrawer({
 
             {/* Current Owner */}
             <div className="proof-row">
-              <div className="proof-key">
-                $owner (current owner)
-                {isVerifyingOwner && (
-                  <span style={{ marginLeft: 6, fontSize: "0.65rem", color: "var(--c-amber)", fontWeight: 400 }}>
-                    (verifying on-chain…)
-                  </span>
-                )}
-                {!isVerifyingOwner && ownerVerificationError && (
-                  <span style={{ marginLeft: 6, fontSize: "0.65rem", color: "#b91c1c", fontWeight: 400 }} title={ownerVerificationError}>
-                    (cached state)
-                  </span>
-                )}
-              </div>
-              <div className="proof-val-wrap">
-                <div className="drawer__key-box" style={{ fontSize: "0.65rem" }} aria-label={`Current Owner: ${currentOwner}`}>
-                  {currentOwner}
-                  {isOwner && (
-                    <span style={{ marginLeft: 6, color: "var(--c-teal)", fontWeight: 700 }}>
-                      (You)
-                    </span>
+              <div className="proof-key">$owner (current owner)</div>
+              {isVerifyingOwner ? (
+                <div className="proof-val-wrap">
+                  <div
+                    id="drawer-owner-verifying"
+                    className="drawer__key-box"
+                    style={{ fontSize: "0.72rem", color: "var(--c-amber)", fontStyle: "italic" }}
+                  >
+                    verifying on-chain…
+                  </div>
+                </div>
+              ) : (
+                <div className="proof-val-wrap">
+                  <div className="drawer__key-box" style={{ fontSize: "0.65rem" }} aria-label={`Current Owner: ${currentOwner}`} title={ownerVerificationError || undefined}>
+                    {currentOwner || (ownerVerificationError ? "Verification error" : "Unknown")}
+                    {isVerifiedOwner && (
+                      <span style={{ marginLeft: 6, color: "var(--c-teal)", fontWeight: 700 }}>
+                        (You)
+                      </span>
+                    )}
+                  </div>
+                  {currentOwner && (
+                    <div className="proof-actions">
+                      <CopyButton value={currentOwner} label="owner address" />
+                      {isVerifiedOwner && walletConnected && (
+                        <button
+                          type="button"
+                          id="toggle-transfer-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsTransferOpen((v) => !v);
+                            setTransferError(null);
+                            setTransferSuccessTx(null);
+                          }}
+                          style={{
+                            background: isTransferOpen ? "#2a2824" : "var(--c-paper)",
+                            color: isTransferOpen ? "var(--c-paper)" : "var(--c-ink)",
+                            border: isTransferOpen ? "1px solid rgba(251, 247, 240, 0.5)" : "1px solid var(--c-ink)",
+                            padding: "2px 8px",
+                            fontSize: "0.72rem",
+                            cursor: "pointer",
+                            fontWeight: 700,
+                            borderRadius: 2,
+                          }}
+                        >
+                          {isTransferOpen ? "Cancel Transfer" : "⇄ Transfer"}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
-                <div className="proof-actions">
-                  <CopyButton value={currentOwner} label="owner address" />
-                  {isOwner && walletConnected && (
-                    <button
-                      type="button"
-                      id="toggle-transfer-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsTransferOpen((v) => !v);
-                        setTransferError(null);
-                        setTransferSuccessTx(null);
-                      }}
-                      style={{
-                        background: isTransferOpen ? "#2a2824" : "var(--c-paper)",
-                        color: isTransferOpen ? "var(--c-paper)" : "var(--c-ink)",
-                        border: isTransferOpen ? "1px solid rgba(251, 247, 240, 0.5)" : "1px solid var(--c-ink)",
-                        padding: "2px 8px",
-                        fontSize: "0.72rem",
-                        cursor: "pointer",
-                        fontWeight: 700,
-                        borderRadius: 2,
-                      }}
-                    >
-                      {isTransferOpen ? "Cancel Transfer" : "⇄ Transfer"}
-                    </button>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Inline Ownership Transfer Form */}
@@ -989,7 +1034,7 @@ export function SlotDrawer({
             {slot.expiresAtBlock !== undefined && (
               <div className="proof-row">
                 <div className="proof-key">Entity Expiration Block</div>
-                <div className="proof-val">#{slot.expiresAtBlock.toLocaleString()}</div>
+                <div className="proof-val">#{slot.expiresAtBlock.toLocaleString("en-US")}</div>
               </div>
             )}
 
@@ -997,7 +1042,7 @@ export function SlotDrawer({
             {slot.createdAtBlock !== undefined && (
               <div className="proof-row">
                 <div className="proof-key">Created-at Block</div>
-                <div className="proof-val">#{slot.createdAtBlock.toLocaleString()}</div>
+                <div className="proof-val">#{slot.createdAtBlock.toLocaleString("en-US")}</div>
               </div>
             )}
           </section>
@@ -1139,7 +1184,7 @@ export function SlotDrawer({
                   width: "100%",
                 }}
               >
-                ✅ Job Completed — This capacity window is permanently fulfilled and closed.
+                ✅ Job Completed — This capacity window is fulfilled; closed for new bookings.
               </div>
             ) : (
               <div

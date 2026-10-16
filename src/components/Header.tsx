@@ -29,6 +29,7 @@ export interface HeaderProps {
   onOpenDemoGuide?: () => void;
   isSocketHealthy?: boolean;
   lastFetched?: Date | null;
+  refreshFailed?: boolean;
 }
 
 export function Header({
@@ -40,6 +41,7 @@ export function Header({
   onOpenDemoGuide,
   isSocketHealthy = false,
   lastFetched,
+  refreshFailed = false,
 }: HeaderProps): React.ReactElement {
   const { blockNumber, loading: chainLoading, error: chainError } = useChainHead();
   const { status, address, isWrongNetwork, hasProvider } = useWallet();
@@ -125,6 +127,24 @@ export function Header({
           >
             {isSocketHealthy ? "LIVE" : "POLLING"}
           </span>
+          {refreshFailed && (
+            <span
+              id="header-refresh-failed-badge"
+              style={{
+                fontSize: "0.68rem",
+                fontWeight: 700,
+                padding: "1px 5px",
+                borderRadius: "4px",
+                letterSpacing: "0.04em",
+                backgroundColor: "#fee2e2",
+                color: "#b91c1c",
+                border: "1px solid #fca5a5",
+              }}
+              title="Last refresh failed; serving last verified on-chain state"
+            >
+              REFRESH FAILED
+            </span>
+          )}
           {lastUpdatedStr && (
             <span
               style={{
