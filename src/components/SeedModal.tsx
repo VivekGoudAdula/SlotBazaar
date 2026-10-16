@@ -35,7 +35,7 @@ import { generateSeedSlots, type GeneratedSlot } from "../lib/seedGenerator.js";
 const COOLDOWN_KEY = "slotbazaar_last_seed_time";
 const FAUCET_URL = "https://hub.arkiv.network/faucet";
 const MAX_LIVE_SYNTHETIC_CAP = 40;
-const REAL_BATCH_LIMIT = 20; // Empirically verified on Arkiv Tiramisu (size 20 & 30 confirmed in 1 single tx)
+const DEFAULT_DEMO_BATCH_SIZE = 7; // Canonical 6-8 listings per demo batch
 const COST_PER_SLOT_GLM = 0.00014328;
 const MIN_REQUIRED_BALANCE_WEI = 1000000000000000n; // 0.001 GLM
 
@@ -76,10 +76,10 @@ export function SeedModal({
 
   const isLimitReached = liveSyntheticCount >= MAX_LIVE_SYNTHETIC_CAP;
 
-  // Real batch size: up to 20 per transaction, capped at remaining space under 40
+  // Real batch size: 6-8 per transaction, capped at remaining space under 40
   const plannedBatchCount = useMemo(() => {
     const remaining = Math.max(0, MAX_LIVE_SYNTHETIC_CAP - liveSyntheticCount);
-    return Math.min(REAL_BATCH_LIMIT, remaining > 0 ? remaining : REAL_BATCH_LIMIT);
+    return Math.min(DEFAULT_DEMO_BATCH_SIZE, remaining > 0 ? remaining : DEFAULT_DEMO_BATCH_SIZE);
   }, [liveSyntheticCount]);
 
   const estimatedBatchCostGLM = useMemo(() => {
@@ -179,6 +179,8 @@ export function SeedModal({
           title: s.title,
           description: s.description,
           seller_label: s.sellerLabel,
+          synthetic: true,
+          demo: true,
           schema_version: 1,
         }),
         contentType: "application/json",
@@ -194,8 +196,10 @@ export function SeedModal({
           lat_e4: i32(Math.round(s.lat * 10000)),
           lon_e4: i32(Math.round(s.lon * 10000)),
           synthetic: bool(true),
+          demo: bool(true),
           seed_batch: str(batchId),
         },
+        flags: { readonly: true },
         expires: ExpirationTime.atDate(new Date(s.endsAt * 1000)),
       }));
 
@@ -227,6 +231,10 @@ export function SeedModal({
         startsAt: s.startsAt,
         endsAt: s.endsAt,
         synthetic: true,
+        creationFlags: {
+          readonly: true,
+          permissionlessExtension: false,
+        },
         seedBatch: batchId,
       }));
 
@@ -565,6 +573,21 @@ export function SeedModal({
                         <span style={{ color: "#374151" }}>{s.title.split("] ")[1] || s.title}</span>
                       </div>
                       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                        {s.isDemoTestRecord && (
+                          <span
+                            style={{
+                              padding: "1px 6px",
+                              borderRadius: 4,
+                              background: "rgba(232, 69, 44, 0.15)",
+                              color: "#dc2626",
+                              fontWeight: 700,
+                              fontSize: "0.72rem",
+                              border: "1px solid #dc2626",
+                            }}
+                          >
+                            ⚡ Demo Expiry Test
+                          </span>
+                        )}
                         <span
                           style={{
                             padding: "1px 6px",

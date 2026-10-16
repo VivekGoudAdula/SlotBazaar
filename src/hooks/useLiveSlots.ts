@@ -21,8 +21,10 @@ import {
   type CompletionEntity,
   type ReputationResult,
   type ReputationProof,
+  getKnownTransferredOwner,
+  recordTransferredOwner,
 } from "../lib/arkiv.js";
-import type { Address } from "viem";
+import { checksumAddress, type Address, type Hex } from "viem";
 
 const POLL_INTERVAL_MS = 30_000; // 30-second polling safety net
 
@@ -41,6 +43,8 @@ export interface UseLiveSlotsResult {
   isSocketHealthy: boolean;
   refresh: () => void;
   addSlot: (slot: SlotEntity) => void;
+  updateSlotOwner: (key: Hex, newOwner: Address) => void;
+  addBooking: (booking: BookingEntity) => void;
 }
 
 const LOCAL_STORAGE_KEY = "slotbazaar_recent_slots";
@@ -48,6 +52,22 @@ const LOCAL_STORAGE_KEY = "slotbazaar_recent_slots";
 export function getBaseOnChainSlots(): SlotEntity[] {
   const now = Math.floor(Date.now() / 1000);
   return [
+    {
+      key: "0x6aa50234086b2db6b70562e021f0e8cef293127e2742b0a7d0220fc72a961d53",
+      creator: "0xf48e7802a97781cca58750a6e5f1f1ab93763225",
+      owner: (getKnownTransferredOwner("0x6aa50234086b2db6b70562e021f0e8cef293127e2742b0a7d0220fc72a961d53") || "0x53491aA366E086C19da948669b340317eE6eA6e9") as Address,
+      category: "transport",
+      cluster: "jeedimetla",
+      title: "Test - Express Mini Truck",
+      description: "",
+      sellerLabel: "0xf48e…3225",
+      priceBand: "mid",
+      lat: 17.4897,
+      lon: 78.5650,
+      startsAt: now - 3600,
+      endsAt: now + 4 * 3600,
+      synthetic: false,
+    },
     {
       key: "0x844c662541d77ebae8102ed29e0de86aaa06915ef452e034218b87a2679f4d47",
       creator: "0x53491aa366e086c19da948669b340317ee6ea6e9",
@@ -252,11 +272,15 @@ function loadLocalRecentSlots(): SlotEntity[] {
     const nowSec = Math.floor(Date.now() / 1000);
     const validLocal = parsed
       .filter((s) => s.endsAt > nowSec)
-      .map((s) => ({
-        ...s,
-        createdAtBlock: s.createdAtBlock ? BigInt(s.createdAtBlock) : undefined,
-        expiresAtBlock: s.expiresAtBlock ? BigInt(s.expiresAtBlock) : undefined,
-      }));
+      .map((s) => {
+        const known = getKnownTransferredOwner(s.key as Hex);
+        return {
+          ...s,
+          owner: known ? known : s.owner,
+          createdAtBlock: s.createdAtBlock ? BigInt(s.createdAtBlock) : undefined,
+          expiresAtBlock: s.expiresAtBlock ? BigInt(s.expiresAtBlock) : undefined,
+        };
+      });
     const map = new Map<string, SlotEntity>();
     for (const b of base) map.set(b.key.toLowerCase(), b);
     for (const s of validLocal) map.set(s.key.toLowerCase(), s);
@@ -281,9 +305,38 @@ function saveLocalRecentSlots(slots: SlotEntity[]): void {
   }
 }
 
+const LOCAL_BOOKINGS_STORAGE_KEY = "slotbazaar_recent_bookings";
+
+function loadLocalRecentBookings(): BookingEntity[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_BOOKINGS_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as BookingEntity[]) : [];
+    return parsed.map((b) => ({
+      ...b,
+      createdAtBlock: b.createdAtBlock ? BigInt(b.createdAtBlock) : undefined,
+      expiresAtBlock: b.expiresAtBlock ? BigInt(b.expiresAtBlock) : undefined,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalRecentBookings(bookings: BookingEntity[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    const serialized = JSON.stringify(bookings, (_, value) =>
+      typeof value === "bigint" ? value.toString() : value
+    );
+    localStorage.setItem(LOCAL_BOOKINGS_STORAGE_KEY, serialized);
+  } catch (err) {
+    console.error("Failed to persist bookings to localStorage:", err);
+  }
+}
+
 export function useLiveSlots(): UseLiveSlotsResult {
   const [slots, setSlots] = useState<SlotEntity[]>(() => loadLocalRecentSlots());
-  const [bookings, setBookings] = useState<BookingEntity[]>([]);
+  const [bookings, setBookings] = useState<BookingEntity[]>(() => loadLocalRecentBookings());
   const [completions, setCompletions] = useState<CompletionEntity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -294,6 +347,7 @@ export function useLiveSlots(): UseLiveSlotsResult {
   const isFetchingRef = useRef(false);
   const lastFetchTimeRef = useRef(0);
   const localSlotsRef = useRef<SlotEntity[]>(loadLocalRecentSlots());
+  const localBookingsRef = useRef<BookingEntity[]>(loadLocalRecentBookings());
 
   const addSlot = useCallback((newSlot: SlotEntity) => {
     localSlotsRef.current = [
@@ -305,6 +359,35 @@ export function useLiveSlots(): UseLiveSlotsResult {
       newSlot,
       ...prev.filter((s) => s.key.toLowerCase() !== newSlot.key.toLowerCase()),
     ]);
+  }, []);
+
+  const addBooking = useCallback((newBooking: BookingEntity) => {
+    localBookingsRef.current = [
+      newBooking,
+      ...localBookingsRef.current.filter((b) => b.key.toLowerCase() !== newBooking.key.toLowerCase()),
+    ];
+    saveLocalRecentBookings(localBookingsRef.current);
+    setBookings((prev) => [
+      newBooking,
+      ...prev.filter((b) => b.key.toLowerCase() !== newBooking.key.toLowerCase()),
+    ]);
+  }, []);
+
+  const updateSlotOwner = useCallback((key: Hex, newOwner: Address) => {
+    const normKey = key.toLowerCase();
+    const cOwner = checksumAddress(newOwner);
+    recordTransferredOwner(key, cOwner);
+
+    localSlotsRef.current = localSlotsRef.current.map((s) =>
+      s.key.toLowerCase() === normKey ? { ...s, owner: cOwner } : s
+    );
+    saveLocalRecentSlots(localSlotsRef.current);
+
+    setSlots((prev) =>
+      prev.map((s) =>
+        s.key.toLowerCase() === normKey ? { ...s, owner: cOwner } : s
+      )
+    );
   }, []);
 
   // Fixed 3 queries per refresh cycle: 1 slots + 1 bookings + 1 completions
@@ -379,7 +462,20 @@ export function useLiveSlots(): UseLiveSlotsResult {
           });
         }
 
-        if (freshBookings.length > 0) setBookings(freshBookings);
+        if (freshBookings.length > 0) {
+          const bookingMap = new Map<string, BookingEntity>();
+          for (const b of freshBookings) {
+            bookingMap.set(b.key.toLowerCase(), b);
+          }
+          for (const b of localBookingsRef.current) {
+            if (!bookingMap.has(b.key.toLowerCase())) {
+              bookingMap.set(b.key.toLowerCase(), b);
+            }
+          }
+          const mergedBookings = Array.from(bookingMap.values());
+          setBookings(mergedBookings);
+          saveLocalRecentBookings(mergedBookings);
+        }
         if (freshCompletions.length > 0) setCompletions(freshCompletions);
         setLastFetched(new Date());
       }
@@ -460,9 +556,12 @@ export function useLiveSlots(): UseLiveSlotsResult {
             backoffDelayRef.current = 1000;
             triggerDebouncedFetch();
           },
-          onOwnershipTransferred: () => {
+          onOwnershipTransferred: (event) => {
             setSocketHealthy(true);
             backoffDelayRef.current = 1000;
+            if (event?.entityKey && event?.newOwner) {
+              updateSlotOwner(event.entityKey as Hex, event.newOwner as Address);
+            }
             triggerDebouncedFetch();
           },
           onEntityDeleted: () => {
@@ -522,13 +621,14 @@ export function useLiveSlots(): UseLiveSlotsResult {
       setSlots((prev) => {
         const remaining = prev.filter((s) => s.endsAt > nowSec + BLOCK_MARGIN_SEC);
         if (remaining.length !== prev.length) {
+          triggerDebouncedFetch();
           return remaining;
         }
         return prev;
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [triggerDebouncedFetch]);
 
   // Polling backoff tracking for 429/5xx responses
   const pollingDelayRef = useRef(POLL_INTERVAL_MS);
@@ -720,5 +820,7 @@ export function useLiveSlots(): UseLiveSlotsResult {
     isSocketHealthy,
     refresh: () => doFetch(true),
     addSlot,
+    updateSlotOwner,
+    addBooking,
   };
 }

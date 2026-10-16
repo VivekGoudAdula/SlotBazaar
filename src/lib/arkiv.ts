@@ -18,7 +18,7 @@ import {
 import { tiramisu } from "@arkiv-network/sdk/chains";
 import { str, u64, i32, bool, key } from "@arkiv-network/sdk/attr";
 import { eq, gt, and } from "@arkiv-network/sdk/query";
-import { http, custom, webSocket, type Address, type Hex } from "viem";
+import { http, custom, webSocket, isAddress, checksumAddress, parseAbiItem, type Address, type Hex } from "viem";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. CONSTANTS & NAMESPACES
@@ -32,6 +32,87 @@ export type SlotCategory = (typeof CATEGORIES)[number];
 
 export const PRICE_BANDS = ["low", "mid", "high"] as const;
 export type PriceBand = (typeof PRICE_BANDS)[number];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1b. AUTHORITATIVE OWNERSHIP CACHE & PERSISTENCE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const TRANSFERRED_OWNERS_STORAGE_KEY = "slotbazaar_transferred_owners";
+
+const inMemoryTransferredOwners = new Map<string, Address>();
+
+function initTransferredOwners(): Map<string, Address> {
+  const map = new Map<string, Address>();
+  if (typeof window !== "undefined") {
+    try {
+      const raw = localStorage.getItem(TRANSFERRED_OWNERS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, string>;
+        for (const [k, v] of Object.entries(parsed)) {
+          if (isAddress(v)) {
+            map.set(k.toLowerCase(), checksumAddress(v as Address));
+          }
+        }
+      }
+    } catch {
+      // Ignore JSON or localStorage exceptions
+    }
+  }
+  return map;
+}
+
+// Populate map on module initialization
+for (const [k, v] of initTransferredOwners().entries()) {
+  inMemoryTransferredOwners.set(k, v);
+}
+
+/**
+ * Records an authoritative transferred owner for an entity key across memory and localStorage.
+ */
+export function recordTransferredOwner(entityKey: Hex, newOwner: Address): void {
+  const normKey = entityKey.toLowerCase();
+  const cOwner = checksumAddress(newOwner);
+  inMemoryTransferredOwners.set(normKey, cOwner);
+  if (typeof window !== "undefined") {
+    try {
+      const obj: Record<string, string> = {};
+      for (const [k, v] of inMemoryTransferredOwners.entries()) {
+        obj[k] = v;
+      }
+      localStorage.setItem(TRANSFERRED_OWNERS_STORAGE_KEY, JSON.stringify(obj));
+    } catch {
+      // Ignore quota errors
+    }
+  }
+}
+
+/**
+ * Retrieves the recorded transferred owner for an entity key, if known.
+ */
+export function getKnownTransferredOwner(entityKey: Hex): Address | undefined {
+  return inMemoryTransferredOwners.get(entityKey.toLowerCase());
+}
+
+/**
+ * Returns a read-only snapshot map of all recorded transferred owners.
+ */
+export function getAllTransferredOwners(): Map<string, Address> {
+  return new Map(inMemoryTransferredOwners);
+}
+
+/**
+ * Clears the transferred owners cache (useful for isolated unit testing).
+ */
+export function clearTransferredOwnersCacheForTesting(): void {
+  inMemoryTransferredOwners.clear();
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(TRANSFERRED_OWNERS_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. ERROR TAXONOMY
@@ -119,6 +200,11 @@ export interface SlotPayload {
   schema_version: number;
 }
 
+export interface EntityCreationFlags {
+  readonly: boolean;
+  permissionlessExtension: boolean;
+}
+
 export interface SlotEntity {
   key: Hex;
   creator: Address;
@@ -135,6 +221,7 @@ export interface SlotEntity {
   sellerLabel: string;
   createdAtBlock?: bigint;
   expiresAtBlock?: bigint;
+  creationFlags?: EntityCreationFlags;
   synthetic: boolean;
   seedBatch?: string;
 }
@@ -156,6 +243,7 @@ export interface BookingEntity {
   note: string;
   createdAtBlock?: bigint;
   expiresAtBlock?: bigint;
+  creationFlags?: EntityCreationFlags;
   synthetic: boolean;
   schemaVersion: number;
 }
@@ -176,6 +264,7 @@ export interface CompletionEntity {
   note: string;
   createdAtBlock?: bigint;
   expiresAtBlock?: bigint;
+  creationFlags?: EntityCreationFlags;
   synthetic: boolean;
   schemaVersion: number;
 }
@@ -328,11 +417,22 @@ export function parseSlotEntity(entity: Entity | FullEntity): SlotEntity | null 
       payloadJson = null;
     }
     const validated = validateSlotPayload(payloadJson);
+    const keyHex = entity.key as Hex;
+    const knownOwner = getKnownTransferredOwner(keyHex);
+    const resolvedOwner = knownOwner
+      ? knownOwner
+      : entity.owner && isAddress(entity.owner)
+        ? checksumAddress(entity.owner as Address)
+        : ("0x0" as Address);
+
+    const resolvedCreator = entity.creator && isAddress(entity.creator)
+      ? checksumAddress(entity.creator as Address)
+      : ("0x0" as Address);
 
     return {
-      key: entity.key as Hex,
-      creator: (entity.creator || "0x0") as Address,
-      owner: (entity.owner || "0x0") as Address,
+      key: keyHex,
+      creator: resolvedCreator,
+      owner: resolvedOwner,
       category,
       cluster,
       startsAt,
@@ -345,6 +445,12 @@ export function parseSlotEntity(entity: Entity | FullEntity): SlotEntity | null 
       sellerLabel: validated.seller_label,
       createdAtBlock: entity.createdAt,
       expiresAtBlock: entity.expiresAt,
+      creationFlags: entity.creationFlags
+        ? {
+            readonly: Boolean(entity.creationFlags.readonly),
+            permissionlessExtension: Boolean(entity.creationFlags.permissionlessExtension),
+          }
+        : undefined,
       synthetic,
       seedBatch,
     };
@@ -423,6 +529,12 @@ export function parseBookingEntity(entity: Entity | FullEntity): BookingEntity |
       note: validated.note || "",
       createdAtBlock: entity.createdAt,
       expiresAtBlock: entity.expiresAt,
+      creationFlags: entity.creationFlags
+        ? {
+            readonly: Boolean(entity.creationFlags.readonly),
+            permissionlessExtension: Boolean(entity.creationFlags.permissionlessExtension),
+          }
+        : undefined,
       synthetic,
       schemaVersion,
     };
@@ -479,6 +591,12 @@ export function parseCompletionEntity(entity: Entity | FullEntity): CompletionEn
       note: validated.note || "",
       createdAtBlock: entity.createdAt,
       expiresAtBlock: entity.expiresAt,
+      creationFlags: entity.creationFlags
+        ? {
+            readonly: Boolean(entity.creationFlags.readonly),
+            permissionlessExtension: Boolean(entity.creationFlags.permissionlessExtension),
+          }
+        : undefined,
       synthetic,
       schemaVersion,
     };
@@ -1019,6 +1137,41 @@ export function getReputation(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 7b. DERIVED BOOKING STATE & LIFECYCLE (pure function, source of truth: Arkiv)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type SlotBookingStatus = "AVAILABLE" | "BOOKED" | "EXPIRED" | "COMPLETED";
+
+/**
+ * Derives the authoritative 4-state lifecycle status for a slot.
+ * Source of truth: Real Arkiv listing, booking, and completion entities.
+ *
+ * States:
+ * - "COMPLETED": A winning booking exists and both seller and buyer have confirmed completion on Arkiv.
+ * - "BOOKED": A winning booking exists on Arkiv (capacity window claimed; single-use capacity locked).
+ * - "EXPIRED": No winning booking exists and the slot's availability deadline (endsAt) has elapsed.
+ * - "AVAILABLE": No winning booking exists and the slot's availability deadline (endsAt) is in the future.
+ */
+export function getSlotBookingStatus(
+  slot: { key: Hex; creator: Address; endsAt: number; startsAt?: number },
+  winningBooking: BookingEntity | null | undefined,
+  completions: CompletionEntity[] = [],
+  nowSec: number = Math.floor(Date.now() / 1000)
+): SlotBookingStatus {
+  if (winningBooking) {
+    const verified = verifyJobCompletion(slot, winningBooking, completions);
+    if (verified) {
+      return "COMPLETED";
+    }
+    return "BOOKED";
+  }
+  if (slot.endsAt <= nowSec) {
+    return "EXPIRED";
+  }
+  return "AVAILABLE";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 8. WRITE LAYER (MUTATION FUNCTIONS WITH IDEMPOTENCY)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1082,6 +1235,7 @@ export async function createSlot(
         lon_e4: i32(lonE4),
         synthetic: bool(synthetic),
       },
+      flags: { readonly: true },
       expires,
     });
 
@@ -1114,8 +1268,23 @@ export interface CreateBookingOutput {
 
 /**
  * Creates a booking entity on Arkiv Tiramisu (Schema v2).
- * Uses provided slotCreator, slotStartsAt and slotEndsAt or reads the slot live on-chain.
- * Expiry: 30 days.
+ *
+ * Booking Integrity & Concurrency Rules:
+ * 1. Preflight on-chain verification:
+ *    - Rejects expired slots (endsAt <= nowSec)
+ *    - Rejects seller or current owner attempting to book their own slot
+ *    - Queries Arkiv for existing bookings linked to slotKey; rejects if an active booking exists
+ * 2. Protocol-level Concurrency:
+ *    - Arkiv SDK does not provide cross-wallet compare-and-set or unique constraints for custom attributes.
+ *    - If two wallets query simultaneously before either booking is confirmed on-chain, both may broadcast a tx.
+ *    - The protocol deterministically resolves concurrency via block consensus:
+ *      Earliest confirmed block wins (createdAtBlock ascending). Ties broken lexicographically by entityKey.
+ *    - Only the winning booking is eligible to confirm completion and earn two-sided reputation.
+ * 3. Lifecycle & Release Rules:
+ *    - Industrial capacity windows in SlotBazaar are strictly single-use. Once booked, a capacity window
+ *      cannot be re-booked a second time, even after completion.
+ *    - Counterparty booking records are created with flags: { readonly: true } and cannot be silently
+ *      released or deleted by client state. Sellers with recurring capacity must issue a new listing entity.
  */
 export async function createBooking(
   wallet: WalletArkivClient,
@@ -1124,24 +1293,53 @@ export async function createBooking(
 ): Promise<CreateBookingOutput> {
   acquireWriteLock("createBooking");
   try {
+    const nowSec = Math.floor(Date.now() / 1000);
     let slotCreator = input.slotCreator;
     let slotStartsAt = input.slotStartsAt;
     let slotEndsAt = input.slotEndsAt;
+    let slotOwner: Address | undefined;
 
-    // If caller didn't pass slot details, lookup slot entity
-    if (!slotCreator || slotStartsAt === undefined || !slotEndsAt) {
-      const slot = await getSlotEntity(input.slotKey, publicClient);
-      if (slot) {
-        slotCreator = slot.creator;
-        slotStartsAt = slot.startsAt;
-        slotEndsAt = slot.endsAt;
-      }
+    // 1. Resolve slot details from on-chain if missing or unverified
+    const slot = await getSlotEntity(input.slotKey, publicClient);
+    if (slot) {
+      slotCreator = slot.creator;
+      slotStartsAt = slot.startsAt;
+      slotEndsAt = slot.endsAt;
+      slotOwner = slot.owner;
     }
 
     if (!slotCreator || !slotEndsAt || slotStartsAt === undefined) {
       throw new ArkivError(
         "INVALID_PAYLOAD",
         `Cannot book slot: target slot entity ${input.slotKey} details could not be resolved.`
+      );
+    }
+
+    // 2. Reject expired slot
+    if (slotEndsAt <= nowSec) {
+      throw new ArkivError(
+        "INVALID_PAYLOAD",
+        `Cannot book expired slot ${input.slotKey}: availability deadline passed at ${new Date(slotEndsAt * 1000).toISOString()}.`
+      );
+    }
+
+    // 3. Reject seller or owner booking their own slot
+    const walletAddr = wallet.account?.address?.toLowerCase();
+    if (walletAddr) {
+      if (walletAddr === slotCreator.toLowerCase() || (slotOwner && walletAddr === slotOwner.toLowerCase())) {
+        throw new ArkivError(
+          "INVALID_PAYLOAD",
+          "Sellers and listing owners cannot book their own slot."
+        );
+      }
+    }
+
+    // 4. Preflight on-chain query: Check for existing active booking on Arkiv
+    const existing = await fetchBookingsForSlot(input.slotKey, publicClient);
+    if (existing.winner || existing.all.length > 0) {
+      throw new ArkivError(
+        "CONCURRENT_SUBMISSION",
+        `Slot ${input.slotKey} already has an active booking on Arkiv (winner: ${existing.winner?.key ?? existing.all[0].key}). Competing bookings are rejected.`
       );
     }
 
@@ -1171,6 +1369,7 @@ export async function createBooking(
         booked_at: u64(BigInt(bookedAt)),
         synthetic: bool(synthetic),
       },
+      flags: { readonly: true },
       expires,
     });
 
@@ -1234,6 +1433,7 @@ export async function createCompletion(
         completed_at: u64(BigInt(completedAt)),
         synthetic: bool(synthetic),
       },
+      flags: { readonly: true, permissionlessExtension: true },
       expires,
     });
 
@@ -1247,6 +1447,244 @@ export async function createCompletion(
   } finally {
     releaseWriteLock();
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8a. PERMISSIONLESS EXTENSION (COMPLETION / REPUTATION EVIDENCE)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ExtendProofOutput {
+  entityKey: Hex;
+  txHash: Hex;
+  expiresAt: bigint;
+}
+
+/**
+ * Publicly extends the storage lifetime of an Arkiv entity on Tiramisu.
+ * Designed for immutable completion/reputation evidence entities created with
+ * flags: { readonly: true, permissionlessExtension: true }.
+ *
+ * Verifies that the entity exists and has permissionlessExtension enabled before
+ * submitting the transaction via the connected wallet.
+ *
+ * Note: Extending an Arkiv entity preserves on-chain data availability; it does NOT
+ * reopen or modify the underlying job or capacity availability window.
+ */
+export async function extendProofEntity(
+  wallet: WalletArkivClient,
+  entityKey: Hex,
+  daysFromNow: number = 60,
+  publicClient: PublicArkivClient = getArkivPublicClient()
+): Promise<ExtendProofOutput> {
+  acquireWriteLock("extendProofEntity");
+  try {
+    let entity: FullEntity;
+    try {
+      entity = await publicClient.getEntity(entityKey);
+    } catch {
+      throw new ArkivError(
+        "QUERY_ERROR",
+        `Target entity ${entityKey} could not be found or has already expired on Arkiv.`
+      );
+    }
+
+    if (!entity.creationFlags?.permissionlessExtension) {
+      throw new ArkivError(
+        "INVALID_PAYLOAD",
+        `Entity ${entityKey} was not created with permissionlessExtension: true.`
+      );
+    }
+
+    const expires = ExpirationTime.fromDays(daysFromNow);
+    const result = await wallet.extendEntity({
+      entityKey,
+      expires,
+    });
+
+    return {
+      entityKey: result.entityKey,
+      txHash: result.txHash as Hex,
+      expiresAt: result.expiresAt,
+    };
+  } catch (err) {
+    throw parseArkivError(err, "UNKNOWN_WRITE_ERROR");
+  } finally {
+    releaseWriteLock();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8b. OWNERSHIP TRANSFER (ARKIV-NATIVE CHANGE OWNERSHIP)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface TransferOwnershipOutput {
+  entityKey: Hex;
+  newOwner: Address;
+  txHash: Hex;
+}
+
+/**
+ * Transfers ownership of an Arkiv entity to a new recipient address.
+ * Invokes the real Arkiv SDK changeOwnership action via the connected wallet.
+ *
+ * The original creator ($creator) remains permanent and immutable, while the new
+ * address becomes the current owner ($owner).
+ */
+export async function transferEntityOwnership(
+  wallet: WalletArkivClient,
+  entityKey: Hex,
+  newOwner: Address
+): Promise<TransferOwnershipOutput> {
+  if (!isAddress(newOwner)) {
+    throw new ArkivError(
+      "INVALID_PAYLOAD",
+      `Invalid recipient address format: "${newOwner}". Must be a valid 42-character 0x EVM address.`
+    );
+  }
+
+  acquireWriteLock("transferEntityOwnership");
+  try {
+    const result = await wallet.changeOwnership({
+      entityKey,
+      newOwner: newOwner as Hex,
+    });
+
+    const cOwner = checksumAddress(newOwner);
+    recordTransferredOwner(entityKey, cOwner);
+
+    return {
+      entityKey: result.entityKey,
+      newOwner: cOwner,
+      txHash: result.txHash as Hex,
+    };
+  } catch (err) {
+    throw parseArkivError(err, "UNKNOWN_WRITE_ERROR");
+  } finally {
+    releaseWriteLock();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8c. AUTHORITATIVE ON-CHAIN ENTITY VERIFICATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ARKIV_ADDRESS = "0x4400000000000000000000000000000000000044" as const;
+
+export interface AuthoritativeEntityState {
+  key: Hex;
+  owner: Address;
+  creator?: Address;
+  creationFlags?: EntityCreationFlags;
+  verifiedOnChain: boolean;
+  source: "sdk_entity" | "onchain_event" | "cache_fallback";
+}
+
+/**
+ * Fetches the authoritative, on-chain entity owner and metadata.
+ *
+ * Strategy:
+ *  1. Query Arkiv SDK `client.getEntity(entityKey)` which reads authoritative `$owner` and `$creator`.
+ *  2. If Arkiv query RPC is rate-limited (HTTP 429 ANON_COST_LIMITED) or encounters a transient issue,
+ *     fall back to querying EVM event logs directly on ARKIV_ADDRESS (OwnershipTransferred and EntityCreated).
+ *  3. Fallback to cached known transfer if network is unavailable.
+ */
+export async function fetchAuthoritativeEntityOwner(
+  entityKey: Hex,
+  client: PublicArkivClient = getArkivPublicClient()
+): Promise<AuthoritativeEntityState> {
+  // 1. Primary: Arkiv SDK authoritative entity fetch
+  try {
+    const ent = await client.getEntity(entityKey);
+    if (ent && ent.owner && isAddress(ent.owner)) {
+      const owner = checksumAddress(ent.owner as Address);
+      const creator = ent.creator && isAddress(ent.creator) ? checksumAddress(ent.creator as Address) : undefined;
+      recordTransferredOwner(entityKey, owner);
+      return {
+        key: entityKey,
+        owner,
+        creator,
+        creationFlags: ent.creationFlags
+          ? {
+              readonly: Boolean(ent.creationFlags.readonly),
+              permissionlessExtension: Boolean(ent.creationFlags.permissionlessExtension),
+            }
+          : undefined,
+        verifiedOnChain: true,
+        source: "sdk_entity",
+      };
+    }
+  } catch {
+    // If rate-limited or indexing in progress, proceed to on-chain event log verification
+  }
+
+  // 2. Secondary: Direct on-chain EVM event logs via standard eth_getLogs on Arkiv contract
+  try {
+    const [transferLogs, createdLogs] = await Promise.all([
+      client.getLogs({
+        address: ARKIV_ADDRESS,
+        event: parseAbiItem(
+          "event OwnershipTransferred(bytes32 indexed entityKey, address indexed previousOwner, address indexed newOwner)"
+        ),
+        args: { entityKey },
+        fromBlock: 0x90000n,
+      }).catch(() => []),
+      client.getLogs({
+        address: ARKIV_ADDRESS,
+        event: parseAbiItem(
+          "event EntityCreated(bytes32 indexed entityKey, address indexed owner, uint64 expiresAt, uint8 creationFlags)"
+        ),
+        args: { entityKey },
+        fromBlock: 0x90000n,
+      }).catch(() => []),
+    ]);
+
+    let creator: Address | undefined;
+    if (createdLogs && createdLogs.length > 0 && createdLogs[0].args?.owner) {
+      creator = checksumAddress(createdLogs[0].args.owner);
+    }
+
+    if (transferLogs && transferLogs.length > 0) {
+      const latest = transferLogs[transferLogs.length - 1];
+      if (latest.args?.newOwner) {
+        const owner = checksumAddress(latest.args.newOwner);
+        recordTransferredOwner(entityKey, owner);
+        return {
+          key: entityKey,
+          owner,
+          creator,
+          verifiedOnChain: true,
+          source: "onchain_event",
+        };
+      }
+    } else if (creator) {
+      // Created on-chain, not transferred
+      return {
+        key: entityKey,
+        owner: creator,
+        creator,
+        verifiedOnChain: true,
+        source: "onchain_event",
+      };
+    }
+  } catch {
+    // Direct event log query failed
+  }
+
+  // 3. Tertiary: Cached known transfer fallback
+  const cachedOwner = getKnownTransferredOwner(entityKey);
+  if (cachedOwner) {
+    return {
+      key: entityKey,
+      owner: cachedOwner,
+      verifiedOnChain: false,
+      source: "cache_fallback",
+    };
+  }
+
+  throw new ArkivError(
+    "QUERY_ERROR",
+    `Could not authoritatively verify owner for entity ${entityKey}.`
+  );
 }
 
 /**

@@ -32,7 +32,33 @@ export const MarkerClusterGroup = createLayerComponent<
   MarkerClusterGroupProps
 >((props, context) => {
   const { children: _children, ...options } = props;
-  const clusterInstance: L.MarkerClusterGroup = L.markerClusterGroup(options);
+  const clusterInstance: L.MarkerClusterGroup = L.markerClusterGroup({
+    spiderfyOnMaxZoom: true,
+    showCoverageOnHover: false,
+    zoomToBoundsOnClick: false, // Handled smartly below to spiderfy same-location clusters at any zoom
+    spiderfyDistanceMultiplier: 1.5,
+    maxClusterRadius: 35,
+    ...options,
+  });
+
+  // Smart cluster click: if markers are at the same or near-identical coordinates,
+  // spiderfy immediately instead of requiring zooming all the way to maxZoom 19.
+  clusterInstance.on("clusterclick", (e: L.LeafletEvent) => {
+    const cluster = (e as unknown as { layer: L.MarkerCluster }).layer;
+    if (!cluster) return;
+    const bounds = cluster.getBounds();
+    const ne = bounds.getNorthEast();
+    const sw = bounds.getSouthWest();
+    const latDiff = Math.abs(ne.lat - sw.lat);
+    const lonDiff = Math.abs(ne.lng - sw.lng);
+
+    if (latDiff < 0.001 && lonDiff < 0.001) {
+      cluster.spiderfy();
+    } else {
+      cluster.zoomToBounds();
+    }
+  });
+
   return createElementObject(
     clusterInstance,
     extendContext(context, { layerContainer: clusterInstance })

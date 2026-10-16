@@ -11,7 +11,7 @@
  *  - flyTo support via new `flyTarget` prop
  */
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
 import L from "leaflet";
 import { MarkerClusterGroup } from "./MarkerClusterGroup.js";
@@ -351,32 +351,46 @@ export function MapView({
           spiderfyDistanceMultiplier={1.5}
           showCoverageOnHover={false}
         >
-          {slots.map((slot) => {
-            const sKeyNorm = slot.key.toLowerCase();
-            const winningBooking = winningBookingsBySlot?.get(sKeyNorm);
-            const sellerRep = reputationByAddress?.get(slot.creator.toLowerCase());
-            const icon = getSlotIcon(slot, winningBooking, userAddress);
+          {useMemo(() => {
+            return slots.map((slot) => {
+              const sKeyNorm = slot.key.toLowerCase();
+              const winningBooking = winningBookingsBySlot?.get(sKeyNorm);
+              const sellerRep = reputationByAddress?.get(slot.creator.toLowerCase());
+              const icon = getSlotIcon(slot, winningBooking, userAddress);
 
-            return (
-              <Marker
-                key={slot.key}
-                position={[slot.lat, slot.lon]}
-                icon={icon}
-                title={slot.title}
-                riseOnHover={true}
-              >
-                <Popup closeButton={false} className="slot-popup" autoPan={false}>
-                  <SlotCard
-                    slot={slot}
-                    winningBooking={winningBooking}
-                    sellerReputation={sellerRep}
-                    userAddress={userAddress}
-                    onSelect={onSelectSlot}
-                  />
-                </Popup>
-              </Marker>
-            );
-          })}
+              return (
+                <Marker
+                  key={slot.key}
+                  position={[slot.lat, slot.lon]}
+                  icon={icon}
+                  title={slot.title}
+                  riseOnHover={true}
+                  eventHandlers={{
+                    click: (e) => {
+                      if (e.originalEvent) {
+                        L.DomEvent.stopPropagation(e.originalEvent);
+                      }
+                    },
+                  }}
+                >
+                  <Popup closeButton={false} className="slot-popup" autoPan={false}>
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <SlotCard
+                        slot={slot}
+                        winningBooking={winningBooking}
+                        sellerReputation={sellerRep}
+                        userAddress={userAddress}
+                        onSelect={onSelectSlot}
+                      />
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            });
+          }, [slots, winningBookingsBySlot, reputationByAddress, userAddress, onSelectSlot])}
         </MarkerClusterGroup>
       </MapContainer>
     </div>

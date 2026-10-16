@@ -14,6 +14,7 @@ import type { Hex } from "viem";
 import { formatEther } from "viem";
 import {
   createBooking,
+  fetchBookingsForSlot,
   getArkivPublicClient,
   getEntityExplorerUrl,
   getTxExplorerUrl,
@@ -117,7 +118,17 @@ export function BookSlotModal({
       return;
     }
 
-    if (slot.creator.toLowerCase() === address.toLowerCase()) {
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (slot.endsAt <= nowSec) {
+      setErrorCode("INVALID_PAYLOAD");
+      setErrorNotice("Cannot book this slot: availability window has already expired on Arkiv.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const userAddr = address.toLowerCase();
+    if (slot.creator.toLowerCase() === userAddr || (slot.owner && slot.owner.toLowerCase() === userAddr)) {
+      setErrorCode("INVALID_PAYLOAD");
       setErrorNotice("You cannot book your own slot.");
       setIsSubmitting(false);
       return;
@@ -125,6 +136,16 @@ export function BookSlotModal({
 
     try {
       setStage("preparing");
+
+      // Preflight on-chain check to prevent competing active bookings
+      const existing = await fetchBookingsForSlot(slot.key);
+      if (existing.winner || existing.all.length > 0) {
+        setErrorCode("CONCURRENT_SUBMISSION");
+        setErrorNotice("This slot has already been booked by another wallet on Arkiv. Competing bookings are prevented.");
+        setIsSubmitting(false);
+        setStage("idle");
+        return;
+      }
 
       setStage("waiting_wallet");
       // Call createBooking (passes slotCreator, slotStartsAt and slotEndsAt directly so MetaMask opens instantly without blocking network queries)
@@ -191,6 +212,15 @@ export function BookSlotModal({
       } else if (lower.includes("chain") || lower.includes("wrong network")) {
         setErrorCode("WRONG_NETWORK");
         setErrorNotice("Wrong network. Please switch to Arkiv Tiramisu.");
+      } else if (lower.includes("already has an active booking") || lower.includes("competing booking") || lower.includes("concurrent")) {
+        setErrorCode("CONCURRENT_SUBMISSION");
+        setErrorNotice("This slot has already been booked on Arkiv. Competing bookings are rejected.");
+      } else if (lower.includes("expired") || lower.includes("deadline")) {
+        setErrorCode("INVALID_PAYLOAD");
+        setErrorNotice("Cannot book this slot: availability window has already expired on Arkiv.");
+      } else if (lower.includes("own slot")) {
+        setErrorCode("INVALID_PAYLOAD");
+        setErrorNotice("You cannot book your own slot.");
       } else {
         setErrorCode("UNKNOWN");
         setErrorNotice(`Failed to book slot: ${msg}`);

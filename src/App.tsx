@@ -16,7 +16,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 
-import type { Hex } from "viem";
+import type { Hex, Address } from "viem";
 import { WalletProvider, useWallet } from "./lib/wallet.js";
 import { useLiveSlots }              from "./hooks/useLiveSlots.js";
 import {
@@ -343,6 +343,8 @@ function AppInner(): React.ReactElement {
     lastFetched,
     refresh,
     addSlot,
+    updateSlotOwner,
+    addBooking,
   } = useLiveSlots();
   const { address, status } = useWallet();
 
@@ -442,6 +444,23 @@ function AppInner(): React.ReactElement {
     return () => clearTimeout(timer);
   }, [toast]);
 
+  // Re-fetch authoritative state whenever the connected wallet account changes
+  useEffect(() => {
+    if (address) {
+      refresh();
+    }
+  }, [address, refresh]);
+
+  // Keep open selectedSlot synchronized if slot owner is updated
+  useEffect(() => {
+    if (selectedSlot) {
+      const match = slots.find((s) => s.key.toLowerCase() === selectedSlot.key.toLowerCase());
+      if (match && match.owner !== selectedSlot.owner) {
+        setSelectedSlot(match);
+      }
+    }
+  }, [slots, selectedSlot]);
+
   /** Unique sorted cluster names */
   const clusters = useMemo<string[]>(
     () => [...new Set(slots.map((s) => s.cluster))].sort(),
@@ -450,20 +469,21 @@ function AppInner(): React.ReactElement {
 
   /** Filter slots by active criteria */
   const filteredSlots = useMemo<SlotEntity[]>(() => {
+    const currentNow = Math.floor(Date.now() / 1000);
     return slots.filter((s) => {
       if (filters.category  !== "all" && s.category  !== filters.category)  return false;
       if (filters.cluster   !== "all" && s.cluster   !== filters.cluster)   return false;
       if (filters.priceBand !== "all" && s.priceBand !== filters.priceBand) return false;
-      if (filters.endingSoon && (s.endsAt - now) > 15 * 60)                 return false;
+      if (filters.endingSoon && (s.endsAt - currentNow) > 15 * 60)          return false;
       if (filters.mySlots && address) {
         const userAddr = address.toLowerCase();
-        if (s.creator.toLowerCase() !== userAddr && s.owner.toLowerCase() !== userAddr) {
+        if (s.owner.toLowerCase() !== userAddr) {
           return false;
         }
       }
       return true;
     });
-  }, [slots, filters, now, address]);
+  }, [slots, filters, address, filters.endingSoon ? now : null]);
 
   const handleSelect  = useCallback((slot: SlotEntity) => setSelectedSlot(slot), []);
   const handleClose   = useCallback(() => setSelectedSlot(null), []);
@@ -498,8 +518,23 @@ function AppInner(): React.ReactElement {
     []
   );
 
+  const handleOwnerUpdated = useCallback(
+    (key: string, newOwner: string) => {
+      const addr = newOwner as Address;
+      updateSlotOwner(key as Hex, addr);
+      setSelectedSlot((prev) =>
+        prev && prev.key.toLowerCase() === key.toLowerCase()
+          ? { ...prev, owner: addr }
+          : prev
+      );
+    },
+    [updateSlotOwner]
+  );
+
+
   const handleBookingComplete = useCallback(
     (booking: BookingEntity, isWinner: boolean) => {
+      addBooking(booking);
       refresh();
       setToast({
         message: isWinner ? "You booked this slot!" : "Booking submitted on Arkiv.",
@@ -510,7 +545,7 @@ function AppInner(): React.ReactElement {
         },
       });
     },
-    [refresh]
+    [addBooking, refresh]
   );
 
   const handleCompletionDone = useCallback(
@@ -658,7 +693,7 @@ function AppInner(): React.ReactElement {
       <main className="main-map-area" role="main" aria-label="India slot map">
         <MapView
           slots={filteredSlots}
-          onSelectSlot={handleSelectAndFly}
+          onSelectSlot={handleSelect}
           flyTarget={flyTarget}
           winningBookingsBySlot={winningBookingsBySlot}
           reputationByAddress={reputationByAddress}
@@ -737,6 +772,7 @@ function AppInner(): React.ReactElement {
           sellerReputation={selectedSlot ? reputationByAddress.get(selectedSlot.creator.toLowerCase()) : undefined}
           onOpenBook={handleOpenBook}
           onOpenConfirmJob={handleOpenConfirmJob}
+          onOwnerUpdated={handleOwnerUpdated}
         />
       </main>
 

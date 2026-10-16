@@ -6,7 +6,13 @@
  */
 
 import React from "react";
-import type { SlotEntity, BookingEntity, ReputationResult } from "../lib/arkiv.js";
+import {
+  type SlotEntity,
+  type BookingEntity,
+  type ReputationResult,
+  type SlotBookingStatus,
+  getSlotBookingStatus,
+} from "../lib/arkiv.js";
 import { formatTimeLeft, getUrgency } from "../lib/time.js";
 import { useNow } from "../hooks/useNow.js";
 
@@ -43,12 +49,20 @@ export function SlotCard({
   const timeLeft = formatTimeLeft(slot.endsAt, now);
   const icon     = CATEGORY_ICONS[slot.category] ?? "📦";
 
+  const remaining = slot.endsAt - now;
+  const isExpiringSoon = remaining > 0 && remaining <= 15 * 60;
+
   const normUser = userAddress?.toLowerCase() ?? "";
   const isMine = Boolean(
     normUser &&
     (slot.creator.toLowerCase() === normUser || slot.owner.toLowerCase() === normUser)
   );
-  const isBooked = Boolean(winningBooking);
+  const slotStatus: SlotBookingStatus = getSlotBookingStatus(
+    slot,
+    winningBooking,
+    undefined,
+    now
+  );
   const isBookedByYou = Boolean(
     winningBooking && normUser && winningBooking.creator.toLowerCase() === normUser
   );
@@ -102,10 +116,41 @@ export function SlotCard({
 
       {/* State badge + Cluster + price band row */}
       <div className="slot-card__row" style={{ flexWrap: "wrap", gap: "6px" }}>
-        {isBookedByYou ? (
+        {slot.synthetic && (
           <span
             style={{
-              background: "var(--c-teal)",
+              background: "#ecfdf5",
+              color: "#047857",
+              border: "1px solid #a7f3d0",
+              fontSize: "0.68rem",
+              fontWeight: 800,
+              padding: "1px 5px",
+              borderRadius: "2px",
+              letterSpacing: "0.02em",
+            }}
+          >
+            ⚗️ SYNTHETIC DEMO
+          </span>
+        )}
+
+        {slotStatus === "COMPLETED" ? (
+          <span
+            style={{
+              background: "rgba(34, 197, 94, 0.15)",
+              color: "#15803d",
+              border: "1px solid #22c55e",
+              fontSize: "0.68rem",
+              fontWeight: 800,
+              padding: "1px 5px",
+              borderRadius: "2px",
+            }}
+          >
+            ✅ Completed
+          </span>
+        ) : slotStatus === "BOOKED" ? (
+          <span
+            style={{
+              background: isBookedByYou ? "var(--c-teal)" : "#4b5563",
               color: "white",
               fontSize: "0.68rem",
               fontWeight: 800,
@@ -113,33 +158,35 @@ export function SlotCard({
               borderRadius: "2px",
             }}
           >
-            ★ Booked by you
+            🔒 {isBookedByYou ? "Booked by you" : "Booked"}
           </span>
-        ) : isMine ? (
+        ) : slotStatus === "EXPIRED" ? (
           <span
             style={{
-              background: "var(--c-marigold)",
-              color: "var(--c-ink)",
+              background: "#f3f4f6",
+              color: "#4b5563",
+              border: "1px solid #9ca3af",
               fontSize: "0.68rem",
               fontWeight: 800,
               padding: "1px 5px",
               borderRadius: "2px",
             }}
           >
-            ★ Your slot
+            ⚫ Expired
           </span>
-        ) : isBooked ? (
+        ) : isExpiringSoon ? (
           <span
             style={{
-              background: "#9E9E9E",
-              color: "white",
+              background: "rgba(232, 69, 44, 0.15)",
+              color: "#b91c1c",
+              border: "1px solid #ef4444",
               fontSize: "0.68rem",
               fontWeight: 800,
               padding: "1px 5px",
               borderRadius: "2px",
             }}
           >
-            🔒 Booked
+            🔴 Expiring soon
           </span>
         ) : (
           <span
@@ -153,7 +200,22 @@ export function SlotCard({
               borderRadius: "2px",
             }}
           >
-            🟢 Open
+            🟢 Available
+          </span>
+        )}
+
+        {isMine && (
+          <span
+            style={{
+              background: "var(--c-marigold)",
+              color: "var(--c-ink)",
+              fontSize: "0.68rem",
+              fontWeight: 800,
+              padding: "1px 5px",
+              borderRadius: "2px",
+            }}
+          >
+            ★ Your slot
           </span>
         )}
 

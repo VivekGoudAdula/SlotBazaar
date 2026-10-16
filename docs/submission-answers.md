@@ -73,10 +73,13 @@ On SlotBazaar, **censorship resistance is enforced by consensus**:
 |---|---|---|
 | **Attributes vs Payload** | `src/lib/arkiv.ts:1099`, `schema.md` | Searchable fields (`category`, `cluster`, `starts_at`, `ends_at`, `lat_e4`, `lon_e4`) are stored as typed attributes for zero-middleware querying; display text (`title`, `description`) resides in payload. |
 | **Compound Predicates & Ranges** | `src/lib/arkiv.ts:380-450` | Queries use `and()`, `eq()`, `gt("ends_at", u64(nowSec))` for live cluster and category filtering directly over RPC. |
-| **Autonomous Entity Expiration** | `src/lib/arkiv.ts:1099`, `schema.md` | Slots expire at `ends_at` (15m to 7d); bookings and completions persist for as long as their entities exist (30 days today) to enable post-slot completion and dispute settlement. |
+| **Autonomous Entity Expiration** | `src/lib/arkiv.ts:1099`, `schema.md` | Slots expire at `ends_at` (15m to 7d); bookings and completions persist for as long as their entities exist (30 days today) to enable post-slot completion and dispute settlement. Distinct visual lifecycle: Active (>15m) → Expiring soon (≤15m) → Expired (≤0s). |
 | **`$creator` Verification** | `src/lib/arkiv.ts:890`, `src/hooks/useLiveSlots.ts` | The reputation engine matches on-chain `$creator` against the slot owner and winning buyer; prevents impersonation and fake self-reviews. |
+| **Immutable Creation Flags** | `src/lib/arkiv.ts:1099, 1157, 1222` | `flags: { readonly: true }` passed on slots and bookings; `creationFlags.readonly` confirmed directly from fetched entity and shown in on-chain proof panel. |
+| **Permissionless Extension** | `src/lib/arkiv.ts:1222, 1260` | `flags: { readonly: true, permissionlessExtension: true }` on completion entities; "🛡️ Preserve proof (extend 60d)" calls native `extendEntity()` to lengthen evidence persistence without modifying booking windows. |
+| **Ownership Transfer** | `src/lib/arkiv.ts:1280`, `SlotDrawer.tsx` | Owner-only "⇄ Transfer Ownership" calls `changeOwnership({ entityKey, newOwner })`; proof drawer distinguishes immutable `$creator` from current `$owner`. |
 | **WebSocket Entity Events** | `src/hooks/useLiveSlots.ts:413-480` | Subscribes via `watchEntityEvents` over `webSocket` transport (omitting `fromBlock` to avoid HTTP polling fallback). Pushes newly posted slots to all peer tabs with real empirical latency measured on localhost (8 of 10 appeared; median 2.60 s, p90: 6.93 s; 2 timed out at 35s; 30s fallback polling is implemented, though recovery was not demonstrated in those two samples). |
-| **Single-Signature Batch Writes** | `src/components/SeedModal.tsx:38`, `executeBatch` | Bundles up to 20 slots per transaction (`execute(Operation[])`). Prompts MetaMask only once, saving gas and eliminating signature fatigue. |
+| **Single-Signature Batch Writes** | `src/components/SeedModal.tsx:38`, `executeBatch` | Bundles synthetic demo listings (batch of 7 with 1 rapid 5m expiry test record) per transaction (`execute(Operation[])`). Prompts MetaMask only once, saving gas and eliminating signature fatigue. |
 | **Client-Side Expiry Guard** | `src/hooks/useLiveSlots.ts:491-505` | 1-second proactive ticker with 4-second client margin exists strictly for browser/chain clock skew, not an Arkiv asymmetry. |
 
 ---
@@ -136,7 +139,7 @@ Every submission must pass all 11 gates to be eligible for scoring:
 | **1. Why India? (Best Indian Use Case)** | 25 | Names real MSME users (precision job shops in Jeedimetla, Surat, Tiruppur) losing idle machine hours. Solves high broker cuts and lack of portable reputation. Works live today. Documented in [docs/WHY_INDIA.md](WHY_INDIA.md). |
 | **1 (Alt). Why Censorship Resistance?** | 25 | Proves data is queryable by anyone via public Arkiv RPCs without our backend. Platform operators cannot alter transaction records or manipulate ratings. Documented in [docs/WHY_ARKIV.md](WHY_ARKIV.md). |
 | **2. Why Arkiv?** | 25 | Thoroughly analyzes why PostgreSQL, IPFS/Arweave, Subgraphs, and custom APIs fail. Explains why autonomous entity expiration IS the product. Discloses what deliberately stays off Arkiv (PII, map tiles, transient UI state). Documented in [docs/WHY_ARKIV.md](WHY_ARKIV.md). |
-| **3. How You Use Arkiv** | 25 | Every feature tied to core UX: typed attributes vs payload, compound range predicates, autonomous expiration (15m to 7d slots, 30d bookings/completions), `$creator` reputation verification, `watchEntityEvents` WebSocket live updates, single-sig `executeBatch` writes (up to 20 slots/tx). 46 unit tests verify behavior. |
+| **3. How You Use Arkiv** | 25 | Every feature tied to core UX: typed attributes vs payload, compound range predicates, autonomous expiration (15m to 7d slots, 30d bookings/completions), `$creator` reputation verification, protocol-level `readonly` flags, permissionless extension for completion proofs, `$creator` vs `$owner` ownership transfer, `watchEntityEvents` WebSocket live updates, single-sig `executeBatch` writes (synthetic demo batch of 7 with 1 rapid 5m expiry test record). 58 unit tests verify behavior. |
 | **4. Friction Report** | 25 | 17 comprehensive friction entries (6 small SDK and DX findings, 1 cosmetic typo, 10 notes/withdrawn) in [arkiv/friction.md](../arkiv/friction.md). Includes exact error text, SDK/viem versions, minimal reproduction code, and upstream issue pointers. |
 
 ---
@@ -154,6 +157,6 @@ Every submission must pass all 11 gates to be eligible for scoring:
 | **Completion Entity Expiry** | 30 days (`30 * 86400 * 1000ms`) | `src/lib/arkiv.ts:1222` |
 | **Real Batch Write Limit** | 20 slots per tx | `src/components/SeedModal.tsx:38` (`REAL_BATCH_LIMIT`) |
 | **Max Live Synthetic Cap** | 40 slots | `src/components/SeedModal.tsx:37` (`MAX_LIVE_SYNTHETIC_CAP`) |
-| **Pure Unit Test Count** | 46 tests (21 Phase 4 + 25 Phase 5) | `npm run test:unit` |
+| **Pure Unit Test Count** | 58 tests (21 Phase 4 + 37 Phase 5) | `npm run test:unit` |
 | **Foreground RPC Load** | 14.0 req/min (14 per min, CDP measured) | `README.md:196`, `friction.md` |
 | **Hidden Tab RPC Load** | 1.0 req/min (CDP measured) | `README.md:196`, `friction.md` |

@@ -15,13 +15,22 @@
  * Phase 2 read-only: write stubs present but commented.
  */
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import type { Hex, Address } from "viem";
 import {
   type SlotEntity,
   type BookingEntity,
   type CompletionEntity,
   type ReputationResult,
+  type SlotBookingStatus,
+  getSlotBookingStatus,
   getEntityExplorerUrl,
+  getTxExplorerUrl,
+  getMetaMaskWalletClient,
+  transferEntityOwnership,
+  extendProofEntity,
+  fetchAuthoritativeEntityOwner,
+  getKnownTransferredOwner,
 } from "../lib/arkiv.js";
 import { formatTimeLeft, getUrgency, formatDateTime } from "../lib/time.js";
 import { useNow } from "../hooks/useNow.js";
@@ -78,6 +87,7 @@ export interface SlotDrawerProps {
   sellerReputation?: ReputationResult;
   onOpenBook?: (slot: SlotEntity) => void;
   onOpenConfirmJob?: (slot: SlotEntity, booking: BookingEntity, role: "seller" | "buyer") => void;
+  onOwnerUpdated?: (key: Hex, newOwner: Address) => void;
 }
 
 export function SlotDrawer({
@@ -89,10 +99,97 @@ export function SlotDrawer({
   sellerReputation,
   onOpenBook,
   onOpenConfirmJob,
+  onOwnerUpdated,
 }: SlotDrawerProps): React.ReactElement | null {
   const now    = useNow();
   const wallet = useWallet();
   const [showProofs, setShowProofs] = useState(false);
+
+  // Ownership transfer state
+  const [currentOwner, setCurrentOwner] = useState<string>(() => {
+    if (!slot) return "";
+    const known = getKnownTransferredOwner(slot.key);
+    return known || slot.owner || "";
+  });
+  const [isVerifyingOwner, setIsVerifyingOwner] = useState(false);
+  const [ownerVerificationError, setOwnerVerificationError] = useState<string | null>(null);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [transferTarget, setTransferTarget] = useState("");
+  const [isTransferring, setIsTransferring] = useState(false);
+  const [transferError, setTransferError] = useState<string | null>(null);
+  const [transferSuccessTx, setTransferSuccessTx] = useState<string | null>(null);
+
+  // Proof extension state
+  const [extendingKey, setExtendingKey] = useState<string | null>(null);
+  const [extendError, setExtendError] = useState<string | null>(null);
+  const [extendSuccess, setExtendSuccess] = useState<{ key: string; txHash: string; expiresAt: bigint } | null>(null);
+
+  // Keep onOwnerUpdated ref up to date to prevent effect re-triggers on parent renders
+  const onOwnerUpdatedRef = useRef(onOwnerUpdated);
+  useEffect(() => {
+    onOwnerUpdatedRef.current = onOwnerUpdated;
+  }, [onOwnerUpdated]);
+
+  const slotKey = slot?.key;
+  const slotOwner = slot?.owner;
+  const slotOwnerRef = useRef(slotOwner);
+  useEffect(() => {
+    slotOwnerRef.current = slotOwner;
+  }, [slotOwner]);
+
+  // Keep currentOwner in sync with known local storage or slot prop updates
+  useEffect(() => {
+    if (!slotKey) return;
+    const known = getKnownTransferredOwner(slotKey);
+    if (known) {
+      setCurrentOwner(known);
+    } else if (slotOwner) {
+      setCurrentOwner(slotOwner);
+    }
+  }, [slotKey, slotOwner]);
+
+  // Reset transient drawer interaction state ONLY when selected slot key or wallet account changes
+  useEffect(() => {
+    setIsTransferOpen(false);
+    setTransferTarget("");
+    setTransferError(null);
+    setTransferSuccessTx(null);
+    setExtendingKey(null);
+    setExtendError(null);
+    setExtendSuccess(null);
+    setOwnerVerificationError(null);
+  }, [slotKey, wallet.address]);
+
+  // Authoritatively verify entity state on Arkiv when slot changes
+  useEffect(() => {
+    if (!slotKey) return;
+
+    let active = true;
+    setIsVerifyingOwner(true);
+
+    fetchAuthoritativeEntityOwner(slotKey)
+      .then((auth) => {
+        if (!active) return;
+        if (auth.owner) {
+          setCurrentOwner(auth.owner);
+          if (slotOwnerRef.current && auth.owner.toLowerCase() !== slotOwnerRef.current.toLowerCase()) {
+            onOwnerUpdatedRef.current?.(slotKey, auth.owner);
+          }
+        }
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.warn("Authoritative owner lookup failed:", err);
+        setOwnerVerificationError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (active) setIsVerifyingOwner(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [slotKey]);
 
   if (!slot) return null;
 
@@ -107,10 +204,71 @@ export function SlotDrawer({
   const isWrongNetwork = wallet.isWrongNetwork;
   const userAddr = wallet.address?.toLowerCase();
 
+  const isOwner = Boolean(userAddr && currentOwner.toLowerCase() === userAddr);
   const isMySlot = Boolean(
     userAddr &&
-    (slot.creator.toLowerCase() === userAddr || slot.owner.toLowerCase() === userAddr)
+    (slot.creator.toLowerCase() === userAddr || currentOwner.toLowerCase() === userAddr)
   );
+
+  const handleTransferOwnership = async () => {
+    if (!walletConnected || !slot) return;
+    const target = transferTarget.trim();
+    if (!target.startsWith("0x") || target.length !== 42) {
+      setTransferError("Recipient must be a valid 42-character 0x EVM address.");
+      return;
+    }
+    if (target.toLowerCase() === currentOwner.toLowerCase()) {
+      setTransferError("Recipient is already the current owner.");
+      return;
+    }
+
+    setIsTransferring(true);
+    setTransferError(null);
+    setTransferSuccessTx(null);
+
+    try {
+      const walletClient = await getMetaMaskWalletClient();
+      const res = await transferEntityOwnership(walletClient, slot.key, target as Address);
+      const verifiedTarget = res.newOwner;
+      setCurrentOwner(verifiedTarget);
+      setTransferSuccessTx(res.txHash);
+      setIsTransferOpen(false);
+      if (onOwnerUpdatedRef.current) {
+        onOwnerUpdatedRef.current(slot.key, verifiedTarget);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setTransferError(msg);
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
+  const handleExtendProof = async (proofKey: Hex) => {
+    if (!walletConnected) {
+      setExtendError("Connect MetaMask to extend proof lifetime.");
+      return;
+    }
+
+    setExtendingKey(proofKey);
+    setExtendError(null);
+    setExtendSuccess(null);
+
+    try {
+      const walletClient = await getMetaMaskWalletClient();
+      const res = await extendProofEntity(walletClient, proofKey, 60);
+      setExtendSuccess({
+        key: proofKey,
+        txHash: res.txHash,
+        expiresAt: res.expiresAt,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setExtendError(msg);
+    } finally {
+      setExtendingKey(null);
+    }
+  };
 
   const hasUserBooking = Boolean(
     userAddr &&
@@ -150,25 +308,42 @@ export function SlotDrawer({
   const hasBuyerConfirmed = Boolean(buyerCompletion);
   const isJobVerified = hasSellerConfirmed && hasBuyerConfirmed;
 
+  // Authoritative derived booking status from Arkiv entities
+  const slotStatus: SlotBookingStatus = getSlotBookingStatus(
+    slot,
+    winningBooking,
+    completions,
+    now
+  );
+
   // Determine booking button disabled state & message
   let canBook = true;
   let bookDisabledReason = "";
 
-  if (!walletConnected) {
+  if (slotStatus === "COMPLETED") {
     canBook = false;
-    bookDisabledReason = "Connect MetaMask to book this slot";
-  } else if (isWrongNetwork) {
+    bookDisabledReason = "Job completed and verified on Arkiv. Capacity is permanently closed.";
+  } else if (slotStatus === "BOOKED") {
     canBook = false;
-    bookDisabledReason = "Switch wallet to Arkiv Tiramisu";
-  } else if (expired) {
+    if (userIsWinner) {
+      bookDisabledReason = "You hold the confirmed booking on Arkiv for this slot.";
+    } else if (hasUserBooking) {
+      bookDisabledReason = "You have already placed a booking on this slot.";
+    } else {
+      bookDisabledReason = "This capacity is already booked by another wallet on Arkiv.";
+    }
+  } else if (slotStatus === "EXPIRED" || expired) {
     canBook = false;
-    bookDisabledReason = "This slot has expired on Arkiv";
+    bookDisabledReason = "This slot window has expired on Arkiv.";
   } else if (isMySlot) {
     canBook = false;
-    bookDisabledReason = "You cannot book your own slot";
-  } else if (hasUserBooking) {
+    bookDisabledReason = "You cannot book your own slot.";
+  } else if (!walletConnected) {
     canBook = false;
-    bookDisabledReason = "You have already placed a booking on this slot";
+    bookDisabledReason = "Connect MetaMask to book this slot.";
+  } else if (isWrongNetwork) {
+    canBook = false;
+    bookDisabledReason = "Switch wallet to Arkiv Tiramisu.";
   }
 
   const verifiedCount = sellerReputation?.verifiedJobsCount ?? 0;
@@ -204,7 +379,87 @@ export function SlotDrawer({
             <h2 className="drawer__title">{slot.title}</h2>
             <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
               {slot.synthetic && (
-                <span className="synthetic-badge">⚗ Synthetic demo data</span>
+                <span
+                  className="synthetic-badge"
+                  style={{
+                    background: "#ecfdf5",
+                    color: "#047857",
+                    border: "1px solid #a7f3d0",
+                    fontWeight: 800,
+                  }}
+                >
+                  ⚗️ SYNTHETIC DEMO
+                </span>
+              )}
+              {slotStatus === "COMPLETED" ? (
+                <span
+                  style={{
+                    background: "rgba(34, 197, 94, 0.15)",
+                    color: "#15803d",
+                    border: "1px solid #22c55e",
+                    padding: "2px 6px",
+                    fontSize: "0.72rem",
+                    fontWeight: 800,
+                  }}
+                  id="drawer-status-badge-completed"
+                >
+                  ✅ Completed
+                </span>
+              ) : slotStatus === "BOOKED" ? (
+                <span
+                  style={{
+                    background: "#4b5563",
+                    color: "white",
+                    padding: "2px 6px",
+                    fontSize: "0.72rem",
+                    fontWeight: 800,
+                  }}
+                  id="drawer-status-badge-booked"
+                >
+                  🔒 Booked
+                </span>
+              ) : slotStatus === "EXPIRED" ? (
+                <span
+                  style={{
+                    background: "#f3f4f6",
+                    color: "#4b5563",
+                    border: "1px solid #9ca3af",
+                    padding: "2px 6px",
+                    fontSize: "0.72rem",
+                    fontWeight: 800,
+                  }}
+                  id="drawer-status-badge-expired"
+                >
+                  ⚫ Expired
+                </span>
+              ) : isCritical ? (
+                <span
+                  style={{
+                    background: "rgba(232, 69, 44, 0.15)",
+                    color: "#b91c1c",
+                    border: "1px solid #ef4444",
+                    padding: "2px 6px",
+                    fontSize: "0.72rem",
+                    fontWeight: 800,
+                  }}
+                  id="drawer-status-badge-critical"
+                >
+                  🔴 Expiring soon
+                </span>
+              ) : (
+                <span
+                  style={{
+                    background: "rgba(34, 197, 94, 0.15)",
+                    color: "#15803d",
+                    border: "1px solid #22c55e",
+                    padding: "2px 6px",
+                    fontSize: "0.72rem",
+                    fontWeight: 800,
+                  }}
+                  id="drawer-status-badge-available"
+                >
+                  🟢 Available
+                </span>
               )}
               {isMySlot && (
                 <span
@@ -232,19 +487,6 @@ export function SlotDrawer({
                   }}
                 >
                   ★ Booked by You
-                </span>
-              )}
-              {winningBooking && !userIsWinner && !isMySlot && (
-                <span
-                  style={{
-                    background: "#9E9E9E",
-                    color: "white",
-                    padding: "2px 6px",
-                    fontSize: "0.72rem",
-                    fontWeight: 700,
-                  }}
-                >
-                  🔒 Booked
                 </span>
               )}
             </div>
@@ -359,27 +601,82 @@ export function SlotDrawer({
                 }}
               >
                 {sellerReputation.proofs.map((p, idx) => (
-                  <div key={p.bookingKey} style={{ borderBottom: idx < sellerReputation.proofs.length - 1 ? "1px dashed #ccc" : "none", paddingBottom: 4 }}>
+                  <div key={p.bookingKey} style={{ borderBottom: idx < sellerReputation.proofs.length - 1 ? "1px dashed #ccc" : "none", paddingBottom: 6 }}>
                     <div>
                       <strong>Booking:</strong>{" "}
                       <a href={getEntityExplorerUrl(p.bookingKey)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
                         {p.bookingKey.slice(0, 10)}…{p.bookingKey.slice(-6)} ↗
                       </a>
                     </div>
-                    <div>
-                      <strong>Seller Signature:</strong>{" "}
-                      <a href={getEntityExplorerUrl(p.sellerCompletionKey)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
-                        {p.sellerCompletionKey.slice(0, 10)}…{p.sellerCompletionKey.slice(-6)} ↗
-                      </a>
+                    <div style={{ marginTop: 2, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 4 }}>
+                      <div>
+                        <strong>Seller Signature:</strong>{" "}
+                        <a href={getEntityExplorerUrl(p.sellerCompletionKey)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
+                          {p.sellerCompletionKey.slice(0, 10)}…{p.sellerCompletionKey.slice(-6)} ↗
+                        </a>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleExtendProof(p.sellerCompletionKey)}
+                        disabled={extendingKey === p.sellerCompletionKey}
+                        style={{
+                          background: "none",
+                          border: "1px solid var(--c-ink)",
+                          fontSize: "0.68rem",
+                          padding: "1px 6px",
+                          cursor: "pointer",
+                          fontWeight: 700,
+                          borderRadius: 2,
+                        }}
+                        title="Permissionlessly extend public cryptographic availability of this completion proof for another 60 days on Arkiv."
+                      >
+                        {extendingKey === p.sellerCompletionKey ? "Extending…" : "🛡️ Preserve proof (extend 60d)"}
+                      </button>
                     </div>
-                    <div>
-                      <strong>Buyer Signature:</strong>{" "}
-                      <a href={getEntityExplorerUrl(p.buyerCompletionKey)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
-                        {p.buyerCompletionKey.slice(0, 10)}…{p.buyerCompletionKey.slice(-6)} ↗
-                      </a>
+                    <div style={{ marginTop: 2, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 4 }}>
+                      <div>
+                        <strong>Buyer Signature:</strong>{" "}
+                        <a href={getEntityExplorerUrl(p.buyerCompletionKey)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline", color: "var(--c-ink)" }}>
+                          {p.buyerCompletionKey.slice(0, 10)}…{p.buyerCompletionKey.slice(-6)} ↗
+                        </a>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleExtendProof(p.buyerCompletionKey)}
+                        disabled={extendingKey === p.buyerCompletionKey}
+                        style={{
+                          background: "none",
+                          border: "1px solid var(--c-ink)",
+                          fontSize: "0.68rem",
+                          padding: "1px 6px",
+                          cursor: "pointer",
+                          fontWeight: 700,
+                          borderRadius: 2,
+                        }}
+                        title="Permissionlessly extend public cryptographic availability of this completion proof for another 60 days on Arkiv."
+                      >
+                        {extendingKey === p.buyerCompletionKey ? "Extending…" : "🛡️ Preserve proof (extend 60d)"}
+                      </button>
+                    </div>
+                    <div style={{ fontSize: "0.65rem", opacity: 0.75, marginTop: 2 }}>
+                      ℹ️ Extension preserves on-chain receipt availability; it does not reopen the job window.
                     </div>
                   </div>
                 ))}
+
+                {extendSuccess && (
+                  <div style={{ padding: "6px 8px", background: "rgba(34, 197, 94, 0.15)", border: "1px solid #22c55e", color: "#15803d", fontSize: "0.72rem" }}>
+                    ✓ Proof extended to block #{extendSuccess.expiresAt.toLocaleString()}!{" "}
+                    <a href={getTxExplorerUrl(extendSuccess.txHash)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline" }}>
+                      Tx ↗
+                    </a>
+                  </div>
+                )}
+                {extendError && (
+                  <div style={{ padding: "6px 8px", background: "rgba(232, 69, 44, 0.15)", border: "1px solid #ef4444", color: "#b91c1c", fontSize: "0.72rem" }}>
+                    ⚠️ {extendError}
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -464,11 +761,11 @@ export function SlotDrawer({
 
             {/* Creator */}
             <div className="proof-row">
-              <div className="proof-key">$creator (seller)</div>
+              <div className="proof-key">$creator (immutable)</div>
               <div className="proof-val-wrap">
                 <div className="drawer__key-box" style={{ fontSize: "0.65rem" }} aria-label={`Creator: ${slot.creator}`}>
                   {slot.creator}
-                  {isMySlot && (
+                  {slot.creator.toLowerCase() === userAddr && (
                     <span style={{ marginLeft: 6, color: "var(--c-teal)", fontWeight: 700 }}>
                       (You)
                     </span>
@@ -477,6 +774,188 @@ export function SlotDrawer({
                 <CopyButton value={slot.creator} label="creator address" />
               </div>
             </div>
+
+            {/* Current Owner */}
+            <div className="proof-row">
+              <div className="proof-key">
+                $owner (current owner)
+                {isVerifyingOwner && (
+                  <span style={{ marginLeft: 6, fontSize: "0.65rem", color: "var(--c-amber)", fontWeight: 400 }}>
+                    (verifying on-chain…)
+                  </span>
+                )}
+                {!isVerifyingOwner && ownerVerificationError && (
+                  <span style={{ marginLeft: 6, fontSize: "0.65rem", color: "#b91c1c", fontWeight: 400 }} title={ownerVerificationError}>
+                    (cached state)
+                  </span>
+                )}
+              </div>
+              <div className="proof-val-wrap">
+                <div className="drawer__key-box" style={{ fontSize: "0.65rem" }} aria-label={`Current Owner: ${currentOwner}`}>
+                  {currentOwner}
+                  {isOwner && (
+                    <span style={{ marginLeft: 6, color: "var(--c-teal)", fontWeight: 700 }}>
+                      (You)
+                    </span>
+                  )}
+                </div>
+                <div className="proof-actions">
+                  <CopyButton value={currentOwner} label="owner address" />
+                  {isOwner && walletConnected && (
+                    <button
+                      type="button"
+                      id="toggle-transfer-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsTransferOpen((v) => !v);
+                        setTransferError(null);
+                        setTransferSuccessTx(null);
+                      }}
+                      style={{
+                        background: isTransferOpen ? "#2a2824" : "var(--c-paper)",
+                        color: isTransferOpen ? "var(--c-paper)" : "var(--c-ink)",
+                        border: isTransferOpen ? "1px solid rgba(251, 247, 240, 0.5)" : "1px solid var(--c-ink)",
+                        padding: "2px 8px",
+                        fontSize: "0.72rem",
+                        cursor: "pointer",
+                        fontWeight: 700,
+                        borderRadius: 2,
+                      }}
+                    >
+                      {isTransferOpen ? "Cancel Transfer" : "⇄ Transfer"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Inline Ownership Transfer Form */}
+            {isTransferOpen && (
+              <div
+                style={{
+                  background: "var(--c-paper-dark)",
+                  color: "var(--c-ink)",
+                  border: "1px dashed var(--c-ink)",
+                  padding: "10px 12px",
+                  marginTop: 6,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  borderRadius: 2,
+                }}
+              >
+                <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--c-ink)" }}>
+                  ⇄ Transfer Listing Ownership on Arkiv
+                </div>
+                <div style={{ fontSize: "0.72rem", color: "var(--c-ink)", opacity: 0.9, lineHeight: 1.45 }}>
+                  Calls real Arkiv <code style={{ background: "rgba(0,0,0,0.08)", padding: "1px 4px", borderRadius: 2, color: "var(--c-ink)" }}>changeOwnership()</code>. The original creator (<code style={{ background: "rgba(0,0,0,0.08)", padding: "1px 4px", borderRadius: 2, color: "var(--c-ink)" }}>$creator</code>) remains
+                  permanent and immutable on-chain, but you will lose owner-only controls and the recipient becomes the new owner.
+                </div>
+                <input
+                  type="text"
+                  placeholder="Recipient address (0x...)"
+                  value={transferTarget}
+                  onChange={(e) => setTransferTarget(e.target.value)}
+                  disabled={isTransferring}
+                  style={{
+                    padding: "6px 8px",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "0.75rem",
+                    border: "1px solid var(--c-ink)",
+                    background: "#ffffff",
+                    color: "var(--c-ink)",
+                    borderRadius: 2,
+                    width: "100%",
+                  }}
+                />
+                {transferError && (
+                  <div style={{ color: "#b91c1c", fontSize: "0.72rem", fontWeight: 600 }}>
+                    ⚠️ {transferError}
+                  </div>
+                )}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 4 }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsTransferOpen(false)}
+                    disabled={isTransferring}
+                    style={{
+                      background: "var(--c-paper)",
+                      color: "var(--c-ink)",
+                      border: "1px solid #777",
+                      fontSize: "0.72rem",
+                      padding: "4px 10px",
+                      cursor: "pointer",
+                      fontWeight: 600,
+                      borderRadius: 2,
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTransferOwnership}
+                    disabled={isTransferring || !transferTarget.trim()}
+                    style={{
+                      background: "var(--c-teal)",
+                      color: "white",
+                      border: "none",
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      padding: "4px 12px",
+                      cursor: isTransferring || !transferTarget.trim() ? "not-allowed" : "pointer",
+                      opacity: isTransferring || !transferTarget.trim() ? 0.6 : 1,
+                      borderRadius: 2,
+                    }}
+                  >
+                    {isTransferring ? "Submitting tx…" : "Confirm Transfer"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {transferSuccessTx && (
+              <div style={{ padding: "6px 8px", background: "rgba(34, 197, 94, 0.15)", border: "1px solid #22c55e", color: "#15803d", fontSize: "0.72rem", marginTop: 4 }}>
+                ✓ Ownership transferred to <code>{currentOwner.slice(0, 8)}…{currentOwner.slice(-6)}</code>!{" "}
+                <a href={getTxExplorerUrl(transferSuccessTx)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline" }}>
+                  Tx ↗
+                </a>
+              </div>
+            )}
+
+            {/* Creation Flags (Display verified flags from fetched Arkiv entity) */}
+            {slot.creationFlags ? (
+              <div className="proof-row">
+                <div className="proof-key">Creation Flags</div>
+                <div className="proof-val" style={{ display: "flex", gap: "6px", flexWrap: "wrap", fontSize: "0.72rem" }}>
+                  <span
+                    style={{
+                      background: slot.creationFlags.readonly ? "rgba(34, 197, 94, 0.15)" : "#f3f4f6",
+                      color: slot.creationFlags.readonly ? "#15803d" : "#4b5563",
+                      padding: "2px 6px",
+                      borderRadius: "2px",
+                      border: "1px solid",
+                      borderColor: slot.creationFlags.readonly ? "#86efac" : "#d1d5db",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {slot.creationFlags.readonly ? "🔒 readonly: true (Immutable)" : "readonly: false"}
+                  </span>
+                  <span
+                    style={{
+                      background: slot.creationFlags.permissionlessExtension ? "rgba(59, 130, 246, 0.15)" : "#f3f4f6",
+                      color: slot.creationFlags.permissionlessExtension ? "#1d4ed8" : "#4b5563",
+                      padding: "2px 6px",
+                      borderRadius: "2px",
+                      border: "1px solid",
+                      borderColor: slot.creationFlags.permissionlessExtension ? "#93c5fd" : "#d1d5db",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {slot.creationFlags.permissionlessExtension ? "🌐 permissionlessExtension: true" : "permissionlessExtension: false"}
+                  </span>
+                </div>
+              </div>
+            ) : null}
 
             {/* Entity Expiration Block */}
             {slot.expiresAtBlock !== undefined && (
@@ -577,7 +1056,7 @@ export function SlotDrawer({
             )}
 
             {/* 2. Book button */}
-            {!expired && (
+            {slotStatus === "AVAILABLE" ? (
               <div
                 title={canBook ? "Book this slot on-chain" : bookDisabledReason}
                 style={{ width: "100%" }}
@@ -596,6 +1075,58 @@ export function SlotDrawer({
                     <span className="btn-tooltip">{bookDisabledReason}</span>
                   )}
                 </button>
+              </div>
+            ) : slotStatus === "BOOKED" ? (
+              <div
+                title={bookDisabledReason}
+                style={{ width: "100%" }}
+              >
+                <button
+                  id="drawer-book-btn"
+                  className="btn-primary"
+                  disabled={true}
+                  aria-label={bookDisabledReason}
+                  aria-disabled={true}
+                  style={{
+                    width: "100%",
+                    background: "#4b5563",
+                    cursor: "not-allowed",
+                    opacity: 0.9,
+                  }}
+                >
+                  🔒 {userIsWinner ? "Booked by You" : "Slot Already Booked"}
+                  <span className="btn-tooltip">{bookDisabledReason}</span>
+                </button>
+              </div>
+            ) : slotStatus === "COMPLETED" ? (
+              <div
+                style={{
+                  background: "rgba(34, 197, 94, 0.15)",
+                  border: "1px solid #22c55e",
+                  color: "#15803d",
+                  padding: "8px 12px",
+                  fontSize: "0.82rem",
+                  fontWeight: 700,
+                  textAlign: "center",
+                  width: "100%",
+                }}
+              >
+                ✅ Job Completed — This capacity window is permanently fulfilled and closed.
+              </div>
+            ) : (
+              <div
+                style={{
+                  background: "#f3f4f6",
+                  border: "1px solid #9ca3af",
+                  color: "#4b5563",
+                  padding: "8px 12px",
+                  fontSize: "0.82rem",
+                  fontWeight: 700,
+                  textAlign: "center",
+                  width: "100%",
+                }}
+              >
+                ⚫ Slot window has expired. This capacity is no longer bookable.
               </div>
             )}
 

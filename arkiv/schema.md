@@ -12,19 +12,24 @@
    - Zero centralized database (no Postgres, MongoDB, or Firebase).
    - Zero custom backend API servers.
    - All state is read directly from and written directly to Arkiv Tiramisu.
-2. **Append-Only Architectural Records**:
-   - Entities are never mutated on-chain: booking a slot creates an independent `booking` entity referencing `slot_key`, and confirming fulfillment creates independent `completion` entities referencing `booking_key`.
-   - *Immutability Note:* Immutability is enforced at the application architecture level (the application never issues `patchEntity` mutations or updates; state transitions are recorded as new standalone entities). SlotBazaar does not currently set the SDK's protocol-level `readonly` flag (`flags.readonly` defaults to `false`), so immutability is architectural rather than protocol-enforced.
+2. **Protocol-Enforced Immutable Records & Creation Flags**:
+   - Entities are protected at the Arkiv protocol level using `flags`:
+     - **Slot Listings**: Created with `flags: { readonly: true }`. Attributes and payload cannot be altered after creation. Read-only records can still be cancelled/deleted or expired autonomously by block consensus.
+     - **Booking Snapshots**: Created with `flags: { readonly: true }`. Counterparty claims are cryptographically fixed upon submission.
+     - **Completion Evidence**: Created with `flags: { readonly: true, permissionlessExtension: true }`. Receipts are immutable, but anyone may extend their on-chain storage lifetime to guarantee perpetual cryptographic evidence availability.
+   - *On-Chain Proof Verification:* The application inspects the actual `creationFlags` returned from the Arkiv node on fetched entities (`slot.creationFlags.readonly`), never inferring flags from client constants.
 3. **Indexed Typed Attributes vs. Unindexed Payload**:
    - `attributes`: Typed metadata fields evaluated in query predicates (`eq`, `gt`).
    - `payload`: Opaque UTF-8 JSON containing human-readable titles, descriptions, and notes.
-4. **Autonomous Protocol Expiration & Expiry Architecture**:
-   - *UI Countdown:* A local visual timer in the client displaying time remaining until `ends_at`.
-   - *Client-Side Pruning:* `useLiveSlots.ts` filters out ended slots with a 4-second (1-2 block) margin for browser/chain clock skew, ensuring stale listings vanish promptly from the interface.
-   - *Autonomous Network Expiration:* Slots are created with `expires: ExpirationTime.atDate(new Date(endsAt * 1000))`. The Arkiv consensus engine autonomously purges expired entities at block boundaries without off-chain cron bots or garbage-collection jobs.
-   - *History Preservation:* Bookings and completions persist for **30 days** (`ExpirationTime.atDate(new Date(Date.now() + 30 * 86400 * 1000))`), ensuring counterparty verification and reputation evaluation remain fully queryable even after the original slot has expired.
-5. **Cryptographic Authentication (`$creator`)**:
-   - Entity creator address is verified directly from the EVM transaction signature, preventing impersonation.
+4. **Autonomous Protocol Expiration & Demonstrable Lifecycle**:
+   - *UI Countdown:* A prominent visual timer in the client displaying time remaining until `ends_at`.
+   - *Visual Lifecycle Stages:* Transitions visibly from **🟢 Active** (>15m) → **🔴 Expiring soon** (≤15m) → **⚫ Expired** (≤0s).
+   - *Client-Side Availability Pruning:* `useLiveSlots.ts` proactively prunes ended listings (with a 4s margin matching 2 blocks) to prevent booking attempts on dead capacity, triggering queries refresh.
+   - *Consensus Expiration:* Slots are created with `expires: ExpirationTime.atDate(new Date(endsAt * 1000))`. The Arkiv consensus engine autonomously cleans up expired records at block boundaries without external cron jobs.
+   - *History Preservation & Extension:* Bookings and completions persist for **30 days** by default, and completion evidence can be permissionlessly extended for another 60 days via `extendEntity()`.
+5. **Cryptographic Authentication, Ownership & Transferability**:
+   - `$creator`: Immutable address derived from the transaction signature at creation.
+   - `$owner`: Current owner of the entity. Supports owner-initiated `changeOwnership()` to transfer custodial control to another wallet while preserving `$creator` provenance permanently.
 
 ---
 
@@ -92,9 +97,21 @@ Created when a buyer reserves an available slot. Records on-chain metadata from 
 #### Expiration Rule
 - `expires: ExpirationTime.atDate(new Date(Date.now() + 30 * 86400 * 1000))` (30-day lifecycle).
 
-#### Winning Booking Resolution
-- Earliest block number wins (`createdAtBlock` ascending).
-- Same-block tie-breaker: Lexicographical order of `entityKey` ascending (`a.key.toLowerCase().localeCompare(b.key.toLowerCase())`).
+#### Winning Booking Resolution & Concurrency Guarantee
+- A slot may have at most one active booking. Capacity windows are strictly single-use; once booked or completed, the capacity window cannot be re-booked.
+- **Client Preflight Check**: Before creating a booking, the client calls `fetchBookingsForSlot(slotKey)`. If an active booking exists, creation is immediately rejected (`CONCURRENT_SUBMISSION`). Self-booking by the slot creator or current owner is prohibited. Bookings on expired slots (`endsAt <= nowSec`) are rejected.
+- **Consensus Arbitration (Residual In-Flight Race)**: Arkiv SDK does not provide an atomic cross-wallet compare-and-set or uniqueness constraint on `slot_key`. If two wallets sign and broadcast bookings concurrently before either is indexed:
+  1. Earliest block number wins (`createdAtBlock` ascending).
+  2. Same-block tie-breaker: Lexicographical order of `entityKey` ascending (`a.key.toLowerCase().localeCompare(b.key.toLowerCase())`).
+  3. Only the winning booking qualifies for two-sided completion and verified on-chain reputation. Any losing booking entity remains unconfirmed and cannot trigger completion receipts.
+
+#### Derived Booking State
+The UI computes canonical derived state via `getSlotBookingStatus`:
+- `AVAILABLE`: Active slot (`endsAt > nowSec`) with no active bookings.
+- `BOOKED`: Active booking exists on Arkiv referencing this slot key. Booking is disabled for all wallets.
+- `EXPIRED`: Current time past `ends_at` (`endsAt <= nowSec`). Booking is disabled for all wallets.
+- `COMPLETED`: Mutual seller and buyer completion receipts verified on Arkiv for the winning booking. Capacity window remains single-use and cannot be re-booked.
+- **Cancellation Policy**: Arkiv entities with `flags: { readonly: true }` cannot be deleted or mutated by arbitrary parties. Cancellations are not silently permitted via client state manipulation. An active reservation locks the slot permanently for that specific time window.
 
 ---
 
@@ -212,6 +229,7 @@ if (winningBooking) {
 | **L-003** | **Client and chain clock skew** | Browser wall-clock time can diverge slightly from consensus block timestamps. Arkiv drops entities at the exact consensus `expiresAt` block (0 blocks early, verified in Phase 9 and Phase 10). | The UI applies a proactive 1-second client ticker with a 4-second client margin strictly for browser/chain clock skew, not an Arkiv asymmetry. |
 | **L-004** | **Client-side tie-break rule** | Intra-block ordering is not provided by Arkiv attributes. | Deterministic tie-breaker in `getWinningBooking` sorts by earliest block number, then lexicographical entity key ascending. |
 | **L-005** | **Positional call signature in `getEntity`** | Passing `{ key }` object threw `Invalid key value` error. Retested in Phase 9: passing positional `getEntity(entityKey)` succeeds cleanly on all live entities and throws `NoEntityFoundError` after expiry. | FR-011 was withdrawn as our own call-shape error. Positional call `publicClient.getEntity(entityKey)` works as documented. |
+| **L-006** | **No atomic cross-wallet lock for bookings** | Arkiv does not provide an atomic cross-wallet compare-and-set or unique constraints on custom attributes (`slot_key`). | Solved via client preflight (`fetchBookingsForSlot`) rejecting duplicate submissions, combined with deterministic consensus arbitration in `getWinningBooking` (earliest confirmed block `createdAtBlock`, with lexicographical entity key tie-breaker). Active booking transitions slot to `BOOKED` state across all wallets, permanently disabling re-booking. |
 
 ---
 
@@ -223,11 +241,11 @@ Every parameter documented in this specification matches the active codebase con
 |---|---|---|---|
 | **Min Slot Duration** | 15 minutes (`900s`) | `MIN_DURATION_SEC = 15 * 60` | `src/lib/slotValidation.ts:39` |
 | **Max Slot Duration** | 7 days (`604,800s`) | `MAX_DURATION_SEC = 7 * 86400` | `src/lib/slotValidation.ts:40` |
-| **Slot Expiry** | `ends_at` Unix seconds | `ExpirationTime.atDate(new Date(endsAt * 1000))` | `src/lib/arkiv.ts:1099` |
-| **Booking Expiry** | 30 days (`2,592,000s`) | `30 * 86400 * 1000` ms | `src/lib/arkiv.ts:1157` |
-| **Completion Expiry** | 30 days (`2,592,000s`) | `30 * 86400 * 1000` ms | `src/lib/arkiv.ts:1222` |
+| **Slot Expiry** | `ends_at` Unix seconds | `ExpirationTime.atDate(new Date(endsAt * 1000))` | `src/lib/arkiv.ts:1220` |
+| **Booking Expiry** | 30 days (`2,592,000s`) | `30 * 86400 * 1000` ms | `src/lib/arkiv.ts:1356` |
+| **Completion Expiry** | 30 days (`2,592,000s`) | `30 * 86400 * 1000` ms | `src/lib/arkiv.ts:1422` |
 | **Real Batch Write Limit** | 20 slots per tx | `REAL_BATCH_LIMIT = 20` | `src/components/SeedModal.tsx:38` |
 | **Max Live Synthetic Cap** | 40 slots | `MAX_LIVE_SYNTHETIC_CAP = 40` | `src/components/SeedModal.tsx:37` |
-| **Pure Unit Test Count** | 46 tests | 21 Phase 4 + 25 Phase 5 | `scripts/test-phase4-unit.ts`, `scripts/test-phase5-unit.ts` |
+| **Pure Unit Test Count** | 77 tests | 21 Phase 4 + 56 Phase 5 | `scripts/test-phase4-unit.ts`, `scripts/test-phase5-unit.ts` |
 | **Tiramisu Decimal Chain ID** | `7738577` | `tiramisu.id` | `src/lib/wallet.ts:24` |
 | **Tiramisu Hex Chain ID** | `0x7614d1` | `0x${tiramisu.id.toString(16)}` | `src/lib/wallet.ts:25` |

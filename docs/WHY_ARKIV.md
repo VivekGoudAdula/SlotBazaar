@@ -59,6 +59,9 @@ When an Arkiv block reaches timestamp `ends_at`, the entity is dropped automatic
 | Arkiv Feature | Where Used in SlotBazaar | Architectural Rationale |
 |---|---|---|
 | **Cryptographic `$creator`** | Reputation Engine (`verifyJobCompletion`) | Verifies the sender address on-chain. Prevents impersonation; only the genuine seller and winning buyer can create valid completion receipts. |
+| **Immutable Creation Flags** | Slot listings & Booking entities (`createSlot`, `createBooking`) | Passing `flags: { readonly: true }` prevents post-creation tampering of slot parameters and booking receipts at the protocol level. |
+| **Permissionless Extension** | Completion receipts (`createCompletion`, `extendProofEntity`) | Created with `flags: { readonly: true, permissionlessExtension: true }`. Allows any public party to pay gas to extend reputation persistence via `extendEntity()` without altering the booking window. |
+| **Ownership Transfer** | Slot entities (`transferEntityOwnership`) | Enables owner-only reassignment via native `changeOwnership()`. Preserves immutable `$creator` provenance while transferring `$owner` stewardship. |
 | **Typed Attribute Filtering** | `fetchLiveSlots`, `fetchAllBookings` | Enables rich client-side and RPC queries (`str`, `u64`, `i32`, `bool`) without centralized middleware. |
 | **Numeric Coordinate Scaling (`e4`)** | Cluster spatial coordinates (`lat_e4`, `lon_e4`) | Scaled integer coordinates (`Math.round(lat * 10000)`) enable native integer range filtering within industrial corridor clusters. |
 | **Single-Signature Batching** | In-app seed & bulk post (`executeBatch`) | Bundles multiple slot entities into a single EVM transaction call (`execute(Operation[])`). MetaMask prompts the user only **once**, preventing signature fatigue. |

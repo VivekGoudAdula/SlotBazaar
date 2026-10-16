@@ -110,6 +110,7 @@ export interface GeneratedSlot {
   durationHours: number;
   durationLabel: string;
   tier: "short" | "normal" | "long";
+  isDemoTestRecord?: boolean;
 }
 
 export interface SeedGeneratorOptions {
@@ -152,7 +153,9 @@ export function formatDurationLabel(h: number): string {
  * - Deterministically spreads across industrial clusters.
  * - Balances machine, transport, and freelance categories.
  * - Prioritizes unseeded Indian cities so consecutive seedings spread across all of India.
- * - Always injects slots under 15m (for fast testing) and some over 1 day when count >= 3.
+ * - In demo batches (6-8 slots), includes 1 clearly marked short-lived test record
+ *   whose timer visibly counts down in video/demo sessions (~5 minutes), plus
+ *   staggered expiries (1h to 48h+) so the map remains useful beyond the demo.
  * - Refuses any computed slots that would expire in the past.
  */
 export function generateSeedSlots(options: SeedGeneratorOptions): GeneratedSlot[] {
@@ -162,7 +165,7 @@ export function generateSeedSlots(options: SeedGeneratorOptions): GeneratedSlot[
   const maxHours = options.maxHours ?? 12;
 
   // Tier distributions based on requested count
-  const tierPlan: { durationHours: number; tier: "short" | "normal" | "long" }[] = [];
+  const tierPlan: { durationHours: number; tier: "short" | "normal" | "long"; isDemoTestRecord?: boolean }[] = [];
 
   if (count === 1) {
     tierPlan.push({ durationHours: 0.2, tier: "short" }); // 12 min
@@ -174,15 +177,22 @@ export function generateSeedSlots(options: SeedGeneratorOptions): GeneratedSlot[
     } else {
       tierPlan.push({ durationHours: 4, tier: "normal" });
     }
-  } else if (count <= 6) {
-    tierPlan.push({ durationHours: 0.15, tier: "short" }); // ~9 min
-    tierPlan.push({ durationHours: 0.5, tier: "short" });  // 30 min
-    tierPlan.push({ durationHours: 2, tier: "normal" });
-    tierPlan.push({ durationHours: 6, tier: "normal" });
-    tierPlan.push({ durationHours: 48, tier: "long" });    // 2 days
-    tierPlan.push({ durationHours: 168, tier: "long" });   // 7 days
+  } else if (count <= 8) {
+    // Canonical 6-8 demo seed batch:
+    // 1. One clearly marked rapid-expiry test record (~5 minutes) for live demo/video proof
+    tierPlan.push({ durationHours: 0.08, tier: "short", isDemoTestRecord: true }); // ~5 min
+    // 2-4. Staggered normal duration listings (1h, 4h, 8h)
+    tierPlan.push({ durationHours: 1, tier: "normal" });
+    tierPlan.push({ durationHours: 4, tier: "normal" });
+    tierPlan.push({ durationHours: 8, tier: "normal" });
+    // 5-7. Staggered long duration listings (24h, 48h, 72h) to keep public map alive
+    tierPlan.push({ durationHours: 24, tier: "long" });
+    tierPlan.push({ durationHours: 48, tier: "long" });
+    if (count >= 7) tierPlan.push({ durationHours: 72, tier: "long" });
+    if (count >= 8) tierPlan.push({ durationHours: 168, tier: "long" });
   } else {
     // Large batch (e.g. 10 to 40)
+    tierPlan.push({ durationHours: 0.08, tier: "short", isDemoTestRecord: true }); // 5m demo test
     tierPlan.push({ durationHours: 0.15, tier: "short" }); // 9m
     tierPlan.push({ durationHours: 0.2, tier: "short" });  // 12m
     tierPlan.push({ durationHours: 0.5, tier: "short" });  // 30m
@@ -230,8 +240,9 @@ export function generateSeedSlots(options: SeedGeneratorOptions): GeneratedSlot[
     const template = SEED_TEMPLATES[idx % SEED_TEMPLATES.length];
     const cluster = availableClusters[idx % availableClusters.length];
 
-    // Starts between 1 and 10 minutes in the future
-    const startDelaySec = 60 + (idx * 30);
+    const isDemo = Boolean(spec.isDemoTestRecord);
+    // Demo test record starts immediately (10s in future); others start between 1 and 5 minutes in future
+    const startDelaySec = isDemo ? 10 : (60 + (idx * 30));
     const startsAt = now + startDelaySec;
     const durationSec = Math.round(spec.durationHours * 3600);
     const endsAt = startsAt + durationSec;
@@ -241,7 +252,15 @@ export function generateSeedSlots(options: SeedGeneratorOptions): GeneratedSlot[
 
     const { lat, lon } = disperseCoordinates(cluster.lat, cluster.lon);
     const durationLabel = formatDurationLabel(spec.durationHours);
-    const title = `[${cluster.label.toUpperCase()}] ${template.titleBase} (${durationLabel})`;
+    const title = isDemo
+      ? `[${cluster.label.toUpperCase()}] [DEMO TEST] Rapid Expiry Demo Slot (${durationLabel})`
+      : `[${cluster.label.toUpperCase()}] ${template.titleBase} (${durationLabel})`;
+
+    const description = isDemo
+      ? "Synthetic rapid-expiry test record created on Arkiv Tiramisu. Designed to visibly transition from Active -> Expiring soon (<15m) -> Expired in live demo sessions."
+      : template.description;
+
+    const sellerLabel = template.sellerLabel;
 
     results.push({
       cluster: cluster.name,
@@ -251,13 +270,14 @@ export function generateSeedSlots(options: SeedGeneratorOptions): GeneratedSlot[
       category: template.category,
       priceBand: template.priceBand,
       title,
-      description: template.description,
-      sellerLabel: template.sellerLabel,
+      description,
+      sellerLabel,
       startsAt,
       endsAt,
       durationHours: spec.durationHours,
       durationLabel,
       tier: spec.tier,
+      isDemoTestRecord: isDemo,
     });
   }
 

@@ -36,6 +36,10 @@ Every UI label, button text, and modal heading used in this script has been audi
 | On-chain explorer link | `Explorer ↗` | [`src/components/SlotDrawer.tsx`](../src/components/SlotDrawer.tsx#L459) | Verified Match |
 | Wallet dropdown menu | `💼 My Jobs & Proofs` | [`src/components/WalletButton.tsx`](../src/components/WalletButton.tsx#L291) | Verified Match |
 | Reputation badge | `🏆 1 Verified Job` | [`src/components/SlotDrawer.tsx`](../src/components/SlotDrawer.tsx#L274) | Verified Match |
+| Demo seed button | `Seed demo listings` | [`src/components/Header.tsx`](../src/components/Header.tsx) / [`SeedModal.tsx`](../src/components/SeedModal.tsx) | Verified Match |
+| Synthetic demo badge | `⚗️ SYNTHETIC DEMO` | [`src/components/SlotCard.tsx`](../src/components/SlotCard.tsx) / [`SlotDrawer.tsx`](../src/components/SlotDrawer.tsx) | Verified Match |
+| Ownership transfer button | `⇄ Transfer Ownership` | [`src/components/SlotDrawer.tsx`](../src/components/SlotDrawer.tsx) | Verified Match |
+| Proof extension button | `🛡️ Preserve proof (extend 60d)` | [`src/components/SlotDrawer.tsx`](../src/components/SlotDrawer.tsx) | Verified Match |
 
 ---
 
@@ -63,9 +67,9 @@ Every UI label, button text, and modal heading used in this script has been audi
 ---
 
 ### [1:15 – 1:40] Segment 4: Buyer Books & Autonomous Expiration (25 seconds, 55 words)
-* **Visual:** On Meena's window (`0xD87a…8c5D`), click the new slot pin. Drawer opens. Click **🤝 Book This Slot**. Modal opens, click **Confirm Booking**. MetaMask confirms. Status turns to `🔒 Booked`. Zoom in on countdown timer ticking down.
+* **Visual:** On Meena's window (`0xD87a…8c5D`), click the new slot pin. Drawer opens. Click **🤝 Book This Slot**. Modal opens, click **Confirm Booking**. MetaMask confirms. Status turns to `🔒 Booked` across both windows, disabling further bookings for all wallets. Zoom in on countdown timer ticking down.
 * **Narration:**
-  > *"Meena needs precision milling nearby. She clicks '🤝 Book This Slot' and confirms the transaction. Arkiv records her reservation entity on-chain; the earliest block wins. Look at the countdown timer: if a slot goes unbooked, Arkiv’s native expiration autonomously removes it at consensus timestamp. No server-side cleanup cron or backend database is ever required."*
+  > *"Meena needs precision milling nearby. She clicks '🤝 Book This Slot' and confirms the transaction. Arkiv records her reservation entity on-chain; preflight checks and earliest-block consensus prevent duplicate bookings, immediately marking the slot booked for all wallets. If a slot instead expires unbooked, Arkiv's native expiration autonomously cleans it up at consensus timestamp with zero backend crons."*
 
 ---
 
@@ -76,10 +80,10 @@ Every UI label, button text, and modal heading used in this script has been audi
 
 ---
 
-### [2:05 – 2:25] Segment 6: On-Chain Explorer Proof & Architecture (20 seconds, 49 words)
-* **Visual:** In the drawer, expand **View Proofs (2) ▼** and click **Explorer ↗**. Opens Blockscout (`tiramisu.explorer.arkiv.network/tx/...`) and Data Explorer (`data.arkiv.network/?q=0x...&chain=tiramisu`). Highlight raw entity attributes (`starts_at`, `ends_at`, `cluster`).
+### [2:05 – 2:25] Segment 6: On-Chain Explorer Proof & Architecture (20 seconds, 50 words)
+* **Visual:** In the drawer, expand **View Proofs (2) ▼** and click **Explorer ↗**. Highlight raw entity attributes, immutable `$creator` vs `$owner`, verified `readonly: true` & `permissionlessExtension: true` flags, and the **🛡️ Preserve proof (extend 60d)** extension action.
 * **Narration:**
-  > *"Clicking 'Explorer' opens the decentralized entity directly on the Arkiv data explorer. Notice the raw attributes, block timestamp, and cryptographic proof. Each booking entity costs about 0.00012 testnet GLM. While Postgres can be manipulated and IPFS cannot filter queries, Arkiv provides native range indexing and verifiable decentralized expiration."*
+  > *"Expanding the proof panel reveals the raw entity, immutable creator, and verified creation flags: readonly for immutability and permissionless extension for public longevity. Anyone can click 'Preserve proof' to extend the reputation record without reopening the booking window. Arkiv provides native range indexing, verifiable expiration, and decentralized proof persistence."*
 
 ---
 
