@@ -314,26 +314,75 @@ export function validateCompletionPayload(raw: unknown): CompletionPayload {
 // 5. CLIENT FACTORIES
 // ─────────────────────────────────────────────────────────────────────────────
 
+function getEnvVar(key: string): string {
+  try {
+    if (typeof import.meta !== "undefined" && import.meta.env && import.meta.env[key]) {
+      return String(import.meta.env[key]);
+    }
+  } catch {}
+  try {
+    const g = globalThis as unknown as { process?: { env?: Record<string, string | undefined> } };
+    if (g.process?.env?.[key]) {
+      return String(g.process.env[key]);
+    }
+  } catch {}
+  return "";
+}
+
+export function getArkivRpcUrl(): string {
+  const envKey = getEnvVar("VITE_ARKIV_API_KEY") || getEnvVar("ARKIV_API_KEY");
+  const envRpc = getEnvVar("VITE_RPC_URL");
+
+  if (envRpc) {
+    if (envKey && !envRpc.includes(envKey)) {
+      return envRpc.replace(/\/+$/, "") + "/" + envKey;
+    }
+    return envRpc;
+  }
+  if (envKey) {
+    return `https://rpc.tiramisu.db-chain.testnet.arkiv.network/${envKey}`;
+  }
+  return "https://rpc.tiramisu.db-chain.testnet.arkiv.network";
+}
+
+export const DEFAULT_ARKIV_WS_RPC = "wss://rpc.tiramisu.db-chain.testnet.arkiv.network";
+
+export function getArkivWsUrl(): string {
+  const envKey = getEnvVar("VITE_ARKIV_API_KEY") || getEnvVar("ARKIV_API_KEY");
+  const envWs = getEnvVar("VITE_WS_URL");
+
+  if (envWs) {
+    if (envKey && !envWs.includes(envKey)) {
+      return envWs.replace(/\/+$/, "") + "/" + envKey;
+    }
+    return envWs;
+  }
+  if (envKey) {
+    return `wss://rpc.tiramisu.db-chain.testnet.arkiv.network/${envKey}`;
+  }
+  return DEFAULT_ARKIV_WS_RPC;
+}
+
 /**
  * Returns a public, read-only Arkiv client connected to Tiramisu testnet.
  */
 export function getArkivPublicClient(rpcUrl?: string): PublicArkivClient {
+  const targetUrl = rpcUrl || getArkivRpcUrl();
   return createPublicClient({
     chain: tiramisu,
-    transport: http(rpcUrl),
+    transport: http(targetUrl),
   });
 }
-
-export const DEFAULT_ARKIV_WS_RPC = "wss://rpc.tiramisu.db-chain.testnet.arkiv.network";
 
 /**
  * Returns a public WebSocket client connected to Tiramisu testnet for real-time log subscriptions.
  * Opens a real socket only with webSocket transport and no fromBlock.
  */
-export function getArkivWebSocketClient(wsUrl: string = DEFAULT_ARKIV_WS_RPC): PublicArkivClient {
+export function getArkivWebSocketClient(wsUrl?: string): PublicArkivClient {
+  const targetUrl = wsUrl || getArkivWsUrl();
   return createPublicClient({
     chain: tiramisu,
-    transport: webSocket(wsUrl),
+    transport: webSocket(targetUrl),
   });
 }
 
@@ -631,14 +680,22 @@ export async function fetchLiveSlots(client: PublicArkivClient = getArkivPublicC
       allRaw.push(...page.entities);
     }
 
+    const seenKeys = new Set<string>();
     const slots: SlotEntity[] = [];
     for (const raw of allRaw) {
+      const normKey = (raw.key || "").toLowerCase();
+      if (!normKey || seenKeys.has(normKey)) continue;
+      seenKeys.add(normKey);
+
       const parsed = parseSlotEntity(raw);
       if (parsed && isProductionSlot(parsed)) slots.push(parsed);
     }
 
-    // Client-side sort: earliest expiring first
-    slots.sort((a, b) => a.endsAt - b.endsAt);
+    // Client-side sort: earliest expiring first, canonical key tie-break
+    slots.sort((a, b) => {
+      if (a.endsAt !== b.endsAt) return a.endsAt - b.endsAt;
+      return a.key.toLowerCase().localeCompare(b.key.toLowerCase());
+    });
     return slots;
   } catch (err) {
     throw parseArkivError(err, "QUERY_ERROR");
@@ -805,8 +862,13 @@ export async function fetchAllBookings(
       allRaw.push(...page.entities);
     }
 
+    const seenKeys = new Set<string>();
     const bookings: BookingEntity[] = [];
     for (const raw of allRaw) {
+      const normKey = (raw.key || "").toLowerCase();
+      if (!normKey || seenKeys.has(normKey)) continue;
+      seenKeys.add(normKey);
+
       const parsed = parseBookingEntity(raw);
       if (parsed) bookings.push(parsed);
     }
@@ -837,8 +899,13 @@ export async function fetchAllCompletions(
       allRaw.push(...page.entities);
     }
 
+    const seenKeys = new Set<string>();
     const completions: CompletionEntity[] = [];
     for (const raw of allRaw) {
+      const normKey = (raw.key || "").toLowerCase();
+      if (!normKey || seenKeys.has(normKey)) continue;
+      seenKeys.add(normKey);
+
       const parsed = parseCompletionEntity(raw);
       if (parsed) completions.push(parsed);
     }
@@ -1169,6 +1236,158 @@ export function getSlotBookingStatus(
     return "EXPIRED";
   }
   return "AVAILABLE";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7c. DETERMINISTIC RECONCILIATION PIPELINE (PURE FUNCTIONS)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ReconcileSlotsOptions {
+  /** Fresh, authoritative entities returned by the Arkiv SDK query across all pages.
+   * If undefined, indicates an RPC query failure, timeout, or rate-limit. */
+  authoritativeSlots?: SlotEntity[];
+  /** Locally cached entities from previous state or localStorage. */
+  cachedSlots?: SlotEntity[];
+  /** Baseline seed listings (e.g. getBaseOnChainSlots()). */
+  baseSlots?: SlotEntity[];
+  /** Current Unix timestamp in seconds (defaults to Math.floor(Date.now() / 1000)). */
+  nowSec?: number;
+}
+
+/**
+ * Pure, deterministic reconciliation pipeline for public marketplace listings.
+ *
+ * Guarantees:
+ * 1. Canonical Entity Key Deduplication: Entities are keyed strictly by lowercase hex (slot.key.toLowerCase()).
+ * 2. Authoritative Precedence: When authoritativeSlots is present, its on-chain attributes (owner, endsAt, etc.)
+ *    supersede cached or baseline attributes, while respecting known transferred owners (getKnownTransferredOwner).
+ * 3. Failure Resiliency: If authoritativeSlots is undefined (e.g. RPC timeout or 429), existing cached records
+ *    are NEVER erased or reduced to a smaller subset; they are preserved.
+ * 4. Deterministic Seed Persistence: Baseline demo records are incorporated if not expired and not overridden.
+ * 5. Deterministic Ordering: Listings are sorted primarily by endsAt ascending, with canonical key ascending as tie-breaker.
+ */
+export function reconcileSlots({
+  authoritativeSlots,
+  cachedSlots = [],
+  baseSlots = [],
+  nowSec = Math.floor(Date.now() / 1000),
+}: ReconcileSlotsOptions): SlotEntity[] {
+  const slotMap = new Map<string, SlotEntity>();
+
+  // 1. Authoritative on-chain slots have highest precedence
+  if (authoritativeSlots) {
+    for (const s of authoritativeSlots) {
+      if (s.endsAt > nowSec && isProductionSlot(s)) {
+        const normKey = s.key.toLowerCase();
+        const knownOwner = getKnownTransferredOwner(s.key as Hex);
+        slotMap.set(normKey, {
+          ...s,
+          owner: knownOwner ? knownOwner : s.owner,
+        });
+      }
+    }
+  }
+
+  // 2. Preserved cached slots
+  // If authoritativeSlots was supplied, cached slots provide local un-indexed listings without overriding authoritative properties.
+  // If authoritativeSlots was undefined (query failed), cached slots preserve the full known dataset.
+  for (const s of cachedSlots) {
+    if (s.endsAt > nowSec && isProductionSlot(s)) {
+      const normKey = s.key.toLowerCase();
+      if (!slotMap.has(normKey)) {
+        const knownOwner = getKnownTransferredOwner(s.key as Hex);
+        slotMap.set(normKey, {
+          ...s,
+          owner: knownOwner ? knownOwner : s.owner,
+        });
+      }
+    }
+  }
+
+  // 3. Baseline deterministic seed slots
+  for (const s of baseSlots) {
+    if (s.endsAt > nowSec && isProductionSlot(s)) {
+      const normKey = s.key.toLowerCase();
+      if (!slotMap.has(normKey)) {
+        const knownOwner = getKnownTransferredOwner(s.key as Hex);
+        slotMap.set(normKey, {
+          ...s,
+          owner: knownOwner ? knownOwner : s.owner,
+        });
+      }
+    }
+  }
+
+  // 4. Deterministic sort: earliest expiry first, canonical key tie-break
+  return Array.from(slotMap.values()).sort((a, b) => {
+    if (a.endsAt !== b.endsAt) {
+      return a.endsAt - b.endsAt;
+    }
+    return a.key.toLowerCase().localeCompare(b.key.toLowerCase());
+  });
+}
+
+export interface ReconcileBookingsOptions {
+  authoritativeBookings?: BookingEntity[];
+  cachedBookings?: BookingEntity[];
+}
+
+export function reconcileBookings({
+  authoritativeBookings,
+  cachedBookings = [],
+}: ReconcileBookingsOptions): BookingEntity[] {
+  const bookingMap = new Map<string, BookingEntity>();
+
+  if (authoritativeBookings) {
+    for (const b of authoritativeBookings) {
+      bookingMap.set(b.key.toLowerCase(), b);
+    }
+  }
+
+  for (const b of cachedBookings) {
+    const normKey = b.key.toLowerCase();
+    if (!bookingMap.has(normKey)) {
+      bookingMap.set(normKey, b);
+    }
+  }
+
+  return Array.from(bookingMap.values()).sort((a, b) => {
+    const blockA = a.createdAtBlock ?? 0n;
+    const blockB = b.createdAtBlock ?? 0n;
+    if (blockA !== blockB) {
+      return blockA < blockB ? -1 : 1;
+    }
+    return a.key.toLowerCase().localeCompare(b.key.toLowerCase());
+  });
+}
+
+export interface ReconcileCompletionsOptions {
+  authoritativeCompletions?: CompletionEntity[];
+  cachedCompletions?: CompletionEntity[];
+}
+
+export function reconcileCompletions({
+  authoritativeCompletions,
+  cachedCompletions = [],
+}: ReconcileCompletionsOptions): CompletionEntity[] {
+  const completionMap = new Map<string, CompletionEntity>();
+
+  if (authoritativeCompletions) {
+    for (const c of authoritativeCompletions) {
+      completionMap.set(c.key.toLowerCase(), c);
+    }
+  }
+
+  for (const c of cachedCompletions) {
+    const normKey = c.key.toLowerCase();
+    if (!completionMap.has(normKey)) {
+      completionMap.set(normKey, c);
+    }
+  }
+
+  return Array.from(completionMap.values()).sort((a, b) =>
+    a.key.toLowerCase().localeCompare(b.key.toLowerCase())
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

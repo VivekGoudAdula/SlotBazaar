@@ -475,7 +475,8 @@ function AppInner(): React.ReactElement {
       if (filters.cluster   !== "all" && s.cluster   !== filters.cluster)   return false;
       if (filters.priceBand !== "all" && s.priceBand !== filters.priceBand) return false;
       if (filters.endingSoon && (s.endsAt - currentNow) > 15 * 60)          return false;
-      if (filters.mySlots && address) {
+      if (filters.mySlots) {
+        if (!address) return false;
         const userAddr = address.toLowerCase();
         if (s.owner.toLowerCase() !== userAddr) {
           return false;

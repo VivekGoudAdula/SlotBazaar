@@ -16,6 +16,9 @@ import {
   fetchAllCompletions,
   getWinningBooking,
   verifyJobCompletion,
+  reconcileSlots,
+  reconcileBookings,
+  reconcileCompletions,
   type SlotEntity,
   type BookingEntity,
   type CompletionEntity,
@@ -269,24 +272,24 @@ function loadLocalRecentSlots(): SlotEntity[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     const parsed = raw ? (JSON.parse(raw) as SlotEntity[]) : [];
-    const nowSec = Math.floor(Date.now() / 1000);
-    const validLocal = parsed
-      .filter((s) => s.endsAt > nowSec)
-      .map((s) => {
-        const known = getKnownTransferredOwner(s.key as Hex);
-        return {
-          ...s,
-          owner: known ? known : s.owner,
-          createdAtBlock: s.createdAtBlock ? BigInt(s.createdAtBlock) : undefined,
-          expiresAtBlock: s.expiresAtBlock ? BigInt(s.expiresAtBlock) : undefined,
-        };
-      });
-    const map = new Map<string, SlotEntity>();
-    for (const b of base) map.set(b.key.toLowerCase(), b);
-    for (const s of validLocal) map.set(s.key.toLowerCase(), s);
-    return Array.from(map.values()).sort((a, b) => a.endsAt - b.endsAt);
+    const hydrated = parsed.map((s) => ({
+      ...s,
+      createdAtBlock: s.createdAtBlock ? BigInt(s.createdAtBlock) : undefined,
+      expiresAtBlock: s.expiresAtBlock ? BigInt(s.expiresAtBlock) : undefined,
+    }));
+    return reconcileSlots({
+      authoritativeSlots: undefined,
+      cachedSlots: hydrated,
+      baseSlots: base,
+      nowSec: Math.floor(Date.now() / 1000),
+    });
   } catch {
-    return base;
+    return reconcileSlots({
+      authoritativeSlots: undefined,
+      cachedSlots: [],
+      baseSlots: base,
+      nowSec: Math.floor(Date.now() / 1000),
+    });
   }
 }
 
@@ -312,11 +315,15 @@ function loadLocalRecentBookings(): BookingEntity[] {
   try {
     const raw = localStorage.getItem(LOCAL_BOOKINGS_STORAGE_KEY);
     const parsed = raw ? (JSON.parse(raw) as BookingEntity[]) : [];
-    return parsed.map((b) => ({
+    const hydrated = parsed.map((b) => ({
       ...b,
       createdAtBlock: b.createdAtBlock ? BigInt(b.createdAtBlock) : undefined,
       expiresAtBlock: b.expiresAtBlock ? BigInt(b.expiresAtBlock) : undefined,
     }));
+    return reconcileBookings({
+      authoritativeBookings: undefined,
+      cachedBookings: hydrated,
+    });
   } catch {
     return [];
   }
@@ -334,10 +341,43 @@ function saveLocalRecentBookings(bookings: BookingEntity[]): void {
   }
 }
 
+const LOCAL_COMPLETIONS_STORAGE_KEY = "slotbazaar_recent_completions";
+
+function loadLocalRecentCompletions(): CompletionEntity[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_COMPLETIONS_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as CompletionEntity[]) : [];
+    const hydrated = parsed.map((c) => ({
+      ...c,
+      createdAtBlock: c.createdAtBlock ? BigInt(c.createdAtBlock) : undefined,
+      expiresAtBlock: c.expiresAtBlock ? BigInt(c.expiresAtBlock) : undefined,
+    }));
+    return reconcileCompletions({
+      authoritativeCompletions: undefined,
+      cachedCompletions: hydrated,
+    });
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalRecentCompletions(completions: CompletionEntity[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    const serialized = JSON.stringify(completions, (_, value) =>
+      typeof value === "bigint" ? value.toString() : value
+    );
+    localStorage.setItem(LOCAL_COMPLETIONS_STORAGE_KEY, serialized);
+  } catch (err) {
+    console.error("Failed to persist completions to localStorage:", err);
+  }
+}
+
 export function useLiveSlots(): UseLiveSlotsResult {
   const [slots, setSlots] = useState<SlotEntity[]>(() => loadLocalRecentSlots());
   const [bookings, setBookings] = useState<BookingEntity[]>(() => loadLocalRecentBookings());
-  const [completions, setCompletions] = useState<CompletionEntity[]>([]);
+  const [completions, setCompletions] = useState<CompletionEntity[]>(() => loadLocalRecentCompletions());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
@@ -348,29 +388,30 @@ export function useLiveSlots(): UseLiveSlotsResult {
   const lastFetchTimeRef = useRef(0);
   const localSlotsRef = useRef<SlotEntity[]>(loadLocalRecentSlots());
   const localBookingsRef = useRef<BookingEntity[]>(loadLocalRecentBookings());
+  const localCompletionsRef = useRef<CompletionEntity[]>(loadLocalRecentCompletions());
 
   const addSlot = useCallback((newSlot: SlotEntity) => {
-    localSlotsRef.current = [
-      newSlot,
-      ...localSlotsRef.current.filter((s) => s.key.toLowerCase() !== newSlot.key.toLowerCase()),
-    ];
-    saveLocalRecentSlots(localSlotsRef.current);
-    setSlots((prev) => [
-      newSlot,
-      ...prev.filter((s) => s.key.toLowerCase() !== newSlot.key.toLowerCase()),
-    ]);
+    const baseSlots = getBaseOnChainSlots();
+    const nowSec = Math.floor(Date.now() / 1000);
+    const reconciled = reconcileSlots({
+      authoritativeSlots: undefined,
+      cachedSlots: [newSlot, ...localSlotsRef.current],
+      baseSlots,
+      nowSec,
+    });
+    localSlotsRef.current = reconciled;
+    saveLocalRecentSlots(reconciled);
+    setSlots(reconciled);
   }, []);
 
   const addBooking = useCallback((newBooking: BookingEntity) => {
-    localBookingsRef.current = [
-      newBooking,
-      ...localBookingsRef.current.filter((b) => b.key.toLowerCase() !== newBooking.key.toLowerCase()),
-    ];
-    saveLocalRecentBookings(localBookingsRef.current);
-    setBookings((prev) => [
-      newBooking,
-      ...prev.filter((b) => b.key.toLowerCase() !== newBooking.key.toLowerCase()),
-    ]);
+    const reconciled = reconcileBookings({
+      authoritativeBookings: undefined,
+      cachedBookings: [newBooking, ...localBookingsRef.current],
+    });
+    localBookingsRef.current = reconciled;
+    saveLocalRecentBookings(reconciled);
+    setBookings(reconciled);
   }, []);
 
   const updateSlotOwner = useCallback((key: Hex, newOwner: Address) => {
@@ -378,10 +419,11 @@ export function useLiveSlots(): UseLiveSlotsResult {
     const cOwner = checksumAddress(newOwner);
     recordTransferredOwner(key, cOwner);
 
-    localSlotsRef.current = localSlotsRef.current.map((s) =>
+    const updated = localSlotsRef.current.map((s) =>
       s.key.toLowerCase() === normKey ? { ...s, owner: cOwner } : s
     );
-    saveLocalRecentSlots(localSlotsRef.current);
+    localSlotsRef.current = updated;
+    saveLocalRecentSlots(updated);
 
     setSlots((prev) =>
       prev.map((s) =>
@@ -398,13 +440,15 @@ export function useLiveSlots(): UseLiveSlotsResult {
     if (isFetchingRef.current) return;
     // Pause network queries completely if tab is hidden
     if (typeof document !== "undefined" && document.hidden) return;
-    // Cooldown throttle: don't fetch more often than every 10 seconds unless forced
-    if (!force && Date.now() - lastFetchTimeRef.current < 10_000) return;
+    // Cooldown throttle: don't fetch more often than every 10s unless forced,
+    // and even if forced (e.g. wallet change), require at least 2.5s between network calls to prevent 429 rate limit
+    const now = Date.now();
+    const minInterval = force ? 2500 : 10_000;
+    if (now - lastFetchTimeRef.current < minInterval) return;
 
     isFetchingRef.current = true;
     try {
-      setError(null);
-      const withTimeout = <T>(p: Promise<T>, ms = 8000): Promise<T> =>
+      const withTimeout = <T>(p: Promise<T>, ms = 15_000): Promise<T> =>
         Promise.race([
           p,
           new Promise<never>((_, rej) =>
@@ -412,71 +456,69 @@ export function useLiveSlots(): UseLiveSlotsResult {
           ),
         ]);
 
-      // Batch fetch with Promise.all: exactly 3 queries, each guarded by timeout
-      const [freshSlots, freshBookings, freshCompletions] = await Promise.all([
-        withTimeout(fetchLiveSlots(client)).catch(() => [] as SlotEntity[]),
-        withTimeout(fetchAllBookings(client)).catch(() => [] as BookingEntity[]),
-        withTimeout(fetchAllCompletions(client)).catch(() => [] as CompletionEntity[]),
+      // Batch fetch with Promise.allSettled: independent failure isolation across queries
+      const [slotsRes, bookingsRes, completionsRes] = await Promise.allSettled([
+        withTimeout(fetchLiveSlots(client)),
+        withTimeout(fetchAllBookings(client)),
+        withTimeout(fetchAllCompletions(client)),
       ]);
 
       if (isMounted.current) {
         const nowSec = Math.floor(Date.now() / 1000);
-        localSlotsRef.current = localSlotsRef.current.filter((s) => s.endsAt > nowSec);
-        saveLocalRecentSlots(localSlotsRef.current);
-
         const baseSlots = getBaseOnChainSlots();
 
-        if (freshSlots.length > 0) {
-          const slotMap = new Map<string, SlotEntity>();
-          for (const s of freshSlots) {
-            slotMap.set(s.key.toLowerCase(), s);
-          }
-          for (const s of localSlotsRef.current) {
-            if (!slotMap.has(s.key.toLowerCase())) {
-              slotMap.set(s.key.toLowerCase(), s);
-            }
-          }
-          const mergedSlots = Array.from(slotMap.values())
-            .filter((s) => s.endsAt > nowSec)
-            .sort((a, b) => a.endsAt - b.endsAt);
-          setSlots(mergedSlots);
+        let queryError: string | null = null;
+        let freshSlots: SlotEntity[] | undefined = undefined;
+
+        if (slotsRes.status === "fulfilled") {
+          freshSlots = slotsRes.value;
         } else {
-          // If RPC query returned 0 slots (e.g. indexer timeout), PRESERVE existing slots!
-          // Never wipe active slots to 0.
-          setSlots((prev) => {
-            const slotMap = new Map<string, SlotEntity>();
-            for (const s of prev) {
-              if (s.endsAt > nowSec) slotMap.set(s.key.toLowerCase(), s);
-            }
-            for (const s of localSlotsRef.current) {
-              if (s.endsAt > nowSec && !slotMap.has(s.key.toLowerCase())) {
-                slotMap.set(s.key.toLowerCase(), s);
-              }
-            }
-            for (const s of baseSlots) {
-              if (s.endsAt > nowSec && !slotMap.has(s.key.toLowerCase())) {
-                slotMap.set(s.key.toLowerCase(), s);
-              }
-            }
-            return Array.from(slotMap.values()).sort((a, b) => a.endsAt - b.endsAt);
-          });
+          const reason = slotsRes.reason instanceof Error ? slotsRes.reason.message : String(slotsRes.reason);
+          console.warn("Live slots query failed, preserving verified cached state:", reason);
+          queryError = /429|cost limit/i.test(reason)
+            ? "Arkiv RPC rate limit active — serving verified local state."
+            : "Arkiv indexer slow — displaying cached on-chain state.";
         }
 
-        if (freshBookings.length > 0) {
-          const bookingMap = new Map<string, BookingEntity>();
-          for (const b of freshBookings) {
-            bookingMap.set(b.key.toLowerCase(), b);
-          }
-          for (const b of localBookingsRef.current) {
-            if (!bookingMap.has(b.key.toLowerCase())) {
-              bookingMap.set(b.key.toLowerCase(), b);
-            }
-          }
-          const mergedBookings = Array.from(bookingMap.values());
-          setBookings(mergedBookings);
-          saveLocalRecentBookings(mergedBookings);
+        // Reconcile slots deterministically
+        const reconciledSlots = reconcileSlots({
+          authoritativeSlots: freshSlots,
+          cachedSlots: localSlotsRef.current,
+          baseSlots,
+          nowSec,
+        });
+
+        localSlotsRef.current = reconciledSlots;
+        saveLocalRecentSlots(reconciledSlots);
+        setSlots(reconciledSlots);
+
+        // Reconcile bookings
+        let freshBookings: BookingEntity[] | undefined = undefined;
+        if (bookingsRes.status === "fulfilled") {
+          freshBookings = bookingsRes.value;
         }
-        if (freshCompletions.length > 0) setCompletions(freshCompletions);
+        const reconciledBookings = reconcileBookings({
+          authoritativeBookings: freshBookings,
+          cachedBookings: localBookingsRef.current,
+        });
+        localBookingsRef.current = reconciledBookings;
+        saveLocalRecentBookings(reconciledBookings);
+        setBookings(reconciledBookings);
+
+        // Reconcile completions
+        let freshCompletions: CompletionEntity[] | undefined = undefined;
+        if (completionsRes.status === "fulfilled") {
+          freshCompletions = completionsRes.value;
+        }
+        const reconciledCompletions = reconcileCompletions({
+          authoritativeCompletions: freshCompletions,
+          cachedCompletions: localCompletionsRef.current,
+        });
+        localCompletionsRef.current = reconciledCompletions;
+        saveLocalRecentCompletions(reconciledCompletions);
+        setCompletions(reconciledCompletions);
+
+        setError(queryError);
         setLastFetched(new Date());
       }
     } catch (err) {
@@ -621,6 +663,8 @@ export function useLiveSlots(): UseLiveSlotsResult {
       setSlots((prev) => {
         const remaining = prev.filter((s) => s.endsAt > nowSec + BLOCK_MARGIN_SEC);
         if (remaining.length !== prev.length) {
+          localSlotsRef.current = remaining;
+          saveLocalRecentSlots(remaining);
           triggerDebouncedFetch();
           return remaining;
         }
