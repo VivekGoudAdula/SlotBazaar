@@ -120,7 +120,7 @@ export function SlotDrawer({
   const [transferSuccessTx, setTransferSuccessTx] = useState<string | null>(null);
 
   // Proof extension state
-  const [extendingKey, setExtendingKey] = useState<string | null>(null);
+  const [extendingKeys, setExtendingKeys] = useState<Set<string>>(new Set());
   const [extendError, setExtendError] = useState<string | null>(null);
   const [extendSuccess, setExtendSuccess] = useState<{ key: string; txHash: string; expiresAt: bigint } | null>(null);
 
@@ -153,8 +153,7 @@ export function SlotDrawer({
     setIsTransferOpen(false);
     setTransferTarget("");
     setTransferError(null);
-    setTransferSuccessTx(null);
-    setExtendingKey(null);
+    setExtendingKeys(new Set());
     setExtendError(null);
     setExtendSuccess(null);
     setOwnerVerificationError(null);
@@ -245,18 +244,33 @@ export function SlotDrawer({
   };
 
   const handleExtendProof = async (proofKey: Hex) => {
-    if (extendingKey !== null) return;
+    const keyLower = proofKey.toLowerCase();
+    if (extendingKeys.has(keyLower)) return;
+
     if (!walletConnected) {
-      setExtendError("Connect MetaMask to extend proof lifetime.");
+      setExtendError("Please connect your MetaMask wallet before extending proof lifetime.");
       return;
     }
 
-    setExtendingKey(proofKey);
+    if (isWrongNetwork) {
+      setExtendError("Connected to wrong network. Please switch MetaMask to Arkiv Tiramisu (Chain ID: 7738577).");
+      try {
+        await wallet.switchNetwork();
+      } catch {}
+      return;
+    }
+
+    setExtendingKeys((prev) => new Set(prev).add(keyLower));
     setExtendError(null);
     setExtendSuccess(null);
 
     try {
-      const walletClient = await getMetaMaskWalletClient();
+      console.log(`[extendProof] Stage 1: Extension clicked for entity ${proofKey}`);
+      const walletClient =
+        wallet.client && wallet.status === "connected"
+          ? wallet.client
+          : await getMetaMaskWalletClient();
+
       const res = await extendProofEntity(walletClient, proofKey, 60);
       setExtendSuccess({
         key: proofKey,
@@ -267,7 +281,11 @@ export function SlotDrawer({
       const msg = err instanceof Error ? err.message : String(err);
       setExtendError(msg);
     } finally {
-      setExtendingKey(null);
+      setExtendingKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(keyLower);
+        return next;
+      });
     }
   };
 
@@ -618,21 +636,22 @@ export function SlotDrawer({
                       </div>
                       <button
                         type="button"
+                        id={`extend-proof-seller-${p.sellerCompletionKey.slice(0, 10)}`}
                         onClick={() => handleExtendProof(p.sellerCompletionKey)}
-                        disabled={extendingKey !== null}
+                        disabled={extendingKeys.has(p.sellerCompletionKey.toLowerCase())}
                         style={{
                           background: "none",
                           border: "1px solid var(--c-ink)",
                           fontSize: "0.68rem",
                           padding: "1px 6px",
-                          cursor: extendingKey !== null ? "not-allowed" : "pointer",
+                          cursor: extendingKeys.has(p.sellerCompletionKey.toLowerCase()) ? "not-allowed" : "pointer",
                           fontWeight: 700,
                           borderRadius: 2,
-                          opacity: extendingKey !== null && extendingKey !== p.sellerCompletionKey ? 0.5 : 1,
+                          opacity: extendingKeys.has(p.sellerCompletionKey.toLowerCase()) ? 0.7 : 1,
                         }}
                         title="Permissionlessly extend public cryptographic availability of this completion proof for another 60 days on Arkiv."
                       >
-                        {extendingKey === p.sellerCompletionKey ? "Confirming in MetaMask…" : "🛡️ Preserve proof (extend 60d)"}
+                        {extendingKeys.has(p.sellerCompletionKey.toLowerCase()) ? "⏳ Confirming in MetaMask…" : "🛡️ Preserve proof (extend 60d)"}
                       </button>
                     </div>
                     <div style={{ marginTop: 2, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 4 }}>
@@ -644,24 +663,25 @@ export function SlotDrawer({
                       </div>
                       <button
                         type="button"
+                        id={`extend-proof-buyer-${p.buyerCompletionKey.slice(0, 10)}`}
                         onClick={() => handleExtendProof(p.buyerCompletionKey)}
-                        disabled={extendingKey !== null}
+                        disabled={extendingKeys.has(p.buyerCompletionKey.toLowerCase())}
                         style={{
                           background: "none",
                           border: "1px solid var(--c-ink)",
                           fontSize: "0.68rem",
                           padding: "1px 6px",
-                          cursor: extendingKey !== null ? "not-allowed" : "pointer",
+                          cursor: extendingKeys.has(p.buyerCompletionKey.toLowerCase()) ? "not-allowed" : "pointer",
                           fontWeight: 700,
                           borderRadius: 2,
-                          opacity: extendingKey !== null && extendingKey !== p.buyerCompletionKey ? 0.5 : 1,
+                          opacity: extendingKeys.has(p.buyerCompletionKey.toLowerCase()) ? 0.7 : 1,
                         }}
                         title="Permissionlessly extend public cryptographic availability of this completion proof for another 60 days on Arkiv."
                       >
-                        {extendingKey === p.buyerCompletionKey ? "Confirming in MetaMask…" : "🛡️ Preserve proof (extend 60d)"}
+                        {extendingKeys.has(p.buyerCompletionKey.toLowerCase()) ? "⏳ Confirming in MetaMask…" : "🛡️ Preserve proof (extend 60d)"}
                       </button>
                     </div>
-                    {extendingKey && (
+                    {extendingKeys.size > 0 && (
                       <div style={{ padding: "4px 8px", background: "rgba(59, 130, 246, 0.12)", border: "1px solid #3b82f6", color: "#1d4ed8", fontSize: "0.70rem", marginTop: 4, borderRadius: 2 }}>
                         ⏳ Please review and confirm the extension transaction in your MetaMask wallet popup…
                       </div>

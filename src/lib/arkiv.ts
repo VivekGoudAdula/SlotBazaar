@@ -170,28 +170,66 @@ export function parseArkivError(err: unknown, defaultCode: ArkivErrorCode = "UNK
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. IDEMPOTENCY GUARD
+// 3. IDEMPOTENCY & CONCURRENCY GUARDS
 // ─────────────────────────────────────────────────────────────────────────────
 
-let globalWritePendingSince = 0;
-let currentWriteAction: string | null = null;
-const WRITE_LOCK_TIMEOUT_MS = 60_000;
-
-function acquireWriteLock(actionName: string): void {
-  const now = Date.now();
-  if (globalWritePendingSince > 0 && (now - globalWritePendingSince) < WRITE_LOCK_TIMEOUT_MS) {
-    throw new ArkivError(
-      "CONCURRENT_SUBMISSION",
-      `Cannot execute ${actionName}: an on-chain transaction (${currentWriteAction || "write"}) is currently awaiting wallet approval or confirmation on-chain.`
-    );
-  }
-  globalWritePendingSince = now;
-  currentWriteAction = actionName;
+interface LockInfo {
+  action: string;
+  timestamp: number;
 }
 
-function releaseWriteLock(): void {
-  globalWritePendingSince = 0;
-  currentWriteAction = null;
+const activeLocks = new Map<string, LockInfo>();
+const WRITE_LOCK_TIMEOUT_MS = 60_000;
+
+/**
+ * Acquires a fine-grained lock for a specific entity or action.
+ * Scoped entity locks ensure extending or mutating one entity never
+ * blocks independent operations on other entities.
+ * Automatically times out after 60 seconds to prevent permanent deadlock.
+ */
+export function acquireEntityLock(lockKey: string, actionName: string): void {
+  const now = Date.now();
+  const existing = activeLocks.get(lockKey);
+  if (existing && now - existing.timestamp < WRITE_LOCK_TIMEOUT_MS) {
+    throw new ArkivError(
+      "CONCURRENT_SUBMISSION",
+      `Cannot execute ${actionName}: an on-chain transaction (${existing.action}) is already in progress for ${lockKey}.`
+    );
+  }
+  activeLocks.set(lockKey, { action: actionName, timestamp: now });
+}
+
+export function releaseEntityLock(lockKey: string): void {
+  activeLocks.delete(lockKey);
+}
+
+export function isEntityLocked(lockKey: string): boolean {
+  const existing = activeLocks.get(lockKey);
+  if (!existing) return false;
+  if (Date.now() - existing.timestamp >= WRITE_LOCK_TIMEOUT_MS) {
+    activeLocks.delete(lockKey);
+    return false;
+  }
+  return true;
+}
+
+export function acquireWriteLock(actionName: string, entityKey?: string): void {
+  const key = entityKey ? `entity:${entityKey.toLowerCase()}` : `action:${actionName}`;
+  acquireEntityLock(key, actionName);
+}
+
+export function releaseWriteLock(entityKey?: string, actionName?: string): void {
+  if (entityKey) {
+    releaseEntityLock(`entity:${entityKey.toLowerCase()}`);
+  } else if (actionName) {
+    releaseEntityLock(`action:${actionName}`);
+  } else {
+    for (const [k] of activeLocks.entries()) {
+      if (k.startsWith("action:")) {
+        activeLocks.delete(k);
+      }
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -375,7 +413,7 @@ export function getArkivPublicClient(rpcUrl?: string): PublicArkivClient {
   const targetUrl = rpcUrl || getArkivRpcUrl();
   return createPublicClient({
     chain: tiramisu,
-    transport: http(targetUrl),
+    transport: http(targetUrl, { timeout: 15_000 }),
   });
 }
 
@@ -391,23 +429,118 @@ export function getArkivWebSocketClient(wsUrl?: string): PublicArkivClient {
   });
 }
 
+export interface EIP1193ProviderLike {
+  request: (args: { method: string; params?: unknown[] | Record<string, unknown> }) => Promise<unknown>;
+  on?: (event: string, listener: (...args: unknown[]) => void) => void;
+  removeListener?: (event: string, listener: (...args: unknown[]) => void) => void;
+}
+
 /**
- * Browser helper to instantiate a MetaMask-backed wallet client.
- * Does NOT invoke MetaMask accounts until explicitly called.
+ * Wraps an EIP-1193 provider (such as window.ethereum) so high-frequency read queries
+ * (eth_blockNumber, eth_getTransactionReceipt, eth_call, eth_estimateGas) route directly
+ * through the authenticated Arkiv RPC endpoint instead of hanging on the browser extension's
+ * unauthenticated / rate-limited RPC endpoint.
+ *
+ * All account management, signing, and write transactions route strictly to the user's wallet.
+ */
+export function wrapProviderWithArkivRpc(
+  provider: EIP1193ProviderLike,
+  rpcUrl: string = getArkivRpcUrl()
+): EIP1193ProviderLike {
+  const READ_METHODS = new Set([
+    "eth_blockNumber",
+    "eth_getTransactionReceipt",
+    "eth_call",
+    "eth_estimateGas",
+    "eth_gasPrice",
+    "eth_feeHistory",
+    "eth_maxPriorityFeePerGas",
+  ]);
+
+  return {
+    async request({ method, params }) {
+      if (READ_METHODS.has(method)) {
+        try {
+          const res = await fetch(rpcUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: Math.floor(Math.random() * 1000000),
+              method,
+              params: params || [],
+            }),
+          });
+          const data = await res.json();
+          if (data && !data.error && data.result !== undefined) {
+            return data.result;
+          }
+        } catch {
+          // Fall back to direct provider if authenticated RPC query fails
+        }
+      }
+      return provider.request({ method, params });
+    },
+    on: provider.on ? provider.on.bind(provider) : undefined,
+    removeListener: provider.removeListener ? provider.removeListener.bind(provider) : undefined,
+  };
+}
+
+/**
+ * Browser helper to instantiate an authenticated MetaMask-backed wallet client.
+ * Automatically verifies connection and switches MetaMask to Tiramisu testnet (chain 7738577)
+ * if currently connected to another network.
  */
 export async function getMetaMaskWalletClient(): Promise<WalletArkivClient> {
-  const eth = typeof window !== "undefined" ? (window as unknown as { ethereum?: { request: (args: { method: string }) => Promise<string[]> } }).ethereum : undefined;
+  const eth = typeof window !== "undefined" ? (window as unknown as { ethereum?: EIP1193ProviderLike }).ethereum : undefined;
   if (!eth) {
     throw new ArkivError("WALLET_REJECTED", "MetaMask (window.ethereum) is not installed.");
   }
   try {
-    const accounts = await eth.request({ method: "eth_requestAccounts" });
+    const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[];
     if (!accounts || accounts.length === 0) {
       throw new ArkivError("WALLET_REJECTED", "No Ethereum accounts authorized in wallet.");
     }
+
+    // Ensure wallet is on Tiramisu testnet (chain 7738577 / 0x7614d1)
+    const tiramisuHex = `0x${tiramisu.id.toString(16)}`;
+    try {
+      const currentChain = (await eth.request({ method: "eth_chainId" })) as string;
+      if (currentChain && currentChain.toLowerCase() !== tiramisuHex.toLowerCase()) {
+        try {
+          await eth.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: tiramisuHex }],
+          });
+        } catch (switchErr: unknown) {
+          const errCode = (switchErr as { code?: number })?.code;
+          if (errCode === 4902) {
+            await eth.request({
+              method: "wallet_addEthereumChain",
+              params: [
+                {
+                  chainId: tiramisuHex,
+                  chainName: "Arkiv Tiramisu",
+                  rpcUrls: ["https://rpc.tiramisu.db-chain.testnet.arkiv.network"],
+                  nativeCurrency: { name: "GLM", symbol: "GLM", decimals: 18 },
+                  blockExplorerUrls: ["https://tiramisu.explorer.arkiv.network"],
+                },
+              ],
+            });
+          } else {
+            throw switchErr;
+          }
+        }
+      }
+    } catch (netErr) {
+      throw parseArkivError(netErr, "WRONG_NETWORK");
+    }
+
+    const wrapped = wrapProviderWithArkivRpc(eth);
+
     return createWalletClient({
       chain: tiramisu,
-      transport: custom(eth),
+      transport: custom(wrapped),
       account: accounts[0] as Address,
     });
   } catch (err) {
@@ -1700,42 +1833,115 @@ export async function extendProofEntity(
   daysFromNow: number = 60,
   publicClient: PublicArkivClient = getArkivPublicClient()
 ): Promise<ExtendProofOutput> {
-  // 1. Read and validate entity flags first (without locking write mutex)
+  const lockKey = `extendProof:${entityKey.toLowerCase()}`;
+
+  // Stage 1: Click received & extension initiated
+  console.log(`[extendProof] Stage 1: Initiating extension for receipt ${entityKey} (+${daysFromNow} days)`);
+
+  // 1a. Validate wallet readiness before setting guard or performing write
+  if (!wallet || !wallet.account || !wallet.account.address) {
+    const err = new ArkivError("WALLET_REJECTED", "Wallet is not ready or no authorized account found.");
+    console.error(`[extendProof] Stage Failure: Wallet validation failed:`, err.message);
+    throw err;
+  }
+  const walletAddress = wallet.account.address;
+
+  // 1b. Validate entity existence and permissionlessExtension flag
   let entity: FullEntity;
   try {
     entity = await publicClient.getEntity(entityKey);
   } catch {
-    throw new ArkivError(
+    const err = new ArkivError(
       "QUERY_ERROR",
       `Target entity ${entityKey} could not be found or has already expired on Arkiv.`
     );
+    console.error(`[extendProof] Stage Failure: Entity query failed:`, err.message);
+    throw err;
   }
 
   if (!entity.creationFlags?.permissionlessExtension) {
-    throw new ArkivError(
+    const err = new ArkivError(
       "INVALID_PAYLOAD",
       `Entity ${entityKey} was not created with permissionlessExtension: true.`
     );
+    console.error(`[extendProof] Stage Failure: Ineligible entity:`, err.message);
+    throw err;
   }
 
-  // 2. Acquire lock strictly for the wallet transaction
-  acquireWriteLock("extendProofEntity");
+  // 1c. Calculate requested expiry using SDK documented units & contract rules
+  // The contract enforces: newExpiry > entity.expiresAt.
+  // 1 day = 86400s / 2s block time = 43200 blocks.
+  const additionalBlocks = BigInt(Math.max(1, daysFromNow)) * 43200n;
+  const currentBlock = await publicClient.getBlockNumber();
+  const initialExpiresAt = entity.expiresAt;
+
+  const candidateFromNow = currentBlock + additionalBlocks;
+  const targetBlock = initialExpiresAt >= candidateFromNow ? initialExpiresAt + additionalBlocks : candidateFromNow;
+  const expires = ExpirationTime.atBlock(targetBlock);
+
+  // Stage 2: Wallet ready and entity validated
+  console.log(
+    `[extendProof] Stage 2: Wallet ready (${walletAddress}) & entity verified (current expiry: block #${initialExpiresAt}, target: block #${targetBlock})`
+  );
+
+  // 2. Acquire lock strictly for this specific receipt entity
+  acquireEntityLock(lockKey, "extendProofEntity");
+
   try {
-    const expires = ExpirationTime.fromDays(daysFromNow);
+    // Stage 3: Requesting MetaMask transaction signature
+    console.log(`[extendProof] Stage 3: Requesting MetaMask transaction signature for target block #${targetBlock}...`);
+
     const result = await wallet.extendEntity({
       entityKey,
       expires,
     });
 
+    const txHash = result.txHash as Hex;
+
+    // Stage 4: Transaction hash returned
+    console.log(`[extendProof] Stage 4: Transaction broadcast hash: ${txHash}`);
+
+    // Stage 5: Verification - Refresh entity from Arkiv and verify expiry actually advanced
+    let updatedEntity: FullEntity | null = null;
+    const maxRetries = 6;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        updatedEntity = await publicClient.getEntity(entityKey);
+        if (updatedEntity && updatedEntity.expiresAt > initialExpiresAt) {
+          break;
+        }
+      } catch {
+        // Retry on transient fetch delay
+      }
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
+
+    const verifiedExpiresAt = updatedEntity?.expiresAt ?? 0n;
+    if (!updatedEntity || verifiedExpiresAt <= initialExpiresAt) {
+      throw new ArkivError(
+        "UNKNOWN_WRITE_ERROR",
+        `Extension transaction ${txHash} was confirmed, but entity expiry did not advance on Arkiv (initial: ${initialExpiresAt}, current: ${verifiedExpiresAt}).`
+      );
+    }
+
+    console.log(
+      `[extendProof] Stage 5: Confirmation received! On-chain expiry advanced from block #${initialExpiresAt} to #${verifiedExpiresAt} (tx: ${txHash})`
+    );
+
     return {
       entityKey: result.entityKey,
-      txHash: result.txHash as Hex,
-      expiresAt: result.expiresAt,
+      txHash,
+      expiresAt: verifiedExpiresAt,
     };
   } catch (err) {
-    throw parseArkivError(err, "UNKNOWN_WRITE_ERROR");
+    const parsed = parseArkivError(err, "UNKNOWN_WRITE_ERROR");
+    console.error(`[extendProof] Stage Failure: Extension failed for ${entityKey}:`, parsed.message);
+    throw parsed;
   } finally {
-    releaseWriteLock();
+    // 3. Always release receipt lock in finally
+    releaseEntityLock(lockKey);
   }
 }
 

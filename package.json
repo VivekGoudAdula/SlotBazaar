@@ -9,7 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "scan:secrets": "node scripts/secret-scan.mjs",
-    "test:unit": "npx tsx scripts/test-phase4-unit.ts && npx tsx scripts/test-phase5-unit.ts && npx tsx scripts/test-phase6-reconciliation.ts",
+    "test:unit": "npx tsx scripts/test-phase4-unit.ts && npx tsx scripts/test-phase5-unit.ts && npx tsx scripts/test-phase6-reconciliation.ts && npx tsx scripts/test-phase7-extend-proof.ts",
     "test:report": "npx tsx scripts/test-report.ts",
     "seed": "tsx scripts/seed.ts"
   },
