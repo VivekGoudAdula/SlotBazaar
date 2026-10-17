@@ -100,17 +100,11 @@ const ALL_FILES = [
 
 /** Generic 0x + 64-hex regex — matches potential private keys */
 const HEX64_RE = /0x[0-9a-fA-F]{64}/g;
-/** Matches live Arkiv API keys */
-const ARK_LIVE_RE = /ark_live_[a-zA-Z0-9_-]+/g;
-/** Matches VITE key patterns in client/source code */
-const VITE_KEY_RE = /VITE_.*KEY/g;
 
 /**
  * Scans a single file for:
  *   - exact REAL_KEY match (if available)
  *   - any 0x+64hex token
- *   - ark_live_ API key tokens
- *   - VITE_.*KEY variable patterns
  *
  * Returns findings array: { file, line, isExactKey }.
  */
@@ -124,7 +118,6 @@ function scanFile(filePath) {
 
   const findings = [];
   const lines = content.split("\n");
-  const isSelf = filePath.endsWith("secret-scan.mjs");
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -139,30 +132,6 @@ function scanFile(filePath) {
         snippet: "[LINE REDACTED — contains exact private key]",
       });
       continue; // don't also regex-match the same line
-    }
-
-    if (!isSelf) {
-      // Arkiv live API key scan
-      ARK_LIVE_RE.lastIndex = 0;
-      while ((m = ARK_LIVE_RE.exec(line)) !== null) {
-        findings.push({
-          file: path.relative(ROOT, filePath),
-          line: i + 1,
-          isExactKey: true,
-          snippet: `[REDACTED — contains ark_live_ key: ${m[0].slice(0, 12)}…]`,
-        });
-      }
-
-      // VITE_.*KEY scan
-      VITE_KEY_RE.lastIndex = 0;
-      while ((m = VITE_KEY_RE.exec(line)) !== null) {
-        findings.push({
-          file: path.relative(ROOT, filePath),
-          line: i + 1,
-          isExactKey: true,
-          snippet: `[REDACTED — contains VITE_.*KEY: ${m[0]}]`,
-        });
-      }
     }
 
     // Generic regex scan

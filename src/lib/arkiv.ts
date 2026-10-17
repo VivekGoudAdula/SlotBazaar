@@ -283,7 +283,7 @@ export function validateCompletionPayload(raw: unknown): CompletionPayload {
 // 5. CLIENT FACTORIES
 // ─────────────────────────────────────────────────────────────────────────────
 
-function getEnvVar(key: "VITE_RPC_URL" | "VITE_WS_URL"): string {
+function getEnvVar(key: "VITE_RPC_URL" | "VITE_WS_URL" | "VITE_ARKIV_API_KEY"): string {
   try {
     if (typeof import.meta !== "undefined" && import.meta.env) {
       if (key === "VITE_RPC_URL" && typeof import.meta.env.VITE_RPC_URL === "string") {
@@ -292,6 +292,9 @@ function getEnvVar(key: "VITE_RPC_URL" | "VITE_WS_URL"): string {
       if (key === "VITE_WS_URL" && typeof import.meta.env.VITE_WS_URL === "string") {
         return import.meta.env.VITE_WS_URL;
       }
+      if (key === "VITE_ARKIV_API_KEY" && typeof import.meta.env.VITE_ARKIV_API_KEY === "string") {
+        return import.meta.env.VITE_ARKIV_API_KEY;
+      }
     }
   } catch {}
   try {
@@ -299,22 +302,33 @@ function getEnvVar(key: "VITE_RPC_URL" | "VITE_WS_URL"): string {
     if (g.process?.env?.[key]) {
       return String(g.process.env[key]);
     }
+    if (key === "VITE_ARKIV_API_KEY" && g.process?.env?.ARKIV_API_KEY) {
+      return String(g.process.env.ARKIV_API_KEY);
+    }
   } catch {}
   return "";
 }
 
 export function getArkivRpcUrl(): string {
   const envRpc = getEnvVar("VITE_RPC_URL");
-  if (envRpc) return envRpc;
-  return "https://rpc.tiramisu.db-chain.testnet.arkiv.network";
+  const apiKey = getEnvVar("VITE_ARKIV_API_KEY");
+  const base = envRpc || "https://rpc.tiramisu.db-chain.testnet.arkiv.network";
+  if (apiKey && !base.includes(apiKey)) {
+    return `${base.replace(/\/+$/, "")}/${apiKey}`;
+  }
+  return base;
 }
 
 export const DEFAULT_ARKIV_WS_RPC = "wss://rpc.tiramisu.db-chain.testnet.arkiv.network";
 
 export function getArkivWsUrl(): string {
   const envWs = getEnvVar("VITE_WS_URL");
-  if (envWs) return envWs;
-  return DEFAULT_ARKIV_WS_RPC;
+  const apiKey = getEnvVar("VITE_ARKIV_API_KEY");
+  const base = envWs || DEFAULT_ARKIV_WS_RPC;
+  if (apiKey && !base.includes(apiKey)) {
+    return `${base.replace(/\/+$/, "")}/${apiKey}`;
+  }
+  return base;
 }
 
 /**

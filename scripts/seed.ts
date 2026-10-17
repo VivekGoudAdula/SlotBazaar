@@ -301,8 +301,12 @@ async function main() {
   }
 
   // ── LIVE SEND ──
-  const wallet = createWalletClient({ chain: tiramisu, transport: http(), account });
-  const pub    = createPublicClient({ chain: tiramisu, transport: http() });
+  const envKey = process.env.VITE_ARKIV_API_KEY || process.env.ARKIV_API_KEY || "";
+  const baseRpc = process.env.VITE_RPC_URL || "https://rpc.tiramisu.db-chain.testnet.arkiv.network";
+  const rpcUrl = envKey && !baseRpc.includes(envKey) ? `${baseRpc.replace(/\/+$/, "")}/${envKey}` : baseRpc;
+
+  const wallet = createWalletClient({ chain: tiramisu, transport: http(rpcUrl), account });
+  const pub    = createPublicClient({ chain: tiramisu, transport: http(rpcUrl) });
 
   let seeded = 0;
   let failed = 0;
