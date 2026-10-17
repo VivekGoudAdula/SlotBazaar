@@ -38,7 +38,7 @@ Across India’s major industrial manufacturing corridors (such as Jeedimetla in
 
 Today, this operational capacity is lost because online marketplace penetration is minimal — in our 46-respondent informal survey, only 8.7% find buyers through online marketplaces, while 47.8% rely on informal WhatsApp groups, 19.6% on direct phone calls, 15.2% on agents or middlemen who extract fees, and 8.7% report their spare capacity goes completely unused. Furthermore, 76.1% report their machine or time sits idle almost every day. Most critically, when a small machine shop completes a job on time, their verified performance record stays trapped in private chats — yet 63.0% of respondents stated that past completed jobs confirmed by both sides is what would make them trust a stranger.
 
-SlotBazaar solves this by providing a decentralized, real-time map where MSMEs broadcast perishable time slots for about `0.00014 testnet GLM` per slot (testnet GLM has no market value, with no platform commission in the app). Slots expire autonomously on-chain when the window closes (ranging from 15 minutes to 7 days), reservations race fairly on earliest confirmed block, and two-sided cryptographic signatures produce portable on-chain verified job badges that persist for as long as their entities exist (30 days today) without platform rent. The app is live and fully interactive today at [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app). *(Full analysis: see [docs/WHY_INDIA.md](WHY_INDIA.md))*.
+SlotBazaar solves this by providing a decentralized, real-time map where MSMEs broadcast perishable time slots for about `0.00014 testnet GLM` per slot (testnet GLM has no market value, with no platform commission in the app). Slots expire autonomously on-chain when the window closes (ranging from 15 minutes to 7 days), reservations race fairly on earliest confirmed block, and two-sided cryptographic signatures produce portable on-chain verified job badges that persist for as long as their entities exist (365 days today) without platform rent. The app is live and fully interactive today at [https://slotbazaar.vercel.app](https://slotbazaar.vercel.app). *(Full analysis: see [docs/WHY_INDIA.md](WHY_INDIA.md))*.
 
 ---
 
@@ -73,10 +73,10 @@ On SlotBazaar, **censorship resistance is enforced by consensus**:
 |---|---|---|
 | **Attributes vs Payload** | `src/lib/arkiv.ts:1099`, `schema.md` | Searchable fields (`category`, `cluster`, `starts_at`, `ends_at`, `lat_e4`, `lon_e4`) are stored as typed attributes for zero-middleware querying; display text (`title`, `description`) resides in payload. |
 | **Compound Predicates & Ranges** | `src/lib/arkiv.ts:380-450` | Queries use `and()`, `eq()`, `gt("ends_at", u64(nowSec))` for live cluster and category filtering directly over RPC. |
-| **Autonomous Entity Expiration** | `src/lib/arkiv.ts:1099`, `schema.md` | Slots expire at `ends_at` (15m to 7d); bookings and completions persist for as long as their entities exist (30 days today) to enable post-slot completion and dispute settlement. Distinct visual lifecycle: Active (>15m) → Expiring soon (≤15m) → Expired (≤0s). |
+| **Autonomous Entity Expiration** | `src/lib/arkiv.ts:1099`, `schema.md` | Slots expire at `ends_at` (15m to 7d); bookings and completions persist for as long as their entities exist (365 days today) to enable post-slot completion and dispute settlement. Distinct visual lifecycle: Active (>15m) → Expiring soon (≤15m) → Expired (≤0s). |
 | **`$creator` Verification** | `src/lib/arkiv.ts:890`, `src/hooks/useLiveSlots.ts` | The reputation engine matches on-chain `$creator` against the slot owner and winning buyer; prevents impersonation and fake self-reviews. |
 | **Immutable Creation Flags** | `src/lib/arkiv.ts:1099, 1157, 1222` | `flags: { readonly: true }` passed on slots and bookings; `creationFlags.readonly` confirmed directly from fetched entity and shown in on-chain proof panel. |
-| **Permissionless Extension** | `src/lib/arkiv.ts:1222, 1260` | `flags: { readonly: true, permissionlessExtension: true }` on completion entities; "🛡️ Preserve proof (extend 60d)" calls native `extendEntity()` to lengthen evidence persistence without modifying booking windows. |
+| **Permissionless Extension** | `src/lib/arkiv.ts:1222, 1260` | `flags: { readonly: true, permissionlessExtension: true }` on completion entities; "🛡️ Preserve proof (extend 365d)" calls native `extendEntity()` to lengthen evidence persistence without modifying booking windows. |
 | **Ownership Transfer** | `src/lib/arkiv.ts:1280`, `SlotDrawer.tsx` | Owner-only "⇄ Transfer Ownership" calls `changeOwnership({ entityKey, newOwner })`; proof drawer distinguishes immutable `$creator` from current `$owner`. |
 | **WebSocket Entity Events** | `src/hooks/useLiveSlots.ts:413-480` | Subscribes via `watchEntityEvents` over `webSocket` transport (omitting `fromBlock` to avoid HTTP polling fallback). Pushes newly posted slots to all peer tabs with real empirical latency measured on localhost (8 of 10 appeared; median 2.60 s, p90: 6.93 s; 2 timed out at 35s; 30s fallback polling is implemented, though recovery was not demonstrated in those two samples). |
 | **Single-Signature Batch Writes** | `src/components/SeedModal.tsx:38`, `executeBatch` | Bundles synthetic demo listings (batch of 7 with 1 rapid 5m expiry test record) per transaction (`execute(Operation[])`). Prompts MetaMask only once, saving gas and eliminating signature fatigue. |
@@ -127,7 +127,7 @@ Every submission must pass all 11 gates to be eligible for scoring:
 | **G-08** | **Form Complete** | Every required question on Devfolio project form answered | **Drafted, to be submitted by the user** | All required form fields drafted in Parts 1 and 2 of this document. |
 | **G-09** | **Track Chosen** | At least one track chosen on Devfolio | **PASS** | Best Indian Use Case (Primary) & Censorship Resistance (Secondary). |
 | **G-10** | **Hackathon Window** | Built between 9 and 18 October 2026; pre-existing work disclosed | **PASS** | [docs/DISCLOSURE.md](DISCLOSURE.md); initial commit `8d073160bf920f4967199eddcb03f712c87b0877` created 2026-10-12 21:07:20 +0530 (Phase 0 scaffold & first on-chain slot entity). |
-| **G-11** | **Survives Expiry** | Evidence that survives entity expiration | **PASS** | Transaction hashes documented in `WALLETS.md`; booking & completion entities have 30-day lifespans outliving slots. |
+| **G-11** | **Survives Expiry** | Evidence that survives entity expiration | **PASS** | Transaction hashes documented in `WALLETS.md`; booking & completion entities have 365-day lifespans outliving slots. |
 | **E-01** | **Eligibility** | SDK installed and actively queried; no Postgres proxy; zero secrets or PII | **PASS** | `@arkiv-network/sdk` queried on every page; no centralized DB; `npm run scan:secrets` clean (0 leaks); PII guard regexes in `slotValidation.ts`. |
 
 ---
@@ -139,7 +139,7 @@ Every submission must pass all 11 gates to be eligible for scoring:
 | **1. Why India? (Best Indian Use Case)** | 25 | Names real MSME users (precision job shops in Jeedimetla, Surat, Tiruppur) losing idle machine hours. Solves high broker cuts and lack of portable reputation. Works live today. Documented in [docs/WHY_INDIA.md](WHY_INDIA.md). |
 | **1 (Alt). Why Censorship Resistance?** | 25 | Proves data is queryable by anyone via public Arkiv RPCs without our backend. Platform operators cannot alter transaction records or manipulate ratings. Documented in [docs/WHY_ARKIV.md](WHY_ARKIV.md). |
 | **2. Why Arkiv?** | 25 | Thoroughly analyzes why PostgreSQL, IPFS/Arweave, Subgraphs, and custom APIs fail. Explains why autonomous entity expiration IS the product. Discloses what deliberately stays off Arkiv (PII, map tiles, transient UI state). Documented in [docs/WHY_ARKIV.md](WHY_ARKIV.md). |
-| **3. How You Use Arkiv** | 25 | Every feature tied to core UX: typed attributes vs payload, compound range predicates, autonomous expiration (15m to 7d slots, 30d bookings/completions), `$creator` reputation verification, protocol-level `readonly` flags, permissionless extension for completion proofs, `$creator` vs `$owner` ownership transfer, `watchEntityEvents` WebSocket live updates, single-sig `executeBatch` writes (synthetic demo batch of 7 with 1 rapid 5m expiry test record). 58 unit tests verify behavior. |
+| **3. How You Use Arkiv** | 25 | Every feature tied to core UX: typed attributes vs payload, compound range predicates, autonomous expiration (15m to 7d slots, 365d bookings/completions), `$creator` reputation verification, protocol-level `readonly` flags, permissionless extension for completion proofs, `$creator` vs `$owner` ownership transfer, `watchEntityEvents` WebSocket live updates, single-sig `executeBatch` writes (synthetic demo batch of 7 with 1 rapid 5m expiry test record). 95 unit tests verify behavior. |
 | **4. Friction Report** | 25 | 17 comprehensive friction entries (6 small SDK and DX findings, 1 cosmetic typo, 10 notes/withdrawn) in [arkiv/friction.md](../arkiv/friction.md). Includes exact error text, SDK/viem versions, minimal reproduction code, and upstream issue pointers. |
 
 ---
@@ -153,10 +153,10 @@ Every submission must pass all 11 gates to be eligible for scoring:
 | **Minimum Slot Duration** | 15 minutes (`900s`) | `src/lib/slotValidation.ts:39` (`MIN_DURATION_SEC`) |
 | **Maximum Slot Duration** | 7 days (`604800s`) | `src/lib/slotValidation.ts:40` (`MAX_DURATION_SEC`) |
 | **Slot Expiry Setting** | `ends_at` timestamp | `src/lib/arkiv.ts:1099` |
-| **Booking Entity Expiry** | 30 days (`30 * 86400 * 1000ms`) | `src/lib/arkiv.ts:1157` |
-| **Completion Entity Expiry** | 30 days (`30 * 86400 * 1000ms`) | `src/lib/arkiv.ts:1222` |
+| **Booking Entity Expiry** | 365 days (`365 * 86400 * 1000ms`) | `src/lib/arkiv.ts` (`PROOF_EXPIRY_DAYS`) |
+| **Completion Entity Expiry** | 365 days (`365 * 86400 * 1000ms`) | `src/lib/arkiv.ts` (`PROOF_EXPIRY_DAYS`) |
 | **Real Batch Write Limit** | 20 slots per tx | `src/components/SeedModal.tsx:38` (`REAL_BATCH_LIMIT`) |
 | **Max Live Synthetic Cap** | 40 slots | `src/components/SeedModal.tsx:37` (`MAX_LIVE_SYNTHETIC_CAP`) |
-| **Pure Unit Test Count** | 58 tests (21 Phase 4 + 37 Phase 5) | `npm run test:unit` |
+| **Pure Unit Test Count** | 95 tests (21 Phase 4 + 56 Phase 5 + 10 Phase 6 + 8 Phase 7) | `npm run test:unit` |
 | **Foreground RPC Load** | 14.0 req/min (14 per min, CDP measured) | `README.md:196`, `friction.md` |
 | **Hidden Tab RPC Load** | 1.0 req/min (CDP measured) | `README.md:196`, `friction.md` |

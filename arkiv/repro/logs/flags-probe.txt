@@ -1,0 +1,41 @@
+================================================================================
+               ARKIV ENTITY PROPERTIES & LIFECYCLE PROBE                        
+================================================================================
+Run Date       : 2026-10-17T04:36:46.895Z
+SDK Version    : 0.8.1
+Viem Version   : 2.57.4
+Network        : Arkiv Tiramisu (chainId: 7738577)
+Signer Account : 0x53491aA366E086C19da948669b340317eE6eA6e9
+
+--- Probe 1: readonly Flag Mutation Guard ---
+Creating test entity with flags: { readonly: true } (batch: flags-probe-1792211808225)...
+Entity 1 Created: 0xe0c59fe32ceb9b2ddacd60256b31b61f584ca3d1efff0898bcce5d1422e7b215 (tx: 0x534c5c120ff2c465a485520a00e506f3b65b3bcfbcae7586b6a9bf1d15b667cb)
+Attempting patchEntity on readonly entity (expecting revert)...
+[Observed Revert] Error Name: EntityMutationError
+[Observed Revert] Message   : Transaction failed: entity 0xe0c59fe3…e7b215 was created readonly, so its contents can never change. Its expiry can still be extended, and it can be t...
+[Observed Revert] Cause     : The contract function "execute" reverted.
+
+Error: ReadOnlyEntity(bytes32 entityKey)
+                     (0xe0c59fe32ceb9b2ddacd60256b31b61f584ca3d1ef...
+
+--- Probe 2: changeOwnership on readonly Entity ---
+Transferring ownership of readonly entity 0xe0c59fe32ceb9b2ddacd60256b31b61f584ca3d1efff0898bcce5d1422e7b215 to 0x000000000000000000000000000000000000dEaD...
+Ownership transfer transaction confirmed: 0x628ba4a148b7d954fcec8b12000ef7ea731f1cb62c302dbea32cf629b5d7e242
+Initial Creator (immutable) : 0x53491aA366E086C19da948669b340317eE6eA6e9
+Updated Owner   (transferred): 0x000000000000000000000000000000000000dEaD
+Verification Result: PASS ($owner updated, $creator intact)
+
+--- Probe 3: extendEntity with permissionlessExtension ---
+Creating test entity with flags: { readonly: true, permissionlessExtension: true }...
+Entity 2 Created: 0x25f2248ecb8bb33a7d37bfb37d0f1df9da6aaba55734f5fa134e089f485bf009 (tx: 0xc0a819783639cf59ce4da02e13cc14c96d6f84a4e6f5dc9581b063ec6eddc8c8, initial expiresAt block: #681482)
+Calling extendEntity for +365 days...
+extendEntity transaction confirmed: 0xe6b9981cd0691e34a07ca7cc5d8220535829f954fc19eab434423bfb86e497fb (returned expiresAt: #16449035)
+Refreshed On-Chain expiresAt: #16449035
+Verification Result: PASS (expiresAt advanced by 15767553 blocks)
+
+================================================================================
+SUMMARY OBSERVATIONS:
+1. readonly flag blocks mutations (revert: EntityMutationError)
+2. changeOwnership succeeds on readonly entities ($owner updated to 0x000000..., $creator stays 0x53491a...)
+3. extendEntity advances expiresAt from #681482 to #16449035
+================================================================================

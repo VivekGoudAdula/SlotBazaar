@@ -159,7 +159,7 @@ export function WhyArkivModal({ isOpen, onClose }: WhyArkivModalProps): React.Re
           4. What We Deliberately Kept Off Arkiv
         </h3>
         <p style={{ margin: "0 0 1rem 0" }}>
-          Decentralized storage persists for as long as its entities exist (30 days today) and is public. To protect privacy and optimize performance:
+          Decentralized storage persists for as long as its entities exist (365 days today) and is public. To protect privacy and optimize performance:
         </p>
         <ul style={{ paddingLeft: "1.25rem", margin: "0 0 1.25rem 0" }}>
           <li><strong>No Personal Identifiable Information (PII):</strong> No phone numbers, email addresses, GSTINs, or Aadhaar numbers.</li>

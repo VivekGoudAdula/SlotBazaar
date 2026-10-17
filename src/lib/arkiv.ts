@@ -25,7 +25,13 @@ import { http, custom, webSocket, isAddress, checksumAddress, parseAbiItem, type
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const PROJECT_NAMESPACE = "slotbazaar";
-export const SCHEMA_VERSION = "1";
+export const SLOT_SCHEMA_VERSION = "1";
+export const BOOKING_SCHEMA_VERSION = "3";
+export const COMPLETION_SCHEMA_VERSION = "3";
+export const SCHEMA_VERSION = "1"; // backwards-compatible alias
+
+/** Default storage duration for immutable reputation evidence (bookings and completions) */
+export const PROOF_EXPIRY_DAYS = 365;
 
 export const CATEGORIES = ["machine", "transport", "freelance"] as const;
 export type SlotCategory = (typeof CATEGORIES)[number];
@@ -1712,8 +1718,8 @@ export async function createBooking(
       schema_version: 3,
     };
 
-    // Booking lives for 30 days
-    const expiryDate = new Date(Date.now() + 30 * 86400 * 1000);
+    // Booking lives for 365 days (PROOF_EXPIRY_DAYS)
+    const expiryDate = new Date(Date.now() + PROOF_EXPIRY_DAYS * 86400 * 1000);
     const expires = ExpirationTime.atDate(expiryDate);
 
     const result = await wallet.createEntity({
@@ -1761,7 +1767,7 @@ export interface CreateCompletionOutput {
 
 /**
  * Creates a completion entity on Arkiv Tiramisu (Schema v3).
- * Points to booking_key (not slot_key) with a 30-day expiry matching booking,
+ * Points to booking_key (not slot_key) with a 365-day expiry matching booking,
  * allowing completion to be submitted AFTER the slot itself has expired.
  */
 export async function createCompletion(
@@ -1778,8 +1784,8 @@ export async function createCompletion(
       schema_version: 3,
     };
 
-    // Completions match booking 30-day lifecycle
-    const expiryDate = new Date(Date.now() + 30 * 86400 * 1000);
+    // Completions match booking 365-day lifecycle (PROOF_EXPIRY_DAYS)
+    const expiryDate = new Date(Date.now() + PROOF_EXPIRY_DAYS * 86400 * 1000);
     const expires = ExpirationTime.atDate(expiryDate);
 
     const result = await wallet.createEntity({
@@ -1834,7 +1840,7 @@ export interface ExtendProofOutput {
 export async function extendProofEntity(
   wallet: WalletArkivClient,
   entityKey: Hex,
-  daysFromNow: number = 60,
+  daysFromNow: number = PROOF_EXPIRY_DAYS,
   publicClient: PublicArkivClient = getArkivPublicClient()
 ): Promise<ExtendProofOutput> {
   const lockKey = `extendProof:${entityKey.toLowerCase()}`;
@@ -1987,7 +1993,7 @@ export async function extendJobProof({
   bookingKey,
   sellerCompletionKey,
   buyerCompletionKey,
-  daysFromNow = 60,
+  daysFromNow = PROOF_EXPIRY_DAYS,
   publicClient = getArkivPublicClient(),
   onStep,
 }: ExtendJobProofInput): Promise<ExtendJobProofOutput> {

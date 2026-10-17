@@ -28,6 +28,7 @@ import {
   type WalletArkivClient,
   type PublicArkivClient,
   type FullEntity,
+  PROOF_EXPIRY_DAYS,
 } from "../src/lib/arkiv.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,7 +144,7 @@ async function runTests() {
   try {
     const mockPub = createMockPublicClient({ entityMap: entityDb });
     const mockWallet = createMockWalletClient();
-    await extendProofEntity(mockWallet, INELIGIBLE_KEY, 60, mockPub);
+    await extendProofEntity(mockWallet, INELIGIBLE_KEY, PROOF_EXPIRY_DAYS, mockPub);
   } catch (err: any) {
     test1Error = err.message || String(err);
   }
@@ -161,7 +162,7 @@ async function runTests() {
   try {
     const mockPub = createMockPublicClient({ entityMap: entityDb });
     const mockWallet = createMockWalletClient();
-    await extendProofEntity(mockWallet, missingKey, 60, mockPub);
+    await extendProofEntity(mockWallet, missingKey, PROOF_EXPIRY_DAYS, mockPub);
   } catch (err: any) {
     test2Error = err.message || String(err);
   }
@@ -178,7 +179,7 @@ async function runTests() {
   try {
     const mockPub = createMockPublicClient({ entityMap: entityDb });
     const invalidWallet = { account: undefined } as unknown as WalletArkivClient;
-    await extendProofEntity(invalidWallet, VALID_RECEIPT_KEY, 60, mockPub);
+    await extendProofEntity(invalidWallet, VALID_RECEIPT_KEY, PROOF_EXPIRY_DAYS, mockPub);
   } catch (err: any) {
     test3Error = err.message || String(err);
   }
@@ -202,7 +203,7 @@ async function runTests() {
   });
 
   try {
-    await extendProofEntity(mockRejectWallet, VALID_RECEIPT_KEY, 60, mockPub4);
+    await extendProofEntity(mockRejectWallet, VALID_RECEIPT_KEY, PROOF_EXPIRY_DAYS, mockPub4);
   } catch (err: any) {
     test4Error = err.message || String(err);
   }
@@ -238,7 +239,7 @@ async function runTests() {
   });
 
   try {
-    const res = await extendProofEntity(mockSuccessWallet, VALID_RECEIPT_KEY, 60, mockPubRetry);
+    const res = await extendProofEntity(mockSuccessWallet, VALID_RECEIPT_KEY, PROOF_EXPIRY_DAYS, mockPubRetry);
     retrySucceeded = res.expiresAt === 3000000n;
   } catch (err: any) {
     console.error("Retry failed:", err);
@@ -287,7 +288,7 @@ async function runTests() {
   });
 
   try {
-    await extendProofEntity(mockFakeWallet, VALID_RECEIPT_KEY, 60, mockPubStagnant);
+    await extendProofEntity(mockFakeWallet, VALID_RECEIPT_KEY, PROOF_EXPIRY_DAYS, mockPubStagnant);
   } catch (err: any) {
     test7Error = err.message || String(err);
   }
@@ -316,7 +317,7 @@ async function runTests() {
     },
   });
 
-  const successResult = await extendProofEntity(mockVerifiedWallet, VALID_RECEIPT_KEY, 60, mockPubVerified);
+  const successResult = await extendProofEntity(mockVerifiedWallet, VALID_RECEIPT_KEY, PROOF_EXPIRY_DAYS, mockPubVerified);
   assertTest(
     "Success 8: Successful extension returns verified advanced expiresAt block",
     successResult.expiresAt === 4530046n && successResult.txHash.startsWith("0x777"),

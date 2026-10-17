@@ -31,6 +31,7 @@ import {
   transferEntityOwnership,
   extendJobProof,
   fetchAuthoritativeEntityOwner,
+  PROOF_EXPIRY_DAYS,
 } from "../lib/arkiv.js";
 import { formatTimeLeft, getUrgency, formatDateTime } from "../lib/time.js";
 import { useNow } from "../hooks/useNow.js";
@@ -282,7 +283,7 @@ export function SlotDrawer({
         bookingKey: proof.bookingKey,
         sellerCompletionKey: proof.sellerCompletionKey,
         buyerCompletionKey: proof.buyerCompletionKey,
-        daysFromNow: 60,
+        daysFromNow: PROOF_EXPIRY_DAYS,
         onStep: (step, total, desc) => {
           setExtendJobStep((prev) => ({ ...prev, [jobKey]: `(${step}/${total}) ${desc}` }));
         },
@@ -695,10 +696,10 @@ export function SlotDrawer({
                           title={
                             isLegacyRestricted
                               ? "Legacy booking without permissionless extension: only the booking owner can extend."
-                              : "Extend booking and both completion receipts by 60 days on Arkiv."
+                              : "Extend booking and both completion receipts by 365 days on Arkiv."
                           }
                         >
-                          {isExtending ? (stepMsg || "⏳ Preserving proof…") : "🛡️ Preserve proof (extend 60d)"}
+                          {isExtending ? (stepMsg || "⏳ Preserving proof…") : "🛡️ Preserve proof (extend 365d)"}
                         </button>
                       </div>
 

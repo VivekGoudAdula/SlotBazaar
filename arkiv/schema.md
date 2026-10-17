@@ -14,7 +14,7 @@
    - All state is read directly from and written directly to Arkiv Tiramisu.
 2. **Protocol-Enforced Immutable Records & Creation Flags**:
    - Entities are protected at the Arkiv protocol level using `flags`:
-     - **Slot Listings**: Created with `flags: { readonly: true }` (`schema_v: "2"`). Attributes and payload cannot be altered after creation. Read-only records can still be cancelled/deleted or expired autonomously by block consensus.
+     - **Slot Listings**: Created with `flags: { readonly: true }` (`schema_v: "1"`). Attributes and payload cannot be altered after creation. Read-only records can still be transferred or deleted by their owner, or expired autonomously by block consensus.
      - **Booking Snapshots**: Created with `flags: { readonly: true, permissionlessExtension: true }` (`schema_v: "3"`). Counterparty claims are cryptographically fixed upon submission, and permissionless extension guarantees anyone can preserve the proof set.
      - **Completion Evidence**: Created with `flags: { readonly: true, permissionlessExtension: true }` (`schema_v: "3"`). Receipts are immutable, but anyone may extend their on-chain storage lifetime to guarantee perpetual cryptographic evidence availability.
    - *On-Chain Proof Verification:* The application inspects the actual `creationFlags` returned from the Arkiv node on fetched entities (`slot.creationFlags.readonly`), never inferring flags from client constants.
@@ -26,7 +26,8 @@
    - *Visual Lifecycle Stages:* Transitions visibly from **🟢 Active** (>15m) → **🔴 Expiring soon** (≤15m) → **⚫ Expired** (≤0s).
    - *Client-Side Availability Pruning:* `useLiveSlots.ts` proactively prunes ended listings (with a 4s margin matching 2 blocks) to prevent booking attempts on dead capacity, triggering queries refresh.
    - *Consensus Expiration:* Slots are created with `expires: ExpirationTime.atDate(new Date(endsAt * 1000))`. The Arkiv consensus engine autonomously cleans up expired records at block boundaries without external cron jobs.
-   - *History Preservation & Extension:* Bookings and completions persist for **30 days** by default. Completed job proof sets (booking + seller completion receipt + buyer completion receipt) can be permissionlessly extended for another 60 days via `extendJobProof()`. Older bookings without `permissionlessExtension` can only be extended by their `$owner`.
+   - *History Preservation & Extension:* Bookings and completions persist for **365 days** (`PROOF_EXPIRY_DAYS = 365`) by default. Completed job proof sets (booking + seller completion receipt + buyer completion receipt) can be permissionlessly extended for another 365 days via `extendJobProof()`. Older bookings without `permissionlessExtension` can only be extended by their `$owner`.
+   - *Schema Versions in Active Code:* Active entity schema versions are: `slot` uses `schema_v: "1"`, `booking` uses `schema_v: "3"`, and `completion` uses `schema_v: "3"`. The overarching protocol specification is locked at **Schema v3**.
 5. **Cryptographic Authentication, Ownership & Transferability**:
    - `$creator`: Immutable address derived from the transaction signature at creation.
    - `$owner`: Current owner of the entity. Supports owner-initiated `changeOwnership()` to transfer custodial control to another wallet while preserving `$creator` provenance permanently.
@@ -43,7 +44,7 @@ Represents an available machine hour, freight capacity, or engineering sprint.
 |---|---|---|---|
 | `project` | `str` | `"slotbazaar"` | Partition namespace |
 | `entity_type` | `str` | `"slot"` | Discriminant |
-| `schema_v` | `str` | `"2"` (or `"1"` legacy) | Schema version |
+| `schema_v` | `str` | `"1"` | Schema version (`SLOT_SCHEMA_VERSION = "1"`) |
 | `category` | `str` | `"machine"` \| `"transport"` \| `"freelance"` | Category filter |
 | `cluster` | `str` | Industrial hub (e.g. `"jeedimetla"`, `"surat"`) | Cluster filter |
 | `starts_at` | `u64` | Unix timestamp in seconds | Slot start window |
@@ -61,7 +62,7 @@ Represents an available machine hour, freight capacity, or engineering sprint.
   "title": "string (1-60 chars)",
   "description": "string (max 280 chars)",
   "seller_label": "string (business or trade name)",
-  "schema_version": 2
+  "schema_version": 1
 }
 ```
 
@@ -96,7 +97,7 @@ Created when a buyer reserves an available slot. Records on-chain metadata from 
 
 #### Creation Flags & Expiration Rule
 - `flags: { readonly: true, permissionlessExtension: true }`
-- `expires: ExpirationTime.atDate(new Date(Date.now() + 30 * 86400 * 1000))` (30-day lifecycle).
+- `expires: ExpirationTime.atDate(new Date(Date.now() + PROOF_EXPIRY_DAYS * 86400 * 1000))` (365-day lifecycle).
 
 #### Winning Booking Resolution & Concurrency Guarantee
 - A slot may have at most one active booking. Capacity windows are strictly single-use; once booked or completed, the capacity window cannot be re-booked.
@@ -112,7 +113,10 @@ The UI computes canonical derived state via `getSlotBookingStatus`:
 - `BOOKED`: Active booking exists on Arkiv referencing this slot key. Booking is disabled for all wallets.
 - `EXPIRED`: Current time past `ends_at` (`endsAt <= nowSec`). Booking is disabled for all wallets.
 - `COMPLETED`: Mutual seller and buyer completion receipts verified on Arkiv for the winning booking. Capacity window remains single-use and cannot be re-booked.
-- **Cancellation Policy**: Arkiv entities with `flags: { readonly: true }` cannot be deleted or mutated by arbitrary parties. Cancellations are not silently permitted via client state manipulation. An active reservation locks the slot permanently for that specific time window.
+- **Real Deletion & Mutation Semantics**: Arkiv's `readonly` flag blocks attribute and payload edits (`patchEntity`), but the `$owner` retains native permission to delete (`deleteEntity`) or transfer (`changeOwnership`) a readonly entity (per Arkiv developer notes). In SlotBazaar:
+  - A buyer deleting their own booking removes the reservation record and frees capacity.
+  - A seller or buyer deleting their own completion removes their side of the mutual proof, revoking the verified job badge.
+  - Arbitrary third parties cannot mutate or delete entities owned by others.
 
 ---
 
@@ -140,7 +144,7 @@ Submitted by seller and buyer to confirm that the booked job was completed satis
 
 #### Creation Flags & Expiration Rule
 - `flags: { readonly: true, permissionlessExtension: true }`
-- `expires: ExpirationTime.atDate(new Date(Date.now() + 30 * 86400 * 1000))` (30-day lifecycle, matching booking).
+- `expires: ExpirationTime.atDate(new Date(Date.now() + PROOF_EXPIRY_DAYS * 86400 * 1000))` (365-day lifecycle, matching booking).
 
 ---
 
@@ -155,7 +159,7 @@ An account receives **+1 Verified Job** reputation point if and only if:
 
 ### Critical Proof Set Preservation Rule (3-Entity Job Proof Set)
 Reputation verification requires the **booking entity to still exist alongside both completion receipts**. Because cryptographic derivation inspects `booking.slot_creator`, `booking.creator` (buyer), and `booking.slot_starts_at` directly from the booking entity, all **three entities (booking + seller completion receipt + buyer completion receipt) must be preserved together** to retain the verifiable reputation score on-chain.
-- The "Preserve proof" button executes `extendJobProof()`, which atomically (via `wallet.executeBatch()`) or sequentially extends all three entities by 60 days.
+- The "Preserve proof" button executes `extendJobProof()`, which atomically (via `wallet.executeBatch()`) or sequentially extends all three entities by 365 days.
 - New bookings are created with `flags: { readonly: true, permissionlessExtension: true }` so that anyone (buyer, seller, or third party) can permissionlessly preserve the complete proof set.
 - Older legacy bookings without `permissionlessExtension` can only be extended by their owner (`$owner`). If a non-owner attempts to extend, the UI disables the button and displays the owner-only restriction.
 
@@ -232,12 +236,17 @@ if (winningBooking) {
 
 | # | Limitation | Impact | Mitigation / Status |
 |---|---|---|---|
-| **L-001** | **Post-expiry reputation derivation** | In Schema v1, completions referenced `slot_key`. Once the slot expired, its creator could not be looked up from Arkiv, preventing post-expiry reputation counting. | **Resolved by Schema v2**: The `booking` entity copies `slot_creator`, `slot_starts_at`, and `slot_ends_at` at creation time. Both `booking` and `completion` entities live for 30 days, allowing full cryptographic verification long after the short-duration slot has expired. |
+| **L-001** | **Post-expiry reputation derivation** | In Schema v1, completions referenced `slot_key`. Once the slot expired, its creator could not be looked up from Arkiv, preventing post-expiry reputation counting. | **Resolved by Schema v2/v3**: The `booking` entity copies `slot_creator`, `slot_starts_at`, and `slot_ends_at` at creation time. Both `booking` and `completion` entities live for 365 days, allowing full cryptographic verification long after the short-duration slot has expired. |
 | **L-002** | **No server-side ordering** | Arkiv's query language does not support `orderBy`. | Handled client-side in TypeScript: `useLiveSlots` fetches results and sorts by `ends_at` ascending or block number. |
 | **L-003** | **Client and chain clock skew** | Browser wall-clock time can diverge slightly from consensus block timestamps. Arkiv drops entities at the exact consensus `expiresAt` block (0 blocks early, verified in Phase 9 and Phase 10). | The UI applies a proactive 1-second client ticker with a 4-second client margin strictly for browser/chain clock skew, not an Arkiv asymmetry. |
 | **L-004** | **Client-side tie-break rule** | Intra-block ordering is not provided by Arkiv attributes. | Deterministic tie-breaker in `getWinningBooking` sorts by earliest block number, then lexicographical entity key ascending. |
 | **L-005** | **Positional call signature in `getEntity`** | Passing `{ key }` object threw `Invalid key value` error. Retested in Phase 9: passing positional `getEntity(entityKey)` succeeds cleanly on all live entities and throws `NoEntityFoundError` after expiry. | FR-011 was withdrawn as our own call-shape error. Positional call `publicClient.getEntity(entityKey)` works as documented. |
 | **L-006** | **No atomic cross-wallet lock for bookings** | Arkiv does not provide an atomic cross-wallet compare-and-set or unique constraints on custom attributes (`slot_key`). | Solved via client preflight (`fetchBookingsForSlot`) rejecting duplicate submissions, combined with deterministic consensus arbitration in `getWinningBooking` (earliest confirmed block `createdAtBlock`, with lexicographical entity key tie-breaker). Active booking transitions slot to `BOOKED` state across all wallets, permanently disabling re-booking. |
+| **L-007** | **Cheap Wallets (Sybil)** | One person can run two wallets and confirm their own fictional jobs. | Reputation is only as strong as the cost of generating wallets and funding network gas. Future iterations could integrate proof-of-humanity or token staking. |
+| **L-008** | **Booking Squatting** | Anyone can book an available slot without posting a financial deposit, blocking the slot from real buyers. | No payment or escrow deposit exists in the app today. Real-world deployment would require staking or escrow before locking capacity. |
+| **L-009** | **Deletion Removes Evidence, Cannot Forge** | Owners deleting their booking or completion removes evidence from on-chain state. | Deletion can revoke an existing verified badge, but an attacker cannot forge signatures because `$creator` is cryptographically immutable and verified. |
+| **L-010** | **Timestamp Trustworthiness** | `completed_at` is a self-reported user attribute supplied in transaction input. | Consensus block timestamps (`createdAtBlock`) are the trustworthy timestamps used to arbitrate booking races in `getWinningBooking`; `completed_at` serves only as an application-level sanity check against `slot_starts_at`. |
+| **L-011** | **Ownership Transfer vs Creator Provenance** | `changeOwnership()` modifies `$owner` only. | Reputation verification follows the immutable `$creator`. After an ownership transfer, only the original creator wallet can confirm as seller. |
 
 ---
 
@@ -245,17 +254,18 @@ if (winningBooking) {
 
 Every parameter documented in this specification matches the active codebase constants exactly:
 
-| Parameter | Documented Value | Code Constant | Source File & Line |
+| Parameter | Documented Value | Code Constant | Source File |
 |---|---|---|---|
-| **Min Slot Duration** | 15 minutes (`900s`) | `MIN_DURATION_SEC = 15 * 60` | `src/lib/slotValidation.ts:39` |
-| **Max Slot Duration** | 7 days (`604,800s`) | `MAX_DURATION_SEC = 7 * 86400` | `src/lib/slotValidation.ts:40` |
-| **Slot Expiry** | `ends_at` Unix seconds | `ExpirationTime.atDate(new Date(endsAt * 1000))` | `src/lib/arkiv.ts:1220` |
-| **Booking Expiry** | 30 days (`2,592,000s`) | `30 * 86400 * 1000` ms | `src/lib/arkiv.ts:1738` |
-| **Booking Schema Version** | Schema v3 | `"3"` (`flags: { readonly: true, permissionlessExtension: true }`) | `src/lib/arkiv.ts:1726` |
-| **Completion Expiry** | 30 days (`2,592,000s`) | `30 * 86400 * 1000` ms | `src/lib/arkiv.ts:1796` |
-| **Completion Schema Version** | Schema v3 | `"3"` (`flags: { readonly: true, permissionlessExtension: true }`) | `src/lib/arkiv.ts:1792` |
-| **Real Batch Write Limit** | 20 slots per tx | `REAL_BATCH_LIMIT = 20` | `src/components/SeedModal.tsx:38` |
-| **Max Live Synthetic Cap** | 40 slots | `MAX_LIVE_SYNTHETIC_CAP = 40` | `src/components/SeedModal.tsx:37` |
-| **Pure Unit Test Count** | 77 tests | 21 Phase 4 + 56 Phase 5 | `scripts/test-phase4-unit.ts`, `scripts/test-phase5-unit.ts` |
-| **Tiramisu Decimal Chain ID** | `7738577` | `tiramisu.id` | `src/lib/wallet.ts:24` |
-| **Tiramisu Hex Chain ID** | `0x7614d1` | `0x${tiramisu.id.toString(16)}` | `src/lib/wallet.ts:25` |
+| **Min Slot Duration** | 15 minutes (`900s`) | `MIN_DURATION_SEC = 15 * 60` | `src/lib/slotValidation.ts` |
+| **Max Slot Duration** | 7 days (`604,800s`) | `MAX_DURATION_SEC = 7 * 86400` | `src/lib/slotValidation.ts` |
+| **Slot Expiry** | `ends_at` Unix seconds | `ExpirationTime.atDate(new Date(endsAt * 1000))` | `src/lib/arkiv.ts` |
+| **Slot Schema Version** | Schema v1 | `SLOT_SCHEMA_VERSION = "1"` (`flags: { readonly: true }`) | `src/lib/arkiv.ts` |
+| **Booking Expiry** | 365 days (`31,536,000s`) | `PROOF_EXPIRY_DAYS = 365` | `src/lib/arkiv.ts` |
+| **Booking Schema Version** | Schema v3 | `BOOKING_SCHEMA_VERSION = "3"` (`flags: { readonly: true, permissionlessExtension: true }`) | `src/lib/arkiv.ts` |
+| **Completion Expiry** | 365 days (`31,536,000s`) | `PROOF_EXPIRY_DAYS = 365` | `src/lib/arkiv.ts` |
+| **Completion Schema Version** | Schema v3 | `COMPLETION_SCHEMA_VERSION = "3"` (`flags: { readonly: true, permissionlessExtension: true }`) | `src/lib/arkiv.ts` |
+| **Real Batch Write Limit** | 20 slots per tx | `REAL_BATCH_LIMIT = 20` | `src/components/SeedModal.tsx` |
+| **Max Live Synthetic Cap** | 40 slots | `MAX_LIVE_SYNTHETIC_CAP = 40` | `src/components/SeedModal.tsx` |
+| **Pure Unit Test Count** | 95 tests | 21 Phase 4 + 56 Phase 5 + 10 Phase 6 + 8 Phase 7 | `scripts/test-phase4-unit.ts`, `scripts/test-phase5-unit.ts`, `scripts/test-phase6-reconciliation.ts`, `scripts/test-phase7-extend-proof.ts` |
+| **Tiramisu Decimal Chain ID** | `7738577` | `tiramisu.id` | `src/lib/wallet.ts` |
+| **Tiramisu Hex Chain ID** | `0x7614d1` | `0x${tiramisu.id.toString(16)}` | `src/lib/wallet.ts` |

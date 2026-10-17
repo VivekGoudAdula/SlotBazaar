@@ -391,7 +391,7 @@ export function BookSlotModal({
                 lineHeight: 1.4,
               }}
             >
-              ℹ️ <strong>Demo Notice:</strong> No fiat or token payment is processed. Booking creates an on-chain <code>booking</code> entity on Arkiv with a 30-day lifetime referencing this slot.
+              ℹ️ <strong>Demo Notice:</strong> No fiat or token payment is processed. Booking creates an on-chain <code>booking</code> entity on Arkiv with a 365-day lifetime referencing this slot.
             </div>
 
             <div className="post-modal__footer">

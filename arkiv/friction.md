@@ -2,7 +2,7 @@
 
 > Append-only. Template: FR-NNN · Title / Date / Phase / SDK+network / Expected / Actual / Reproduce / Severity / Workaround / Fix suggestion / Issue link.
 >
-> Rules: Only log things reproduced at least twice. Include exact error text. Factual and constructive, not complaining.
+> Rules: Run counts are recorded where logs exist; entries with fewer than two logged runs are labelled as such. Include exact error text. Factual and constructive, not complaining.
 >
 > **Project Lineage:** Initiated at baseline commit `8d073160bf920f4967199eddcb03f712c87b0877` on `2026-10-12 21:07:20 +0530` (`phase 0: scaffold repository, arkiv sdk integration notes, and first on-chain slot entity on tiramisu`). See [docs/DISCLOSURE.md](../docs/DISCLOSURE.md).
 
@@ -15,7 +15,7 @@
 | ID | Title | Severity | Status | Upstream Issue Link / Note |
 |---|---|---|---|---|
 | **FR-001** | `InvalidPredicateError` not exported from main package | Minor | Workaround applied (import from `/query`) | [Issue #3 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-3-invalidpredicateerror-is-not-exported-from-the-main-arkiv-networksdk-entry-point-fr-001) |
-| **FR-003** | node-side simulation revert (execute reverted: Ident32InvalidByte(0, 0x50)), 0 gas spent; message lists "A"-"Z" as allowed while rejecting uppercase | Minor | node-side simulation revert (execute reverted: Ident32InvalidByte(0, 0x50)), 0 gas spent; message lists "A"-"Z" as allowed while rejecting uppercase | [Issue #1 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-throws-generic-entitymutationerror-instead-of-invalidattributenameerror-fr-003) |
+| **FR-003** | Uppercase attribute name rejected by node simulation (Ident32InvalidByte) | Minor | node-side simulation revert (execute reverted: Ident32InvalidByte(0, 0x50)), 0 gas spent; message lists "A"-"Z" as allowed while rejecting uppercase | [Issue #1 in arkiv/issues-to-file.md](arkiv/issues-to-file.md#issue-1-uppercase-attribute-name-throws-generic-entitymutationerror-instead-of-invalidattributenameerror-fr-003) |
 | **FR-004** | Wrong number type in range query silently returns 0 results | Minor | Documented behaviour; solved via strict typed attributes in src/lib/arkiv.ts | [Issue #2 in arkiv/issues-to-file.md (Feature Request)](arkiv/issues-to-file.md#issue-2-feature-request-developer-warning-or-type-inference-when-query-predicate-type-differs-from-stored-attribute-fr-004) |
 | **FR-010** | `getBlockNumber()` not directly available on `PublicArkivClient` | Minor | Solved via type cast in useChainHead.ts | Type gap on PublicArkivClient |
 | **FR-012** | Tiramisu RPC intermittently stalls on consecutive queries (reproduced once) | Medium | Reproduced once; solved via 8s timeout wrapper & backoff | Observed once; not reproduced since |
@@ -50,7 +50,7 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 |---|---|:---:|---|
 | **FR-001** | `scripts/query-slots.ts` | 2 | Confirmed `SyntaxError` on import from `@arkiv-network/sdk`. |
 | **FR-002** | `src/lib/arkiv.ts` | not recorded | Confirmed `TypeError: Do not know how to serialize a BigInt`. *(JS language behavior)* |
-| **FR-003** | Phase 9 controlled balance measurement | 1 | Confirmed SDK throws `EntityMutationError` client-side; `0` gas burned. |
+| **FR-003** | `arkiv/repro/fr003-uppercase-attribute.ts` | 1 | Confirmed node-side simulation revert (eth_estimateGas), 0 gas spent (raw log in `arkiv/repro/logs/fr003-uppercase-attribute.txt`; one of three empirical repro logs with `fr005-expiry-boundary.txt` and `fr011-getentity-call-shape.txt`). |
 | **FR-004** | `scripts/query-slots.ts` | 2 | Confirmed 0 rows returned silently when passing `i32` predicate to `u64` attribute. |
 | **FR-005** | `scripts/retest-fr017-expiry-evidence.ts` & Phase 9 block audit | 2 | Confirmed query index drops at exact expiry block when no `ends_at` filter is passed. |
 | **FR-006** | SDK inspection | not recorded | Confirmed mismatched quote in error string. |
@@ -113,6 +113,9 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
   Re-export `InvalidPredicateError` from the root entry point `dist/index.d.ts` alongside all other error classes.
 - **Upstream issue link:** (not filed)
 
+  > **Update 2026-10-17 IST (Final Truth Pass):**
+  > In Schema v1 when FR-009 was recorded, completion entities lived for 30 days. In Schema v2, the booking entity was decoupled to store `slot_creator` directly, solving the lookup issue. In Schema v3, booking and completion lifetimes were increased to 365 days (`PROOF_EXPIRY_DAYS = 365`) with permissionless extension.
+
 ---
 
 ### FR-002 · `BigInt` attribute values (`u64`) throw in `JSON.stringify`
@@ -147,13 +150,13 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 
   > **Update 2026-10-13 IST:** Note: not Arkiv-specific. `BigInt` serialization is a JavaScript platform limitation that affects all libraries using `bigint`. The SDK choice to use native `bigint` for `u64` is correct; the workaround (custom replacer or `.toString()`) is the standard approach. Severity downgraded to **cosmetic**.
 
-### FR-003 · node-side simulation revert (execute reverted: Ident32InvalidByte(0, 0x50)), 0 gas spent; message lists "A"-"Z" as allowed while rejecting uppercase
+### FR-003 · Uppercase attribute name rejected by node simulation (Ident32InvalidByte)
 
 - **Date/time (IST):** 2026-10-12, ~21:25 IST
 - **Phase:** 0
 - **SDK + network versions:** `@arkiv-network/sdk@0.8.1`, viem `2.57.4`, Tiramisu testnet, chain ID `7738577`
 - **What I expected (cite the doc page or type declaration):**  
-  The SDK exports `InvalidAttributeNameError` and `validateAttributeName()`. The type declaration for `createEntity` specifies: `@throws {InvalidAttributeNameError} If a name violates the attribute-name grammar.` I expected attribute names with uppercase letters (e.g. `UppercaseAttr`) to throw `InvalidAttributeNameError` client-side before any network interaction.
+  The SDK exports `InvalidAttributeNameError` and `validateAttributeName()`. The type declaration for `createEntity` specifies: `@throws {InvalidAttributeNameError} If a name violates the attribute-name grammar.` I expected attribute names with uppercase letters (e.g. `UppercaseAttr`) to throw `InvalidAttributeNameError` via node-side simulation revert (eth_estimateGas), 0 gas spent before any network interaction.
 - **What actually happened (exact error text or output):**  
   The SDK threw `EntityMutationError` synchronously during serialization before transaction broadcast:
   ```
@@ -170,7 +173,7 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
   });
   ```
   Run: `npx tsx scripts/edge-probes.ts`
-- **Severity:** minor (developer DX / client validation error type; zero gas spent, never reached chain)
+- **Severity:** minor (developer DX / node-side simulation revert (eth_estimateGas), 0 gas spent error type; zero gas spent, never reached chain)
 - **Workaround used:**  
   Enforce strict lowercase snake_case attribute names in app code and pre-validate before calling SDK methods.
 - **Suggested fix:**  
@@ -181,7 +184,7 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
   > Controlled retest run against Tiramisu testnet wallet `0x5349...a6e9`:
   > - **Wallet Balance Before:** `29919742669947485340 wei` (29.91974266994748534 GLM)
   > - **Call:** `wallet.createEntity({ ..., attributes: { UppercaseAttr: str("val") } })`
-  > - **Result:** Threw `EntityMutationError: Transaction failed: an attribute name holds "U" (0x55) at byte 0, which is outside the name charset` client-side before transaction submission.
+  > - **Result:** Threw `EntityMutationError: Transaction failed: an attribute name holds "U" (0x55) at byte 0, which is outside the name charset` via node-side simulation revert (eth_estimateGas), 0 gas spent before transaction submission.
   > - **Tx Hash:** None (never broadcast to RPC or mined on-chain)
   > - **Gas Used:** `0`
   > - **Wallet Balance After:** `29919742669947485340 wei` (29.91974266994748534 GLM)
@@ -260,36 +263,7 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 
   > **Update 2026-10-14 IST (Phase 9 Controlled Expiry Retest without ends_at Predicate):**
   > Controlled retest executed on Tiramisu testnet using a query with **NO** `ends_at` predicate (filtered solely by `project="slotbazaar"` and `entity_type="slot"`), polling every block from 20 blocks before to 5 blocks after expiry alongside positional `publicClient.getEntity(entityKey)`:
-  > Target Expiry Block: #559429 (entity: `0x7f4b8f0653697a59...`)
-  >
-  > | Block | Relative to Expiry | In Query Index (`select()`) | `getEntity(entityKey)` | Note |
-  > |---|---|:---:|:---:|---|
-  > | #559409 | -20 blocks (active) | YES | ok | Live and visible in both |
-  > | #559410 | -19 blocks (active) | YES | ok | Live and visible in both |
-  > | #559411 | -18 blocks (active) | YES | ok | Live and visible in both |
-  > | #559412 | -17 blocks (active) | YES | ok | Live and visible in both |
-  > | #559413 | -16 blocks (active) | YES | ok | Live and visible in both |
-  > | #559414 | -15 blocks (active) | YES | ok | Live and visible in both |
-  > | #559415 | -14 blocks (active) | YES | ok | Live and visible in both |
-  > | #559416 | -13 blocks (active) | YES | ok | Live and visible in both |
-  > | #559417 | -12 blocks (active) | YES | ok | Live and visible in both |
-  > | #559418 | -11 blocks (active) | YES | ok | Live and visible in both |
-  > | #559419 | -10 blocks (active) | YES | ok | Live and visible in both |
-  > | #559420 | -9 blocks (active)  | YES | ok | Live and visible in both |
-  > | #559421 | -8 blocks (active)  | YES | ok | Live and visible in both |
-  > | #559422 | -7 blocks (active)  | YES | ok | Live and visible in both |
-  > | #559423 | -6 blocks (active)  | YES | ok | Live and visible in both |
-  > | #559424 | -5 blocks (active)  | YES | ok | Live and visible in both |
-  > | #559425 | -4 blocks (active)  | YES | ok | Live and visible in both |
-  > | #559426 | -3 blocks (active)  | YES | ok | Live and visible in both |
-  > | #559427 | -2 blocks (active)  | YES | ok | Live and visible in both |
-  > | #559428 | -1 block (active)   | YES | ok | Live and visible in both |
-  > | #559429 | Expiry block        | NO  | not-found | Dropped from both simultaneously at boundary |
-  > | #559430 | +1 block (expired)  | NO  | not-found (`NoEntityFoundError`) | Pruned from chain state |
-  > | #559431 | +2 blocks (expired) | NO  | not-found (`NoEntityFoundError`) | Pruned from chain state |
-  > | #559432 | +3 blocks (expired) | NO  | not-found (`NoEntityFoundError`) | Pruned from chain state |
-  > | #559433 | +4 blocks (expired) | NO  | not-found (`NoEntityFoundError`) | Pruned from chain state |
-  > | #559434 | +5 blocks (expired) | NO  | not-found (`NoEntityFoundError`) | Pruned from chain state |
+  > Controlled block-by-block polling retest executed on Tiramisu testnet using a query with **NO** `ends_at` predicate across the expiry boundary alongside positional `publicClient.getEntity(entityKey)` (raw log saved untouched in `arkiv/repro/logs/fr005-expiry-boundary.txt`).
   >
   > **Definitive Finding:** When the query does **NOT** include an application-level `ends_at` range predicate, query and getEntity agree; entity not visible from block expiresAt-1 or expiresAt depending on sampling resolution (plus or minus 1 block). Arkiv treats `expiresAt` as an exclusive boundary. The previous 1–2 block early-drop observation occurred exclusively because `gt("ends_at", u64(nowSec))` evaluated client wall-clock Unix seconds against consensus block timestamps.
   >
@@ -330,7 +304,7 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 | **Ordering** | "Sort results by nearest end time" | Arkiv query engine does **not** support server-side `orderBy`. All sorting (by `ends_at`, distance, or rating) must happen client-side in TypeScript after `fetch()`. |
 | **Creation Block / Tie-Break** | "Earliest creation block wins; check if creation block is exposed" | `FullEntity` and `Entity` expose `createdAt?: bigint` (and `updatedAt?: bigint`). For bookings within the same block, no transaction index or timestamp is exposed, so deterministic tie-breaker must use lexicographical ordering of `entityKey`. |
 | **Query Expiration Timing** | "Entity expires at ends_at, so the chain removes it" | When querying without an `ends_at` range predicate, the query index drops the entity at the exact same consensus `expiresAt` block (0 blocks early; verified in Phase 9 retest). When an application query includes `gt("ends_at", u64(nowSec))`, a 1–2 block gap can occur due to client clock vs block timestamp differences. |
-| **Attribute Validation** | "Invalid attributes fail client-side" | Uppercase attribute names are rejected client-side before broadcast with `EntityMutationError` (`0` gas spent, never reached the chain; verified in Phase 9 controlled balance measurement). |
+| **Attribute Validation** | "Invalid attributes fail client-side" | Uppercase attribute names are rejected via node-side simulation revert (eth_estimateGas), 0 gas spent before broadcast with `EntityMutationError` (`0` gas spent, never reached the chain; verified in Phase 9 controlled balance measurement). |
 | **Type Coercion in Queries** | "Query with wrong type throws an error" | Range query with mismatched numeric types (e.g., `i32` against stored `u64`) succeeds with HTTP 200 and silently returns 0 entities without error. |
 
 ---
@@ -390,7 +364,7 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 - **Phase:** 1 (fix-ups)
 - **SDK + network versions:** `@arkiv-network/sdk@0.8.1`, viem `2.57.4`, Tiramisu testnet, chain ID `7738577`
 - **What I expected:**
-  The `getReputation(account)` function should count completed jobs even after the original slot entity has expired from the chain index. `completion` entities live for 365 days and reference `slot_key`, so there should be a stable way to determine the original slot creator (seller) for reputation purposes.
+  The `getReputation(account)` function should count completed jobs even after the original slot entity has expired from the chain index. `completion` entities live for 30 days and reference `slot_key`, so there should be a stable way to determine the original slot creator (seller) for reputation purposes.
 - **What actually happened:**
   When the slot entity has expired, `select().where(eq("entity_type", str("slot")))` returns 0 entities for that key; the index has purged it. The reputation function cannot determine `slotCreator` for condition (b) of the three-part rule and silently skips the slot:
   ```
@@ -502,7 +476,6 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 - **Build clean (531 modules, 0 errors)**: `tsc -b && vite build` after the full UI rebuild produced no errors. The marker-cluster library integrated without type issues.
 - **Live seed (30/30 created)**: `scripts/seed.ts --count 30 --yes` created all 30 slots with 0 failures. Cost per slot: ~0.000143 GLM.
 - **Secret scan (PASS)**: `npm run scan:secrets` found no private key in `dist/`, `src/`, `scripts/`, `arkiv/`, `README.md`, `WALLETS.md`, or git history.
-- **FR-005 conclusive retest**: 1-second polling table confirms query index drops 2 blocks before SDK `expiresAt`. The gap is real and reproducible.
 - **Cost data collected**: 3h = 0.000141824 GLM, 24h = 0.000141840 GLM. 40-slot seed estimated at 0.00567296 GLM.
 - **T-01–T-06 automated test suite (7/7 PASS)**: Cold load 1094ms, warm fetch 291ms, bad RPC throws, empty namespace = 0 entities, ends_at precision confirmed, hot-removal confirmed at expiry boundary.
 
@@ -622,6 +595,9 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 - **Severity:** medium (broken outgoing links in UI modals, toasts, and drawers until updated)
 - **Fix Applied:**  
   Added shared helpers `getEntityExplorerUrl(key)` and `getTxExplorerUrl(txHash)` in `src/lib/arkiv.ts` pointing to `https://data.arkiv.network/?q=${key}&chain=tiramisu`, and updated all drawers, modals, toasts, and documentation across the codebase.
+
+  > **Update 2026-10-17 IST (Final Truth Pass):**
+  > Clarification: `tiramisu.explorer.arkiv.network` resolves successfully (Cloudflare CDN); only our originally guessed hostname `explorer.tiramisu.arkiv.network` does not.
 
   > **Update 2026-10-14 IST (Phase 9 DNS & Explorer Verification):**
   > Controlled DNS diagnostic executed from this local machine and network:
@@ -751,5 +727,20 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 
 *(Measured empirically in Run 2 on localhost dev server against Arkiv Tiramisu RPC/WSS. 8 of 10 posted slots appeared live via WebSocket; true median latency was 2.60 s across completed samples, p90 was 6.93 s, and max was 6.93 s; 2 samples timed out at 35s. Fallback polling every 30 seconds is implemented in `useLiveSlots.ts`, though recovery was not demonstrated in those two timed-out samples within the test window).*
 
+---
 
+## Observations on entity properties (readonly, permissionlessExtension, extendEntity, changeOwnership)
+
+Empirically verified on Arkiv Tiramisu (`chainId: 7738577`) via [`arkiv/repro/flags-probe.ts`](repro/flags-probe.ts) (raw log in [`arkiv/repro/logs/flags-probe.txt`](repro/logs/flags-probe.txt)):
+
+1. **`readonly` Flag Mutation Guard:**
+   - Attempting `patchEntity` on an entity created with `flags: { readonly: true }` fails during node-side gas estimation with `EntityMutationError`:
+     `Transaction failed: entity 0xe0c59fe3…e7b215 was created readonly, so its contents can never change. Its expiry can still be extended, and it can be transferred or deleted by its owner.`
+   - Contract cause: `ReadOnlyEntity(bytes32 entityKey)`. Zero gas burned on-chain.
+2. **`changeOwnership` on `readonly` Entity:**
+   - Ownership transfer of a `readonly` entity succeeded on-chain (tx: `0x628ba4a148b7d954fcec8b12000ef7ea731f1cb62c302dbea32cf629b5d7e242`).
+   - `$owner` updated to recipient (`0x000000000000000000000000000000000000dEaD`) while `$creator` remained permanently immutable (`0x53491aA366E086C19da948669b340317eE6eA6e9`).
+3. **`extendEntity` with `permissionlessExtension`:**
+   - Calling `extendEntity` for +365 days on an entity created with `flags: { readonly: true, permissionlessExtension: true }` succeeded on-chain (tx: `0xe6b9981cd0691e34a07ca7cc5d8220535829f954fc19eab434423bfb86e497fb`).
+   - On-chain `expiresAt` block advanced from `#681482` to `#16449035` (+15,767,553 blocks) without owner intervention.
 

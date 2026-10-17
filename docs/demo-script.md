@@ -76,12 +76,12 @@ Every UI label, button text, and modal heading used in this script has been audi
 ### [1:40 – 2:05] Segment 5: Two-Sided Completion & Verified Reputation (25 seconds, 60 words)
 * **Visual:** Physical work is done. On Ravi's drawer, click **✅ Confirm Job Completion (Seller)** -> **Sign as Seller**. On Meena's drawer, click **✅ Confirm Job Done (Buyer)** -> **Sign as Buyer**. Drawer updates showing the `🏆 1 Verified Job` reputation badge once confirmed.
 * **Narration:**
-  > *"After the physical milling completes, both parties sign mutual completion entities on Arkiv Tiramisu. Ravi clicks 'Confirm Job Completion' as seller, and Meena signs as buyer. Arkiv verifies both wallet signatures, unlocking the '🏆 1 Verified Job' badge on Ravi's card. This portable reputation is verifiable on-chain and persists for 30 days without centralized platform lock-in."*
+  > *"After the physical milling completes, both parties sign mutual completion entities on Arkiv Tiramisu. Ravi clicks 'Confirm Job Completion' as seller, and Meena signs as buyer. Arkiv verifies both wallet signatures, unlocking the '🏆 1 Verified Job' badge on Ravi's card. This portable reputation is verifiable on-chain and persists for 365 days without centralized platform lock-in."*
 
 ---
 
 ### [2:05 – 2:25] Segment 6: On-Chain Explorer Proof & Architecture (20 seconds, 50 words)
-* **Visual:** In the drawer, expand **View Proofs (2) ▼** and click **Explorer ↗**. Highlight raw entity attributes, immutable `$creator` vs `$owner`, verified `readonly: true` & `permissionlessExtension: true` flags, and the **🛡️ Preserve proof (extend 60d)** extension action.
+* **Visual:** In the drawer, expand **View Proofs (2) ▼** and click **Explorer ↗**. Highlight raw entity attributes, immutable `$creator` vs `$owner`, verified `readonly: true` & `permissionlessExtension: true` flags, and the **🛡️ Preserve proof (extend 365d)** extension action.
 * **Narration:**
   > *"Expanding the proof panel reveals the raw entity, immutable creator, and verified creation flags: readonly for immutability and permissionless extension for public longevity. Anyone can click 'Preserve proof' to extend the reputation record without reopening the booking window. Arkiv provides native range indexing, verifiable expiration, and decentralized proof persistence."*
 
