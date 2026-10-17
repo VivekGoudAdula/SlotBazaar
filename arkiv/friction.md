@@ -733,14 +733,24 @@ This register tracks empirical runs on Arkiv Tiramisu (`chainId: 7738577`) or du
 
 Empirically verified on Arkiv Tiramisu (`chainId: 7738577`) via [`arkiv/repro/flags-probe.ts`](repro/flags-probe.ts) (raw log in [`arkiv/repro/logs/flags-probe.txt`](repro/logs/flags-probe.txt)):
 
-1. **`readonly` Flag Mutation Guard:**
-   - Attempting `patchEntity` on an entity created with `flags: { readonly: true }` fails during node-side gas estimation with `EntityMutationError`:
-     `Transaction failed: entity 0xe0c59fe3…e7b215 was created readonly, so its contents can never change. Its expiry can still be extended, and it can be transferred or deleted by its owner.`
-   - Contract cause: `ReadOnlyEntity(bytes32 entityKey)`. Zero gas burned on-chain.
-2. **`changeOwnership` on `readonly` Entity:**
-   - Ownership transfer of a `readonly` entity succeeded on-chain (tx: `0x628ba4a148b7d954fcec8b12000ef7ea731f1cb62c302dbea32cf629b5d7e242`).
-   - `$owner` updated to recipient (`0x000000000000000000000000000000000000dEaD`) while `$creator` remained permanently immutable (`0x53491aA366E086C19da948669b340317eE6eA6e9`).
-3. **`extendEntity` with `permissionlessExtension`:**
-   - Calling `extendEntity` for +365 days on an entity created with `flags: { readonly: true, permissionlessExtension: true }` succeeded on-chain (tx: `0xe6b9981cd0691e34a07ca7cc5d8220535829f954fc19eab434423bfb86e497fb`).
-   - On-chain `expiresAt` block advanced from `#681482` to `#16449035` (+15,767,553 blocks) without owner intervention.
+1. **(a) `readonly` Create:**
+   - Reproduced twice (run 1: `0xe0c59fe3…`, tx `0x534c5c12…`; run 2: `0x7584bc9c…`, tx `0x33678e09…`). Successfully creates immutable entities on-chain with `creationFlags.readonly: true`.
+2. **(b) Owner Edit of `readonly` Reverts:**
+   - Reproduced twice (run 1 & run 2). Calling `patchEntity` reverts during simulation / gas estimation with `EntityMutationError`:
+     `Transaction failed: entity ... was created readonly, so its contents can never change.`
+     Contract revert cause: `ReadOnlyEntity(bytes32 entityKey)`. Zero gas burned on-chain.
+3. **(c) Owner Deletes `readonly`:**
+   - not reproduced twice (single confirmation: tx `0x494d05dc74a6ab4b3a0ba66baa933db2e69731ba1fabb09ba682ba2c6777de3b`; entity subsequently deleted from live state with `NoEntityFoundError`).
+4. **(d) Ownership Transfer of `readonly`:**
+   - Reproduced twice (run 1: tx `0x628ba4a1…`; run 2: tx `0x43809d03…`). `changeOwnership()` updates `$owner` to recipient while `$creator` remains permanently immutable.
+5. **(e) Extend `readonly` as Owner:**
+   - not reproduced twice (single confirmation: tx `0xa9d741a5a7a264c28a7dc76d7439905121d4680a73234c45f374ca72c9a0963d`; on-chain `expiresAt` block advanced from `#686782` to `#1982334`).
+6. **(f) Non-Owner Extend WITHOUT `permissionlessExtension`:**
+   - not reproduced twice (single confirmation: calling `extendEntity` from ephemeral non-owner wallet `0xED9c12Ee…` reverted with contract cause `NotOwner(bytes32 entityKey, address caller, address owner)`).
+7. **(g) Non-Owner Extend WITH `permissionlessExtension`:**
+   - not reproduced twice (single confirmation: calling `extendEntity` from ephemeral non-owner wallet `0xED9c12Ee…` on an entity created with `flags: { readonly: true, permissionlessExtension: true }` succeeded in tx `0x51ae3929a2a573f8ebacfdd6255e118f92627725c1853e4f4b02b575ab172d81`, advancing `expiresAt` block to `#1982344`).
+8. **(h) Batch Create with Per-Entity Flags:**
+   - not reproduced twice (single confirmation: tx `0xc1658878fa09593bc9e65190504eeb606da04adf0108b82d3ed58aa07965d262` created 2 entities in one transaction, verifying `readonly: true` on Entity 1 and `readonly: true, permissionlessExtension: true` on Entity 2).
+9. **(i) Extending to an Earlier Deadline:**
+   - not reproduced twice (single confirmation: calling `extendEntity` with an expiry earlier than current block reverted with contract cause `ExpiryNotExtended(bytes32 entityKey, uint64 newExpiresAt, uint64 currentExpiresAt)`: `would shorten its life`).
 

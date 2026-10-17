@@ -27,8 +27,6 @@ import {
   getWinningBooking,
   verifyJobCompletion,
   getReputation,
-  recordTransferredOwner,
-  clearTransferredOwnersCacheForTesting,
   type SlotEntity,
   type BookingEntity,
   type CompletionEntity,
@@ -134,9 +132,6 @@ function createMockCompletion(
 console.log("========================================================");
 console.log("  SLOTBAZAAR PHASE 6 RECONCILIATION REGRESSION TESTS   ");
 console.log("========================================================\n");
-
-// Clear any local testing registry state
-clearTransferredOwnersCacheForTesting();
 
 // Mock 25 authoritative on-chain slots
 const authoritativeOnChain: SlotEntity[] = Array.from({ length: 25 }, (_, i) => {

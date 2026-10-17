@@ -27,7 +27,7 @@
    - *Client-Side Availability Pruning:* `useLiveSlots.ts` proactively prunes ended listings (with a 4s margin matching 2 blocks) to prevent booking attempts on dead capacity, triggering queries refresh.
    - *Consensus Expiration:* Slots are created with `expires: ExpirationTime.atDate(new Date(endsAt * 1000))`. The Arkiv consensus engine autonomously cleans up expired records at block boundaries without external cron jobs.
    - *History Preservation & Extension:* Bookings and completions persist for **365 days** (`PROOF_EXPIRY_DAYS = 365`) by default. Completed job proof sets (booking + seller completion receipt + buyer completion receipt) can be permissionlessly extended for another 365 days via `extendJobProof()`. Older bookings without `permissionlessExtension` can only be extended by their `$owner`.
-   - *Schema Versions in Active Code:* Active entity schema versions are: `slot` uses `schema_v: "1"`, `booking` uses `schema_v: "3"`, and `completion` uses `schema_v: "3"`. The overarching protocol specification is locked at **Schema v3**.
+   - *Schema Versions in Active Code:* schema_v is per entity type: `slot` uses `schema_v: "1"`, `booking` uses `schema_v: "3"`, and `completion` uses `schema_v: "3"` (there is no single overarching schema_v across all entity types).
 5. **Cryptographic Authentication, Ownership & Transferability**:
    - `$creator`: Immutable address derived from the transaction signature at creation.
    - `$owner`: Current owner of the entity. Supports owner-initiated `changeOwnership()` to transfer custodial control to another wallet while preserving `$creator` provenance permanently.
@@ -266,6 +266,6 @@ Every parameter documented in this specification matches the active codebase con
 | **Completion Schema Version** | Schema v3 | `COMPLETION_SCHEMA_VERSION = "3"` (`flags: { readonly: true, permissionlessExtension: true }`) | `src/lib/arkiv.ts` |
 | **Real Batch Write Limit** | 20 slots per tx | `REAL_BATCH_LIMIT = 20` | `src/components/SeedModal.tsx` |
 | **Max Live Synthetic Cap** | 40 slots | `MAX_LIVE_SYNTHETIC_CAP = 40` | `src/components/SeedModal.tsx` |
-| **Pure Unit Test Count** | 95 tests | 21 Phase 4 + 56 Phase 5 + 10 Phase 6 + 8 Phase 7 | `scripts/test-phase4-unit.ts`, `scripts/test-phase5-unit.ts`, `scripts/test-phase6-reconciliation.ts`, `scripts/test-phase7-extend-proof.ts` |
+| **Pure Unit Test Count** | 119 tests | 21 Phase 4 + 55 Phase 5 + 10 Phase 6 + 8 Phase 7 + 25 Seed & Pagination | `scripts/test-phase4-unit.ts`, `scripts/test-phase5-unit.ts`, `scripts/test-phase6-reconciliation.ts`, `scripts/test-phase7-extend-proof.ts`, `scripts/test-seed-and-pagination.ts` |
 | **Tiramisu Decimal Chain ID** | `7738577` | `tiramisu.id` | `src/lib/wallet.ts` |
 | **Tiramisu Hex Chain ID** | `0x7614d1` | `0x${tiramisu.id.toString(16)}` | `src/lib/wallet.ts` |

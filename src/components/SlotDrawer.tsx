@@ -115,6 +115,7 @@ export function SlotDrawer({
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [transferTarget, setTransferTarget] = useState("");
   const [isTransferring, setIsTransferring] = useState(false);
+  const [transferPending, setTransferPending] = useState(false);
   const [transferError, setTransferError] = useState<string | null>(null);
   const [transferSuccessTx, setTransferSuccessTx] = useState<string | null>(null);
 
@@ -203,7 +204,7 @@ export function SlotDrawer({
   const userAddr = wallet.address?.toLowerCase();
 
   // Connected non-owner NEVER sees (You) or Transfer; verified owner ONLY after read completes
-  const isVerifiedOwner = !isVerifyingOwner && Boolean(userAddr && currentOwner && currentOwner.toLowerCase() === userAddr);
+  const isVerifiedOwner = !isVerifyingOwner && !transferPending && Boolean(userAddr && currentOwner && currentOwner.toLowerCase() === userAddr);
   const isMySlot = Boolean(
     userAddr &&
     (slot.creator.toLowerCase() === userAddr || (!isVerifyingOwner && currentOwner.toLowerCase() === userAddr))
@@ -228,18 +229,41 @@ export function SlotDrawer({
     try {
       const walletClient = await getMetaMaskWalletClient();
       const res = await transferEntityOwnership(walletClient, slot.key, target as Address);
-      const verifiedTarget = res.newOwner;
-      setCurrentOwner(verifiedTarget);
       setTransferSuccessTx(res.txHash);
       setIsTransferOpen(false);
-      if (onOwnerUpdatedRef.current) {
-        onOwnerUpdatedRef.current(slot.key, verifiedTarget);
+      setTransferPending(true);
+
+      // Poll the chain up to 30s showing "transfer pending" until on-chain read reflects new owner
+      const startTime = Date.now();
+      const MAX_POLL_MS = 30000;
+      const INTERVAL_MS = 2000;
+      let confirmedOwner: Address | null = null;
+
+      while (Date.now() - startTime < MAX_POLL_MS) {
+        await new Promise((r) => setTimeout(r, INTERVAL_MS));
+        try {
+          const auth = await fetchAuthoritativeEntityOwner(slot.key);
+          if (auth.owner && auth.owner.toLowerCase() === target.toLowerCase()) {
+            confirmedOwner = auth.owner;
+            break;
+          }
+        } catch {
+          // continue polling
+        }
+      }
+
+      if (confirmedOwner) {
+        setCurrentOwner(confirmedOwner);
+        if (onOwnerUpdatedRef.current) {
+          onOwnerUpdatedRef.current(slot.key, confirmedOwner);
+        }
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setTransferError(msg);
     } finally {
       setIsTransferring(false);
+      setTransferPending(false);
     }
   };
 
@@ -858,6 +882,16 @@ export function SlotDrawer({
                     style={{ fontSize: "0.72rem", color: "var(--c-amber)", fontStyle: "italic" }}
                   >
                     verifying on-chain…
+                  </div>
+                </div>
+              ) : transferPending ? (
+                <div className="proof-val-wrap">
+                  <div
+                    id="drawer-owner-pending"
+                    className="drawer__key-box"
+                    style={{ fontSize: "0.72rem", color: "var(--c-amber)", fontStyle: "italic" }}
+                  >
+                    transfer pending (confirming on-chain…)
                   </div>
                 </div>
               ) : (

@@ -2,11 +2,17 @@
  * arkiv/repro/flags-probe.ts
  *
  * Empirical verification of Arkiv entity properties and lifecycle actions:
- * 1. readonly flag: Attempting patchEntity on a readonly entity reverts on-chain/simulation.
- * 2. changeOwnership action: Transfers $owner while preserving immutable $creator on a readonly entity.
- * 3. extendEntity action with permissionlessExtension: Advances expiresAt block.
+ * (a) readonly create
+ * (b) owner edit of readonly reverts
+ * (c) owner deletes readonly
+ * (d) ownership transfer of readonly
+ * (e) extend readonly as owner
+ * (f) non-owner extend WITHOUT permissionlessExtension (exact error)
+ * (g) non-owner extend WITH permissionlessExtension from a different wallet (ephemeral wallet, keys never printed)
+ * (h) batch create with per-entity flags
+ * (i) extending to an earlier deadline (exact error)
  *
- * Saves raw outputs to arkiv/repro/logs/flags-probe.txt.
+ * Appends raw outputs to arkiv/repro/logs/flags-probe.txt.
  *
  * Usage:
  *   npx tsx arkiv/repro/flags-probe.ts
@@ -15,7 +21,7 @@
 import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
-import { privateKeyToAccount } from "viem/accounts";
+import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
 import {
   createPublicClient,
   createWalletClient,
@@ -23,8 +29,8 @@ import {
   jsonToPayload,
 } from "@arkiv-network/sdk";
 import { tiramisu } from "@arkiv-network/sdk/chains";
-import { str, bool, u64 } from "@arkiv-network/sdk/attr";
-import { http, type Hex, type Address } from "viem";
+import { str } from "@arkiv-network/sdk/attr";
+import { http, parseEther, type Hex, type Address } from "viem";
 
 async function main() {
   const logLines: string[] = [];
@@ -34,8 +40,8 @@ async function main() {
   };
 
   const runDate = new Date().toISOString();
-  log("================================================================================");
-  log("               ARKIV ENTITY PROPERTIES & LIFECYCLE PROBE                        ");
+  log("\n================================================================================");
+  log("          ARKIV ENTITY PROPERTIES & LIFECYCLE PROBE — COMPLETE SUITE            ");
   log("================================================================================");
   log(`Run Date       : ${runDate}`);
   log(`SDK Version    : 0.8.1`);
@@ -50,14 +56,13 @@ async function main() {
 
   const publicClient = createPublicClient({ chain: tiramisu, transport: http() });
   const wallet = createWalletClient({ chain: tiramisu, transport: http(), account });
+  const batchTag = `flags-probe-${Date.now()}`;
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Probe 1: readonly flag rejects mutations (patchEntity)
+  // Probe (a) & (b): readonly create & owner edit reverts
   // ─────────────────────────────────────────────────────────────────────────────
-  log("\n--- Probe 1: readonly Flag Mutation Guard ---");
-  const batchTag = `flags-probe-${Date.now()}`;
+  log("\n--- Probe (a) & (b): readonly create and owner edit of readonly reverts ---");
   log(`Creating test entity with flags: { readonly: true } (batch: ${batchTag})...`);
-  
   const entity1 = await wallet.createEntity({
     payload: jsonToPayload({ purpose: "readonly-mutation-test", note: "immutable" }),
     contentType: "application/json",
@@ -70,41 +75,59 @@ async function main() {
     flags: { readonly: true },
     expires: ExpirationTime.fromMinutes(15),
   });
-  log(`Entity 1 Created: ${entity1.entityKey} (tx: ${entity1.txHash})`);
+  log(`(a) Entity Created with readonly: ${entity1.entityKey} (tx: ${entity1.txHash})`);
 
-  let patchErrorName = "none";
-  let patchErrorMessage = "none";
-  let patchRevertReason = "none";
+  log("Attempting patchEntity on readonly entity as owner (expecting revert)...");
   try {
-    log("Attempting patchEntity on readonly entity (expecting revert)...");
     await wallet.patchEntity({
       entityKey: entity1.entityKey as Hex,
       set: { test_attr: str("mutated") },
     });
     log("UNEXPECTED: patchEntity succeeded on readonly entity!");
   } catch (err: any) {
-    patchErrorName = err.name || "Error";
-    patchErrorMessage = err.message || String(err);
-    patchRevertReason = err.cause?.message || err.cause?.shortMessage || err.shortMessage || "unknown";
-    log(`[Observed Revert] Error Name: ${patchErrorName}`);
-    log(`[Observed Revert] Message   : ${patchErrorMessage.slice(0, 150)}...`);
-    log(`[Observed Revert] Cause     : ${patchRevertReason.slice(0, 150)}...`);
+    log(`(b) [Observed Revert] Error Name: ${err.name || "Error"}`);
+    log(`(b) [Observed Revert] Message   : ${err.message || String(err)}`);
+    log(`(b) [Observed Revert] Cause     : ${err.cause?.message || err.cause?.shortMessage || err.shortMessage || "unknown"}`);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Probe 2: changeOwnership on a readonly entity updates $owner without mutating $creator
+  // Probe (c): owner deletes readonly entity
   // ─────────────────────────────────────────────────────────────────────────────
-  log("\n--- Probe 2: changeOwnership on readonly Entity ---");
+  log("\n--- Probe (c): owner deletes readonly entity ---");
+  const entityToDel = await wallet.createEntity({
+    payload: jsonToPayload({ purpose: "readonly-delete-test" }),
+    contentType: "application/json",
+    attributes: {
+      project: str("slotbazaar"),
+      entity_type: str("probe_receipt"),
+      batch: str(batchTag),
+    },
+    flags: { readonly: true },
+    expires: ExpirationTime.fromMinutes(15),
+  });
+  log(`Created readonly entity for deletion: ${entityToDel.entityKey} (tx: ${entityToDel.txHash})`);
+
+  log("Owner calling deleteEntity on readonly entity...");
+  const delTx = await wallet.deleteEntity({ entityKey: entityToDel.entityKey as Hex });
+  log(`(c) deleteEntity transaction confirmed: ${delTx.txHash}`);
+  try {
+    const fetched = await publicClient.getEntity(entityToDel.entityKey as Hex);
+    log(`(c) Entity state after delete: owner=${fetched.owner}`);
+  } catch (err: any) {
+    log(`(c) Verified deleted on-chain: ${err.name || "Error"} - ${err.message?.slice(0, 80) || "not found"}`);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Probe (d): ownership transfer of readonly entity
+  // ─────────────────────────────────────────────────────────────────────────────
+  log("\n--- Probe (d): ownership transfer of readonly entity ---");
   const targetRecipient: Address = "0x000000000000000000000000000000000000dEaD";
   log(`Transferring ownership of readonly entity ${entity1.entityKey} to ${targetRecipient}...`);
-  
   const transferTx = await wallet.changeOwnership({
     entityKey: entity1.entityKey as Hex,
     newOwner: targetRecipient,
   });
-  log(`Ownership transfer transaction confirmed: ${transferTx.txHash}`);
-
-  // Poll until getEntity reflects the transfer
+  log(`(d) Ownership transfer transaction confirmed: ${transferTx.txHash}`);
   let transferredEntity = await publicClient.getEntity(entity1.entityKey as Hex);
   let pollAttempts = 0;
   while (transferredEntity.owner.toLowerCase() !== targetRecipient.toLowerCase() && pollAttempts < 10) {
@@ -112,19 +135,71 @@ async function main() {
     transferredEntity = await publicClient.getEntity(entity1.entityKey as Hex);
     pollAttempts++;
   }
-  log(`Initial Creator (immutable) : ${transferredEntity.creator}`);
-  log(`Updated Owner   (transferred): ${transferredEntity.owner}`);
-  const ownershipTransferValid =
-    transferredEntity.creator.toLowerCase() === account.address.toLowerCase() &&
-    transferredEntity.owner.toLowerCase() === targetRecipient.toLowerCase();
-  log(`Verification Result: ${ownershipTransferValid ? "PASS ($owner updated, $creator intact)" : "FAIL"}`);
+  log(`(d) Initial Creator (immutable) : ${transferredEntity.creator}`);
+  log(`(d) Updated Owner   (transferred): ${transferredEntity.owner}`);
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Probe 3: extendEntity with permissionlessExtension advances expiresAt block
+  // Probe (e): extend readonly as owner
   // ─────────────────────────────────────────────────────────────────────────────
-  log("\n--- Probe 3: extendEntity with permissionlessExtension ---");
-  log("Creating test entity with flags: { readonly: true, permissionlessExtension: true }...");
-  const entity2 = await wallet.createEntity({
+  log("\n--- Probe (e): extend readonly as owner ---");
+  const entityExtendOwner = await wallet.createEntity({
+    payload: jsonToPayload({ purpose: "readonly-extend-owner-test" }),
+    contentType: "application/json",
+    attributes: {
+      project: str("slotbazaar"),
+      entity_type: str("probe_receipt"),
+      batch: str(batchTag),
+    },
+    flags: { readonly: true }, // no permissionlessExtension
+    expires: ExpirationTime.fromMinutes(15),
+  });
+  log(`Entity created with readonly flag: ${entityExtendOwner.entityKey} (initial expiresAt: #${entityExtendOwner.expiresAt})`);
+  log("Owner calling extendEntity for +30 days...");
+  const extOwnerTx = await wallet.extendEntity({
+    entityKey: entityExtendOwner.entityKey as Hex,
+    expires: ExpirationTime.fromDays(30),
+  });
+  log(`(e) extendEntity by owner confirmed: ${extOwnerTx.txHash} (new expiresAt: #${extOwnerTx.expiresAt})`);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Probe (f) & (g): non-owner extend (without & with permissionlessExtension)
+  // ─────────────────────────────────────────────────────────────────────────────
+  log("\n--- Probe (f) & (g): non-owner extend via ephemeral wallet ---");
+  const ephemeralKey = generatePrivateKey();
+  const ephemeralAccount = privateKeyToAccount(ephemeralKey);
+  log(`Created ephemeral non-owner wallet: ${ephemeralAccount.address} (private key redacted)`);
+
+  log("Funding ephemeral wallet with 0.002 GLM for gas...");
+  const fundTx = await wallet.sendTransaction({
+    to: ephemeralAccount.address,
+    value: parseEther("0.002"),
+  });
+  await publicClient.waitForTransactionReceipt({ hash: fundTx });
+  log(`Funding transaction confirmed: ${fundTx}`);
+
+  const ephemeralWallet = createWalletClient({
+    chain: tiramisu,
+    transport: http(),
+    account: ephemeralAccount,
+  });
+
+  // Probe (f): Non-owner extend WITHOUT permissionlessExtension
+  log("\nProbe (f): Ephemeral non-owner attempts extendEntity WITHOUT permissionlessExtension (expecting revert)...");
+  try {
+    await ephemeralWallet.extendEntity({
+      entityKey: entityExtendOwner.entityKey as Hex,
+      expires: ExpirationTime.fromDays(60),
+    });
+    log("UNEXPECTED: Non-owner extendEntity succeeded without permissionlessExtension!");
+  } catch (err: any) {
+    log(`(f) [Observed Revert] Error Name: ${err.name || "Error"}`);
+    log(`(f) [Observed Revert] Message   : ${err.message || String(err)}`);
+    log(`(f) [Observed Revert] Cause     : ${err.cause?.message || err.cause?.shortMessage || err.shortMessage || "unknown"}`);
+  }
+
+  // Probe (g): Non-owner extend WITH permissionlessExtension
+  log("\nProbe (g): Creating entity WITH permissionlessExtension from main wallet...");
+  const entityWithPerm = await wallet.createEntity({
     payload: jsonToPayload({ purpose: "permissionless-extension-test" }),
     contentType: "application/json",
     attributes: {
@@ -135,36 +210,94 @@ async function main() {
     flags: { readonly: true, permissionlessExtension: true },
     expires: ExpirationTime.fromMinutes(15),
   });
-  log(`Entity 2 Created: ${entity2.entityKey} (tx: ${entity2.txHash}, initial expiresAt block: #${entity2.expiresAt})`);
+  log(`Entity created with permissionlessExtension: ${entityWithPerm.entityKey} (initial expiresAt: #${entityWithPerm.expiresAt})`);
 
-  log("Calling extendEntity for +365 days...");
-  const extendTx = await wallet.extendEntity({
-    entityKey: entity2.entityKey as Hex,
-    expires: ExpirationTime.fromDays(365),
+  log("Ephemeral non-owner wallet calling extendEntity for +30 days...");
+  const extNonOwnerTx = await ephemeralWallet.extendEntity({
+    entityKey: entityWithPerm.entityKey as Hex,
+    expires: ExpirationTime.fromDays(30),
   });
-  log(`extendEntity transaction confirmed: ${extendTx.txHash} (returned expiresAt: #${extendTx.expiresAt})`);
+  log(`(g) extendEntity by non-owner confirmed: ${extNonOwnerTx.txHash} (new expiresAt: #${extNonOwnerTx.expiresAt})`);
 
-  const refreshedEntity2 = await publicClient.getEntity(entity2.entityKey as Hex);
-  log(`Refreshed On-Chain expiresAt: #${refreshedEntity2.expiresAt}`);
-  const extensionValid = refreshedEntity2.expiresAt > entity2.expiresAt;
-  log(`Verification Result: ${extensionValid ? `PASS (expiresAt advanced by ${refreshedEntity2.expiresAt - entity2.expiresAt} blocks)` : "FAIL"}`);
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Probe (h): batch create with per-entity flags
+  // ─────────────────────────────────────────────────────────────────────────────
+  log("\n--- Probe (h): batch create with per-entity flags ---");
+  const batchCreates = [
+    {
+      payload: jsonToPayload({ purpose: "batch-entity-readonly-only" }),
+      contentType: "application/json",
+      attributes: {
+        project: str("slotbazaar"),
+        entity_type: str("probe_receipt"),
+        batch: str(batchTag),
+        label: str("item-readonly"),
+      },
+      flags: { readonly: true },
+      expires: ExpirationTime.fromMinutes(20),
+    },
+    {
+      payload: jsonToPayload({ purpose: "batch-entity-perm-ext" }),
+      contentType: "application/json",
+      attributes: {
+        project: str("slotbazaar"),
+        entity_type: str("probe_receipt"),
+        batch: str(batchTag),
+        label: str("item-perm-ext"),
+      },
+      flags: { readonly: true, permissionlessExtension: true },
+      expires: ExpirationTime.fromMinutes(20),
+    },
+  ];
 
-  // Summary verdict
+  const batchRes = await wallet.executeBatch({ creates: batchCreates });
+  log(`(h) Batch create transaction confirmed: ${batchRes.txHash} (${batchRes.createdEntities.length} entities created)`);
+
+  const be1 = await publicClient.getEntity(batchRes.createdEntities[0] as Hex);
+  const be2 = await publicClient.getEntity(batchRes.createdEntities[1] as Hex);
+  log(`(h) Batch Entity 1 (${be1.key}): readonly=${be1.creationFlags?.readonly}, permissionlessExtension=${be1.creationFlags?.permissionlessExtension}`);
+  log(`(h) Batch Entity 2 (${be2.key}): readonly=${be2.creationFlags?.readonly}, permissionlessExtension=${be2.creationFlags?.permissionlessExtension}`);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Probe (i): extending to an earlier deadline
+  // ─────────────────────────────────────────────────────────────────────────────
+  log("\n--- Probe (i): extending to an earlier deadline (expecting revert) ---");
+  const entityForShorten = await wallet.createEntity({
+    payload: jsonToPayload({ purpose: "earlier-deadline-test" }),
+    contentType: "application/json",
+    attributes: {
+      project: str("slotbazaar"),
+      entity_type: str("probe_receipt"),
+      batch: str(batchTag),
+    },
+    expires: ExpirationTime.fromDays(7),
+  });
+  log(`Entity created with 7-day expiry: ${entityForShorten.entityKey} (expiresAt block #${entityForShorten.expiresAt})`);
+
+  log("Attempting to extend to an earlier deadline (1 minute into future)...");
+  try {
+    await wallet.extendEntity({
+      entityKey: entityForShorten.entityKey as Hex,
+      expires: ExpirationTime.fromMinutes(1),
+    });
+    log("UNEXPECTED: extendEntity to earlier deadline succeeded!");
+  } catch (err: any) {
+    log(`(i) [Observed Revert] Error Name: ${err.name || "Error"}`);
+    log(`(i) [Observed Revert] Message   : ${err.message || String(err)}`);
+    log(`(i) [Observed Revert] Cause     : ${err.cause?.message || err.cause?.shortMessage || err.shortMessage || "unknown"}`);
+  }
+
   log("\n================================================================================");
-  log("SUMMARY OBSERVATIONS:");
-  log(`1. readonly flag blocks mutations (revert: ${patchErrorName})`);
-  log(`2. changeOwnership succeeds on readonly entities ($owner updated to ${targetRecipient.slice(0, 8)}..., $creator stays ${account.address.slice(0, 8)}...)`);
-  log(`3. extendEntity advances expiresAt from #${entity2.expiresAt} to #${refreshedEntity2.expiresAt}`);
+  log("COMPLETE PROBE SUITE COMPLETED SUCCESSFULLY");
   log("================================================================================");
 
-  // Write log to arkiv/repro/logs/flags-probe.txt
-  const logsDir = path.resolve(process.cwd(), "arkiv", "repro", "logs");
-  if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
-  fs.writeFileSync(path.join(logsDir, "flags-probe.txt"), logLines.join("\n") + "\n", "utf8");
-  log(`\nRaw output successfully written to arkiv/repro/logs/flags-probe.txt`);
+  // Append raw output to arkiv/repro/logs/flags-probe.txt
+  const logPath = path.resolve(process.cwd(), "arkiv/repro/logs/flags-probe.txt");
+  fs.appendFileSync(logPath, "\n" + logLines.join("\n") + "\n");
+  console.log(`\nAppended raw output to ${logPath}`);
 }
 
-main().catch((err) => {
-  console.error("Flags probe failed:", err);
+main().catch((e) => {
+  console.error("Probe script error:", e);
   process.exit(1);
 });

@@ -46,9 +46,6 @@ import {
   createBooking,
   getWinningBooking,
   ArkivError,
-  recordTransferredOwner,
-  getKnownTransferredOwner,
-  clearTransferredOwnersCacheForTesting,
   fetchAuthoritativeEntityOwner,
 } from "../src/lib/arkiv.js";
 import { generateSeedSlots, SEED_TEMPLATES } from "../src/lib/seedGenerator.js";
@@ -632,8 +629,6 @@ async function runTests() {
   // 8. OWNERSHIP TRANSFER REGRESSION TEST SUITE (TASK D)
   // ─────────────────────────────────────────────────────────────────────────────
 
-  clearTransferredOwnersCacheForTesting();
-
   const mockEntityKey = "0x6aa50234086b2db6b70562e021f0e8cef293127e2742b0a7d0220fc72a961d53" as Hex;
   const originalCreator = "0xf48e7802a97781cca58750a6e5f1f1ab93763225" as Address;
   const newRecipient = "0x53491aA366E086C19da948669b340317eE6eA6e9" as Address;
@@ -656,16 +651,6 @@ async function runTests() {
     synthetic: false,
   };
 
-  // Test 1: Original owner transfers entity to recipient
-  recordTransferredOwner(mockEntityKey, newRecipient);
-  const cachedOwner = getKnownTransferredOwner(mockEntityKey);
-
-  assertTest(
-    "Regression 1: Original owner transfers entity to recipient records new owner in cache",
-    cachedOwner?.toLowerCase() === newRecipient.toLowerCase(),
-    newRecipient.toLowerCase(),
-    cachedOwner?.toLowerCase() ?? "undefined"
-  );
 
   // Test 2: Authoritative entity state shows the new owner
   const mockPublicClientWithGetEntity = {
@@ -786,8 +771,6 @@ async function runTests() {
     "true (properly throws error)",
     String(queryErrorCaught)
   );
-
-  clearTransferredOwnersCacheForTesting();
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 10. DUPLICATE BOOKING PREVENTION & CONCURRENCY ARBITRATION TESTS

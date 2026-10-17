@@ -1,7 +1,7 @@
 # Why Arkiv? Architecture, Trade-Offs & Rubric Rationale
 
 > **SlotBazaar Submission Document**  
-> **Track:** Best Indian Use Case & Censorship Resistance  
+> [TRACKS: to be filled by the author]  
 > **Network:** Arkiv Tiramisu Testnet (`chainId: 7738577` / `0x7614d1`)
 
 ---

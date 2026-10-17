@@ -39,86 +39,6 @@ export type SlotCategory = (typeof CATEGORIES)[number];
 export const PRICE_BANDS = ["low", "mid", "high"] as const;
 export type PriceBand = (typeof PRICE_BANDS)[number];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1b. AUTHORITATIVE OWNERSHIP CACHE & PERSISTENCE
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const TRANSFERRED_OWNERS_STORAGE_KEY = "slotbazaar_transferred_owners";
-
-const inMemoryTransferredOwners = new Map<string, Address>();
-
-function initTransferredOwners(): Map<string, Address> {
-  const map = new Map<string, Address>();
-  if (typeof window !== "undefined") {
-    try {
-      const raw = localStorage.getItem(TRANSFERRED_OWNERS_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Record<string, string>;
-        for (const [k, v] of Object.entries(parsed)) {
-          if (isAddress(v)) {
-            map.set(k.toLowerCase(), checksumAddress(v as Address));
-          }
-        }
-      }
-    } catch {
-      // Ignore JSON or localStorage exceptions
-    }
-  }
-  return map;
-}
-
-// Populate map on module initialization
-for (const [k, v] of initTransferredOwners().entries()) {
-  inMemoryTransferredOwners.set(k, v);
-}
-
-/**
- * Records an authoritative transferred owner for an entity key across memory and localStorage.
- */
-export function recordTransferredOwner(entityKey: Hex, newOwner: Address): void {
-  const normKey = entityKey.toLowerCase();
-  const cOwner = checksumAddress(newOwner);
-  inMemoryTransferredOwners.set(normKey, cOwner);
-  if (typeof window !== "undefined") {
-    try {
-      const obj: Record<string, string> = {};
-      for (const [k, v] of inMemoryTransferredOwners.entries()) {
-        obj[k] = v;
-      }
-      localStorage.setItem(TRANSFERRED_OWNERS_STORAGE_KEY, JSON.stringify(obj));
-    } catch {
-      // Ignore quota errors
-    }
-  }
-}
-
-/**
- * Retrieves the recorded transferred owner for an entity key, if known.
- */
-export function getKnownTransferredOwner(entityKey: Hex): Address | undefined {
-  return inMemoryTransferredOwners.get(entityKey.toLowerCase());
-}
-
-/**
- * Returns a read-only snapshot map of all recorded transferred owners.
- */
-export function getAllTransferredOwners(): Map<string, Address> {
-  return new Map(inMemoryTransferredOwners);
-}
-
-/**
- * Clears the transferred owners cache (useful for isolated unit testing).
- */
-export function clearTransferredOwnersCacheForTesting(): void {
-  inMemoryTransferredOwners.clear();
-  if (typeof window !== "undefined") {
-    try {
-      localStorage.removeItem(TRANSFERRED_OWNERS_STORAGE_KEY);
-    } catch {
-      // ignore
-    }
-  }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. ERROR TAXONOMY
@@ -363,10 +283,15 @@ export function validateCompletionPayload(raw: unknown): CompletionPayload {
 // 5. CLIENT FACTORIES
 // ─────────────────────────────────────────────────────────────────────────────
 
-function getEnvVar(key: string): string {
+function getEnvVar(key: "VITE_RPC_URL" | "VITE_WS_URL"): string {
   try {
-    if (typeof import.meta !== "undefined" && import.meta.env && import.meta.env[key]) {
-      return String(import.meta.env[key]);
+    if (typeof import.meta !== "undefined" && import.meta.env) {
+      if (key === "VITE_RPC_URL" && typeof import.meta.env.VITE_RPC_URL === "string") {
+        return import.meta.env.VITE_RPC_URL;
+      }
+      if (key === "VITE_WS_URL" && typeof import.meta.env.VITE_WS_URL === "string") {
+        return import.meta.env.VITE_WS_URL;
+      }
     }
   } catch {}
   try {
@@ -379,36 +304,16 @@ function getEnvVar(key: string): string {
 }
 
 export function getArkivRpcUrl(): string {
-  const envKey = getEnvVar("VITE_ARKIV_API_KEY") || getEnvVar("ARKIV_API_KEY");
   const envRpc = getEnvVar("VITE_RPC_URL");
-
-  if (envRpc) {
-    if (envKey && !envRpc.includes(envKey)) {
-      return envRpc.replace(/\/+$/, "") + "/" + envKey;
-    }
-    return envRpc;
-  }
-  if (envKey) {
-    return `https://rpc.tiramisu.db-chain.testnet.arkiv.network/${envKey}`;
-  }
+  if (envRpc) return envRpc;
   return "https://rpc.tiramisu.db-chain.testnet.arkiv.network";
 }
 
 export const DEFAULT_ARKIV_WS_RPC = "wss://rpc.tiramisu.db-chain.testnet.arkiv.network";
 
 export function getArkivWsUrl(): string {
-  const envKey = getEnvVar("VITE_ARKIV_API_KEY") || getEnvVar("ARKIV_API_KEY");
   const envWs = getEnvVar("VITE_WS_URL");
-
-  if (envWs) {
-    if (envKey && !envWs.includes(envKey)) {
-      return envWs.replace(/\/+$/, "") + "/" + envKey;
-    }
-    return envWs;
-  }
-  if (envKey) {
-    return `wss://rpc.tiramisu.db-chain.testnet.arkiv.network/${envKey}`;
-  }
+  if (envWs) return envWs;
   return DEFAULT_ARKIV_WS_RPC;
 }
 
@@ -611,12 +516,9 @@ export function parseSlotEntity(entity: Entity | FullEntity): SlotEntity | null 
     }
     const validated = validateSlotPayload(payloadJson);
     const keyHex = entity.key as Hex;
-    const knownOwner = getKnownTransferredOwner(keyHex);
-    const resolvedOwner = knownOwner
-      ? knownOwner
-      : entity.owner && isAddress(entity.owner)
-        ? checksumAddress(entity.owner as Address)
-        : ("0x0" as Address);
+    const resolvedOwner = entity.owner && isAddress(entity.owner)
+      ? checksumAddress(entity.owner as Address)
+      : ("0x0" as Address);
 
     const resolvedCreator = entity.creator && isAddress(entity.creator)
       ? checksumAddress(entity.creator as Address)
@@ -2125,7 +2027,6 @@ export async function transferEntityOwnership(
     });
 
     const cOwner = checksumAddress(newOwner);
-    recordTransferredOwner(entityKey, cOwner);
 
     return {
       entityKey: result.entityKey,
@@ -2151,7 +2052,7 @@ export interface AuthoritativeEntityState {
   creator?: Address;
   creationFlags?: EntityCreationFlags;
   verifiedOnChain: boolean;
-  source: "sdk_entity" | "onchain_event" | "cache_fallback";
+  source: "sdk_entity" | "onchain_event";
 }
 
 /**
@@ -2161,7 +2062,6 @@ export interface AuthoritativeEntityState {
  *  1. Query Arkiv SDK `client.getEntity(entityKey)` which reads authoritative `$owner` and `$creator`.
  *  2. If Arkiv query RPC is rate-limited (HTTP 429 ANON_COST_LIMITED) or encounters a transient issue,
  *     fall back to querying EVM event logs directly on ARKIV_ADDRESS (OwnershipTransferred and EntityCreated).
- *  3. Fallback to cached known transfer if network is unavailable.
  */
 export async function fetchAuthoritativeEntityOwner(
   entityKey: Hex,
@@ -2173,7 +2073,6 @@ export async function fetchAuthoritativeEntityOwner(
     if (ent && ent.owner && isAddress(ent.owner)) {
       const owner = checksumAddress(ent.owner as Address);
       const creator = ent.creator && isAddress(ent.creator) ? checksumAddress(ent.creator as Address) : undefined;
-      recordTransferredOwner(entityKey, owner);
       return {
         key: entityKey,
         owner,
@@ -2222,7 +2121,6 @@ export async function fetchAuthoritativeEntityOwner(
       const latest = transferLogs[transferLogs.length - 1];
       if (latest.args?.newOwner) {
         const owner = checksumAddress(latest.args.newOwner);
-        recordTransferredOwner(entityKey, owner);
         return {
           key: entityKey,
           owner,
@@ -2243,17 +2141,6 @@ export async function fetchAuthoritativeEntityOwner(
     }
   } catch {
     // Direct event log query failed
-  }
-
-  // 3. Tertiary: Cached known transfer fallback
-  const cachedOwner = getKnownTransferredOwner(entityKey);
-  if (cachedOwner) {
-    return {
-      key: entityKey,
-      owner: cachedOwner,
-      verifiedOnChain: false,
-      source: "cache_fallback",
-    };
   }
 
   throw new ArkivError(

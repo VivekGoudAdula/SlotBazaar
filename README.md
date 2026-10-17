@@ -145,6 +145,7 @@ flowchart TD
 | **Reproducibility Test Scripts** | [arkiv/repro/README.md](arkiv/repro/README.md) | Self-contained, runnable verification scripts for friction & latency claims |
 | **Disclosure & License Audit** | [docs/DISCLOSURE.md](docs/DISCLOSURE.md) | Baseline commit timestamp, code origin audit, license checks |
 | **2:40 Demo Video Script** | [docs/demo-script.md](docs/demo-script.md) | Complete second-by-second video script with audited UI button labels |
+| **Build on SlotBazaar** | [docs/BUILD_ON_SLOTBAZAAR.md](docs/BUILD_ON_SLOTBAZAAR.md) | TypeScript example & guide for building on SlotBazaar's open Arkiv data |
 | **Arkiv Testnet Explorer** | [data.arkiv.network](https://data.arkiv.network/?chain=tiramisu) | Canonical explorer for Tiramisu testnet state |
 | **Blockscout Transaction Explorer** | [tiramisu.explorer.arkiv.network](https://tiramisu.explorer.arkiv.network) | Canonical block explorer for transactions |
 

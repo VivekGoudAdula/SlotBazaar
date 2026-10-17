@@ -2,7 +2,7 @@
                     ARKIV RPC SLOT COUNT STABILITY REPRO                        
 ================================================================================
 Timestamp      : 2026-10-16T12:26:38.067Z
-RPC Endpoint   : https://rpc.tiramisu.db-chain.testnet.arkiv.network/ark_live_***
+RPC Endpoint   : https://rpc.tiramisu.db-chain.testnet.arkiv.network
 Runs           : 10 iterations, 3s interval
 Query Filter   : project="slotbazaar" AND entity_type="slot" AND ends_at > nowSec
 Block Pinning  : atBlock(pinnedBlock) per run

@@ -31,14 +31,7 @@ const DELAY_MS = 3000;
 const LOG_PATH = path.resolve(process.cwd(), "arkiv/repro/logs/slot-count-stability.txt");
 
 async function main() {
-  const envKey = process.env.VITE_ARKIV_API_KEY || process.env.ARKIV_API_KEY || "";
-  const envRpc = process.env.VITE_RPC_URL;
-  let rpcUrl = "https://rpc.tiramisu.db-chain.testnet.arkiv.network";
-  if (envRpc) {
-    rpcUrl = envKey && !envRpc.includes(envKey) ? `${envRpc.replace(/\/+$/, "")}/${envKey}` : envRpc;
-  } else if (envKey) {
-    rpcUrl = `https://rpc.tiramisu.db-chain.testnet.arkiv.network/${envKey}`;
-  }
+  const rpcUrl = process.env.VITE_RPC_URL || "https://rpc.tiramisu.db-chain.testnet.arkiv.network";
 
   const client = createPublicClient({
     chain: tiramisu,
@@ -55,7 +48,7 @@ async function main() {
   log("                    ARKIV RPC SLOT COUNT STABILITY REPRO                        ");
   log("================================================================================");
   log(`Timestamp      : ${new Date().toISOString()}`);
-  log(`RPC Endpoint   : ${rpcUrl.replace(/ark_live_[A-Za-z0-9]+/g, "ark_live_***")}`);
+  log(`RPC Endpoint   : ${rpcUrl}`);
   log(`Runs           : ${RUNS} iterations, ${DELAY_MS / 1000}s interval`);
   log(`Query Filter   : project="slotbazaar" AND entity_type="slot" AND ends_at > nowSec`);
   log(`Block Pinning  : atBlock(pinnedBlock) per run`);

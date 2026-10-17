@@ -39,3 +39,108 @@ SUMMARY OBSERVATIONS:
 2. changeOwnership succeeds on readonly entities ($owner updated to 0x000000..., $creator stays 0x53491a...)
 3. extendEntity advances expiresAt from #681482 to #16449035
 ================================================================================
+
+
+================================================================================
+          ARKIV ENTITY PROPERTIES & LIFECYCLE PROBE — COMPLETE SUITE            
+================================================================================
+Run Date       : 2026-10-17T07:33:10.414Z
+SDK Version    : 0.8.1
+Viem Version   : 2.57.4
+Network        : Arkiv Tiramisu (chainId: 7738577)
+Signer Account : 0x53491aA366E086C19da948669b340317eE6eA6e9
+
+--- Probe (a) & (b): readonly create and owner edit of readonly reverts ---
+Creating test entity with flags: { readonly: true } (batch: flags-probe-1792222390722)...
+(a) Entity Created with readonly: 0x7584bc9ce846e167588b5f1e7ec11b8dc7c4897517dea98bc7476a7af74118bb (tx: 0x33678e097e427358dcb2749424ff84fcff15a59497b5ddccd754a7c307c04943)
+Attempting patchEntity on readonly entity as owner (expecting revert)...
+(b) [Observed Revert] Error Name: EntityMutationError
+(b) [Observed Revert] Message   : Transaction failed: entity 0x7584bc9c…4118bb was created readonly, so its contents can never change. Its expiry can still be extended, and it can be transferred or deleted
+(b) [Observed Revert] Cause     : The contract function "execute" reverted.
+
+Error: ReadOnlyEntity(bytes32 entityKey)
+                     (0x7584bc9ce846e167588b5f1e7ec11b8dc7c4897517dea98bc7476a7af74118bb)
+ 
+Contract Call:
+  address:   0x4400000000000000000000000000000000000044
+  function:  execute((uint8 operation, bytes operationData)[])
+  args:             ([{"operation":2,"operationData":"0x00000000000000000000000000000000000000000000000000000000000000207584bc9ce846e167588b5f1e7ec11b8dc7c4897517dea98bc7476a7af74118bb000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000020746573745f6174747200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000076d75746174656400000000000000000000000000000000000000000000000000"}])
+  sender:    0x53491aA366E086C19da948669b340317eE6eA6e9
+
+Docs: https://viem.sh/docs/contract/writeContract
+Details: execution reverted
+Version: viem@2.57.4
+
+--- Probe (c): owner deletes readonly entity ---
+Created readonly entity for deletion: 0xc79f734138fd1ea98b2ec730fe79744f9b404dea56f14a4059b662422ad04869 (tx: 0x33c60b439a33c56b7265fe8a2e96e5979d4b7fa2329da65c3592e667378c2409)
+Owner calling deleteEntity on readonly entity...
+(c) deleteEntity transaction confirmed: 0x494d05dc74a6ab4b3a0ba66baa933db2e69731ba1fabb09ba682ba2c6777de3b
+(c) Verified deleted on-chain: NoEntityFoundError - No live entity with key 0xc79f734138fd1ea98b2ec730fe79744f9b404dea56f14a4059b662
+
+--- Probe (d): ownership transfer of readonly entity ---
+Transferring ownership of readonly entity 0x7584bc9ce846e167588b5f1e7ec11b8dc7c4897517dea98bc7476a7af74118bb to 0x000000000000000000000000000000000000dEaD...
+(d) Ownership transfer transaction confirmed: 0x43809d03609bd798e860ad07fc411e442b85d38156d07b64d41ae2ae94ccfafc
+(d) Initial Creator (immutable) : 0x53491aA366E086C19da948669b340317eE6eA6e9
+(d) Updated Owner   (transferred): 0x000000000000000000000000000000000000dEaD
+
+--- Probe (e): extend readonly as owner ---
+Entity created with readonly flag: 0x6b88e20772a213b304d16fa750c39d7df5b7b8c8010e5c48fa8d230e2e21a5e9 (initial expiresAt: #686782)
+Owner calling extendEntity for +30 days...
+(e) extendEntity by owner confirmed: 0xa9d741a5a7a264c28a7dc76d7439905121d4680a73234c45f374ca72c9a0963d (new expiresAt: #1982334)
+
+--- Probe (f) & (g): non-owner extend via ephemeral wallet ---
+Created ephemeral non-owner wallet: 0xED9c12Ee27091834D35B88713c2223d4F5C41D11 (private key redacted)
+Funding ephemeral wallet with 0.002 GLM for gas...
+Funding transaction confirmed: 0x1dc1c6c90fb90974f55bc9a7bd02a8e3124bcefed8b430c6a3e1293960b9b103
+
+Probe (f): Ephemeral non-owner attempts extendEntity WITHOUT permissionlessExtension (expecting revert)...
+(f) [Observed Revert] Error Name: EntityMutationError
+(f) [Observed Revert] Message   : Transaction failed: entity 0x6b88e207…21a5e9 is owned by 0x53491aA366E086C19da948669b340317eE6eA6e9, not 0xED9c12Ee27091834D35B88713c2223d4F5C41D11
+(f) [Observed Revert] Cause     : The contract function "execute" reverted.
+
+Error: NotOwner(bytes32 entityKey, address caller, address owner)
+               (0x6b88e20772a213b304d16fa750c39d7df5b7b8c8010e5c48fa8d230e2e21a5e9, 0xED9c12Ee27091834D35B88713c2223d4F5C41D11, 0x53491aA366E086C19da948669b340317eE6eA6e9)
+ 
+Contract Call:
+  address:   0x4400000000000000000000000000000000000044
+  function:  execute((uint8 operation, bytes operationData)[])
+  args:             ([{"operation":3,"operationData":"0x6b88e20772a213b304d16fa750c39d7df5b7b8c8010e5c48fa8d230e2e21a5e900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000278d00"}])
+  sender:    0xED9c12Ee27091834D35B88713c2223d4F5C41D11
+
+Docs: https://viem.sh/docs/contract/writeContract
+Details: execution reverted
+Version: viem@2.57.4
+
+Probe (g): Creating entity WITH permissionlessExtension from main wallet...
+Entity created with permissionlessExtension: 0xf5e6afbbf056b470e67bc46fd0b52c9079df1b9aef3208c5094fd22f06953e57 (initial expiresAt: #686790)
+Ephemeral non-owner wallet calling extendEntity for +30 days...
+(g) extendEntity by non-owner confirmed: 0x51ae3929a2a573f8ebacfdd6255e118f92627725c1853e4f4b02b575ab172d81 (new expiresAt: #1982344)
+
+--- Probe (h): batch create with per-entity flags ---
+(h) Batch create transaction confirmed: 0xc1658878fa09593bc9e65190504eeb606da04adf0108b82d3ed58aa07965d262 (2 entities created)
+(h) Batch Entity 1 (0x89f61af9e69bf816dcf1f3e820c1f1a86fb84486c857e746ec8b74ad46c0d46c): readonly=true, permissionlessExtension=false
+(h) Batch Entity 2 (0x7ae26dc57bac23f63862ef08b9bccc4ac8e86a005ce6d688444af768dc9d803b): readonly=true, permissionlessExtension=true
+
+--- Probe (i): extending to an earlier deadline (expecting revert) ---
+Entity created with 7-day expiry: 0xb6261d6ae1aa919521402c95e6a28481a8a5a9127c90b4e7c288546151575e8c (expiresAt block #988751)
+Attempting to extend to an earlier deadline (1 minute into future)...
+(i) [Observed Revert] Error Name: EntityMutationError
+(i) [Observed Revert] Message   : Transaction failed: entity 0xb6261d6a…575e8c already expires at block 988751, so extending it to 686383 would shorten its life
+(i) [Observed Revert] Cause     : The contract function "execute" reverted.
+
+Error: ExpiryNotExtended(bytes32 entityKey, uint64 newExpiresAt, uint64 currentExpiresAt)
+                        (0xb6261d6ae1aa919521402c95e6a28481a8a5a9127c90b4e7c288546151575e8c, 686383, 988751)
+ 
+Contract Call:
+  address:   0x4400000000000000000000000000000000000044
+  function:  execute((uint8 operation, bytes operationData)[])
+  args:             ([{"operation":3,"operationData":"0xb6261d6ae1aa919521402c95e6a28481a8a5a9127c90b4e7c288546151575e8c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e"}])
+  sender:    0x53491aA366E086C19da948669b340317eE6eA6e9
+
+Docs: https://viem.sh/docs/contract/writeContract
+Details: execution reverted
+Version: viem@2.57.4
+
+================================================================================
+COMPLETE PROBE SUITE COMPLETED SUCCESSFULLY
+================================================================================
