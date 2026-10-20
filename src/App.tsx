@@ -15,6 +15,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import "leaflet/dist/leaflet.css";
+import { Analytics } from "@vercel/analytics/react";
 
 import type { Hex, Address } from "viem";
 import { WalletProvider, useWallet } from "./lib/wallet.js";
@@ -947,6 +948,9 @@ function AppInner(): React.ReactElement {
           <div>Refresh Status: <span style={{ color: refreshFailed ? "#f87171" : "#4ade80" }}>{refreshFailed ? "failed (preserving previous list)" : "ok"}</span></div>
         </aside>
       )}
+
+      {/* Vercel Web Analytics */}
+      <Analytics />
     </div>
   );
 }
